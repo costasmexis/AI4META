@@ -2,8 +2,8 @@ import sklearn
 from sklearn.metrics import get_scorer
 from sklearn.model_selection import StratifiedKFold, GridSearchCV, RandomizedSearchCV, cross_val_score
 from tqdm import tqdm
+# from .bayesian_opt import BayesianOptimization
 
-from .bayesian_opt import BayesianOptimization
 
 def nested_cv(estimator, X, y, param_grid, 
               inner_splits=3, outer_splits=5, 
