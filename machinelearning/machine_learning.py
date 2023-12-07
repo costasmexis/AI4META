@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 import optuna
 from tqdm import tqdm
-
 import sklearn
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, RandomizedSearchCV
 from sklearn.metrics import get_scorer
@@ -123,8 +122,7 @@ class BayesianOptimization(MachineLearningEstimator):
             'RandomForestClassifier': RandomForestClassifier,
             'KNeighborsClassifier': KNeighborsClassifier,
             'DecisionTreeClassifier': DecisionTreeClassifier,
-            'SVC_poly': SVC,
-            'SVC_rest': SVC,
+            'SVC': SVC,
             'GradientBoostingClassifier': GradientBoostingClassifier
         }
 
@@ -156,16 +154,7 @@ class BayesianOptimization(MachineLearningEstimator):
                 min_samples_split=trial.suggest_int('min_samples_split', 2, 10),
                 min_weight_fraction_leaf=trial.suggest_float('min_weight_fraction_leaf', 0.0, 0.5),
             ),
-            'SVC_poly': lambda trial: SVC(
-                C=trial.suggest_int('C', 1, 10),
-                kernel='poly',
-                degree=trial.suggest_int('degree', 2, 5),
-                coef0=trial.suggest_float('coef0', 0, 1),
-                probability=trial.suggest_categorical('probability', [True, False]),
-                shrinking=trial.suggest_categorical('shrinking', [True, False]),
-                decision_function_shape=trial.suggest_categorical('decision_function_shape', ['ovo', 'ovr'])
-            ),
-            'SVC_rest': lambda trial: SVC(
+            'SVC': lambda trial: SVC(
                 C=trial.suggest_int('C', 1, 10),
                 kernel=trial.suggest_categorical('kernel', ['linear', 'rbf', 'sigmoid']),
                 probability=trial.suggest_categorical('probability', [True, False]),
