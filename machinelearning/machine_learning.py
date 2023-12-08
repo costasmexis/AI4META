@@ -3,7 +3,8 @@ import numpy as np
 import optuna
 from tqdm import tqdm
 import sklearn
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, RandomizedSearchCV
+from sklearn.model_selection import train_test_split, cross_val_score, \
+    GridSearchCV, RandomizedSearchCV, StratifiedKFold
 from sklearn.metrics import get_scorer
 from sklearn.linear_model import LogisticRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -134,6 +135,55 @@ class MachineLearningEstimator(DataLoader):
         print(f'Average {scoring}: {np.mean(scores)}')
         print(f'Standard deviation {scoring}: {np.std(scores)}')
         return scores
+    
+    def nested_cross_validation(self, inner_splits=3, outer_splits=5,
+                                inner_scoring='accuracy', outer_scoring='accuracy',
+                                optimizer='grid_search', n_trials=100, num_trials=10, 
+                                n_iter=25, verbose=0):
+        ''' Function to perform a nested cross-validation
+            - inner_splits (int): number of folds for inner cross-validation
+            - outer_splits (int): number of folds for outer cross-validation
+            - inner_scoring (str): scoring metric for inner cross-validation
+            - outer_scoring (str): scoring metric for outer cross-validation
+            - optimizer (str): 'grid_search' for GridSearchCV
+                               'reandom_search' for RandomizedSearchCV
+                               'bayesian_search' for optuna
+            - n_trials (int): number of trials for optuna
+            - num_trials (int): number of trials for the nested cross-validation
+            - n_iter (int): number of iterations for RandomizedSearchCV
+            - verbose (int): verbosity level
+        returns:
+            - nested_scores (list): list of scores for each fold
+        '''
+        # Check if both inner and outer scoring metrics are valid 
+        if inner_scoring not in sklearn.metrics.SCORERS.keys():
+            raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
+        if outer_scoring not in sklearn.metrics.SCORERS.keys():
+            raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
+
+        nested_scores = []
+        for i in tqdm(range(num_trials)):
+
+            inner_cv = StratifiedKFold(n_splits=inner_splits, shuffle=True, random_state=i)
+            outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=i)
+
+            ''' TODO: UPDATE code below '''
+            if optimizer == 'grid_search':
+                pass
+            elif optimizer == 'random_search':
+                pass
+            elif optimizer == 'bayesian_search':
+                pass
+            else:
+                raise Exception("Unsupported optimizer.")
+
+            ''' TODO: UPDATE cross_val_score below'''
+            nested_score = cross_val_score(, X=self.X, y=self.y, scoring=outer_scoring, cv=outer_cv)
+            nested_scores.append(list(nested_score))
+        
+        nested_scores = [item for sublist in nested_scores for item in sublist]
+        return nested_scores
+
 
     def grid_search(self, X=None, y=None, scoring='accuracy', cv=5, verbose=True):
         ''' Function to perform a grid search
