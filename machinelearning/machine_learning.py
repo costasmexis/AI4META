@@ -84,7 +84,7 @@ class MachineLearningEstimator(DataLoader):
                 criterion=trial.suggest_categorical('criterion', ['friedman_mse', 'squared_error']),
                 max_depth=trial.suggest_int('max_depth', 1, 50),
                 min_samples_split=trial.suggest_int('min_samples_split', 2, 10),
-                min_samples_leaf=trial.suggest_,int('min_samples_leaf', 1, 10),
+                min_samples_leaf=trial.suggest_int('min_samples_leaf', 1, 10)
             ),
             'XGBClassifier': lambda trial: XGBClassifier(
                 learning_rate=trial.suggest_float('learning_rate', 0.01, 0.5),
@@ -186,16 +186,38 @@ class MachineLearningEstimator(DataLoader):
             print(f'Best parameters: {self.best_params}')
             print(f'Best {scoring}: {self.best_score}')
 
-    def bayesian_search(self, X=None, y=None, scoring='accuracy', cv=5, n_trials=100, verbose=True):
+    def bayesian_search(self, X=None, y=None, scoring='accuracy', direction='maximize', cv=5, n_trials=100, verbose=True):
         ''' Function to perform a bayesian search using Optuna 
-        TODO: complete the function
+            - X (array): features
+            - y (array): target
+            - scoring (str): scoring metric
+            - direction (str): direction of the optimization
+            - cv (int): number of folds for cross-validation
+            - n_trials (int): number of trials
+            - verbose (bool): whether to print the results
         '''
+
+        if X is None and y is None:
+            X = self.X 
+            y = self.y
+
         if scoring not in sklearn.metrics.SCORERS.keys():
             raise ValueError(
                 f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
 
-        pass
+        def create_model(trial):
+            model = self.bayesian_grid[self.name](trial)
+            return model
 
+        def objective(trial):
+            model = create_model(trial)
+            model.fit(X, y)
+            score = model.score(X, y)
+            return score
+        
+        study = optuna.create_study(direction=direction)
+        study.optimize(objective, n_trials=n_trials)
+        self.best_estimator = self.estimator.set_params(**study.best_params)
 
 class MLPipelines(MachineLearningEstimator):
 
@@ -209,7 +231,8 @@ class MLPipelines(MachineLearningEstimator):
         '''
         super().__init__(estimator, param_grid, label, csv_dir)
 
-    def bootsrap(self, n_iter=100, test_size=0.2, optimizer='grid_search', random_iter=25, n_trials=100, cv=5, scoring='accuracy'):
+    def bootsrap(self, n_iter=100, test_size=0.2, optimizer='grid_search', 
+                 random_iter=25, n_trials=100, cv=5, scoring='accuracy'):
         ''' Performs boostrap validation on a given estimator.
             - n_iter: number of iterations to perform boostrap validation
             - test_size: test size for each iteration
@@ -238,6 +261,9 @@ class MLPipelines(MachineLearningEstimator):
                     self.grid_search(X_train, y_train, scoring=scoring, cv=cv, verbose=False)
                 elif optimizer == 'random_search':
                     self.random_search(X_train, y_train, scoring=scoring, cv=cv, n_iter=random_iter, verbose=False)
+                elif optimizer == 'bayesian_search':
+                    self.bayesian_search(X_train, y_train, scoring=scoring, direction='maximize', cv=cv, n_trials=n_trials, verbose=False)
+                    self.best_estimator.fit(X_train, y_train)
                 else:
                     raise ValueError(f'Invalid optimizer: {optimizer}. Select one of the following: grid_search, bayesian_search')
             
