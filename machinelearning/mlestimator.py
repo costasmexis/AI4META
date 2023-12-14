@@ -46,7 +46,7 @@ class MachineLearningEstimator(DataLoader):
             'DecisionTreeClassifier': DecisionTreeClassifier(),
             'SVC': SVC()
         }
-
+        
         self.bayesian_grid = {
             'RandomForestClassifier': lambda trial: RandomForestClassifier(
                 n_estimators=trial.suggest_int('n_estimators', 2, 200),
@@ -171,9 +171,21 @@ class MachineLearningEstimator(DataLoader):
             print(f'Best parameters: {self.best_params}')
             print(f'Best {scoring}: {self.best_score}')
 
-    def bayesian_search():
-        ''' TODO: To be implemented... '''
-        pass
-
-
-
+    def bayesian_search(self, X=None, y=None, scoring='accuracy', direction='maximize', n_trials=100):
+        
+        if scoring not in sklearn.metrics.get_scorer_names():
+            raise ValueError(
+                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
+            
+        if X is None and y is None:
+            X = self.X 
+            y = self.y
+            
+        def create_model(trial):
+            pass
+                      
+        def objective(trial):
+            pass
+        
+        
+        
