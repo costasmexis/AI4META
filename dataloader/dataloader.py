@@ -64,10 +64,11 @@ class DataLoader:
         else:
             raise Exception("Unsupported feature selection method.")
     
-    def create_test_data(self):
+    def create_test_data(self, output_dir='./test_data.csv'):
         ''' Function to create a test data file '''
-        pass
-    
+        test_data = pd.DataFrame(columns=self.X.columns.values)
+        test_data.to_csv(output_dir)        
+        
     def __str__(self):
         ''' Function to print the dataset information.'''
         return f'Number of rows: {self.data.shape[0]} \nNumber of columns: {self.data.shape[1]}'
