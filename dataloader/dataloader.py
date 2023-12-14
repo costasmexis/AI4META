@@ -13,11 +13,10 @@ class DataLoader:
         self.data = None
         self.X = None
         self.y = None
-        self.selected_features = None                      # The selected features after feature selection
-        self.supported_extensions = ['csv', 'tsv', 'txt']  # Supported file extensions for the dataset
-        # Load the dataset
-        self.__load_data()
-
+        self.selected_features = None
+        self.supported_extensions = ['csv', 'tsv', 'txt']
+        self.__load_data() 
+    
     def __load_data(self, index_col=0):
         ''' Function to load data from a file. 
             - index_col (0): the index column of the dataset
@@ -31,11 +30,11 @@ class DataLoader:
                 
         self.X = self.data.drop(self.label, axis=1)
         self.y = self.data[self.label].copy()
-
+    
     def encode_categorical(self):
         ''' Function to encode the target varable. From str to 1/0.'''
         self.y = self.y.astype('category').cat.codes
-
+    
     def missing_values(self, method='drop'):
         ''' Function to handle missing values in the dataset.'''
         total_missing = self.data.isnull().sum().sum()
@@ -64,7 +63,11 @@ class DataLoader:
             self.X = self.X[self.selected_features]
         else:
             raise Exception("Unsupported feature selection method.")
-
+    
+    def create_test_data(self):
+        ''' Function to create a test data file '''
+        pass
+    
     def __str__(self):
         ''' Function to print the dataset information.'''
         return f'Number of rows: {self.data.shape[0]} \nNumber of columns: {self.data.shape[1]}'

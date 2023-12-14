@@ -17,6 +17,7 @@ from xgboost import XGBClassifier
 
 from dataloader import DataLoader
 
+
 class MachineLearningEstimator(DataLoader):
     def __init__(self, estimator, param_grid, label, csv_dir):
         ''' Class to hold the machine learning estimator and related data 
@@ -119,72 +120,6 @@ class MachineLearningEstimator(DataLoader):
         if self.name not in self.available_clfs.keys():
             raise ValueError(f'Invalid estimator: {self.name}. Select one of the following: {list(self.available_clfs.keys())}')
         
-
-    def cross_validation(self, scoring='accuracy', cv=5) -> list:
-        ''' Function to perform a simple cross validation
-            - scoring (str): scoring metric
-            - cv (int): number of folds for cross-validation
-        returns:
-            - scores (list): list of scores for each fold
-        '''
-        if scoring not in sklearn.metrics.SCORERS.keys():
-            raise ValueError(
-                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
-
-        scores = cross_val_score(self.estimator, self.X, self.y, cv=cv, scoring=scoring)
-        print(f'Average {scoring}: {np.mean(scores)}')
-        print(f'Standard deviation {scoring}: {np.std(scores)}')
-        return scores
-    
-    def nested_cross_validation(self, inner_splits=3, outer_splits=5,
-                                inner_scoring='accuracy', outer_scoring='accuracy',
-                                optimizer='grid_search', n_trials=100, num_trials=10, 
-                                n_iter=25, verbose=0):
-        ''' Function to perform a nested cross-validation
-            - inner_splits (int): number of folds for inner cross-validation
-            - outer_splits (int): number of folds for outer cross-validation
-            - inner_scoring (str): scoring metric for inner cross-validation
-            - outer_scoring (str): scoring metric for outer cross-validation
-            - optimizer (str): 'grid_search' for GridSearchCV
-                               'reandom_search' for RandomizedSearchCV
-                               'bayesian_search' for optuna
-            - n_trials (int): number of trials for optuna
-            - num_trials (int): number of trials for the nested cross-validation
-            - n_iter (int): number of iterations for RandomizedSearchCV
-            - verbose (int): verbosity level
-        returns:
-            - nested_scores (list): list of scores for each fold
-        '''
-        # Check if both inner and outer scoring metrics are valid 
-        if inner_scoring not in sklearn.metrics.SCORERS.keys():
-            raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
-        if outer_scoring not in sklearn.metrics.SCORERS.keys():
-            raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
-
-        nested_scores = []
-        for i in tqdm(range(num_trials)):
-
-            inner_cv = StratifiedKFold(n_splits=inner_splits, shuffle=True, random_state=i)
-            outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=i)
-
-            ''' TODO: UPDATE code below '''
-            if optimizer == 'grid_search':
-                pass
-            elif optimizer == 'random_search':
-                pass
-            elif optimizer == 'bayesian_search':
-                pass
-            else:
-                raise Exception("Unsupported optimizer.")
-
-            ''' TODO: UPDATE cross_val_score below'''
-            nested_score = cross_val_score(, X=self.X, y=self.y, scoring=outer_scoring, cv=outer_cv)
-            nested_scores.append(list(nested_score))
-        
-        nested_scores = [item for sublist in nested_scores for item in sublist]
-        return nested_scores
-
-
     def grid_search(self, X=None, y=None, scoring='accuracy', cv=5, verbose=True):
         ''' Function to perform a grid search
             - X (array): features
@@ -193,14 +128,14 @@ class MachineLearningEstimator(DataLoader):
             - cv (int): number of folds for cross-validation
             - verbose (bool): whether to print the results
         '''
-        if scoring not in sklearn.metrics.SCORERS.keys():
+        if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
-                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
-
+                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
+        
         if X is None and y is None:
             X = self.X 
             y = self.y
-
+        
         grid_search = GridSearchCV(self.estimator, self.param_grid, scoring=scoring, cv=cv)
         grid_search.fit(X, y)
         self.best_params = grid_search.best_params_
@@ -219,9 +154,9 @@ class MachineLearningEstimator(DataLoader):
             - n_iter (int): number of iterations
             - verbose (bool): whether to print the results
         '''
-        if scoring not in sklearn.metrics.SCORERS.keys():
+        if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
-                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
+                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
 
         if X is None and y is None:
             X = self.X 
@@ -236,92 +171,9 @@ class MachineLearningEstimator(DataLoader):
             print(f'Best parameters: {self.best_params}')
             print(f'Best {scoring}: {self.best_score}')
 
-    def bayesian_search(self, X=None, y=None, scoring='accuracy', direction='maximize', cv=5, n_trials=100, verbose=True):
-        ''' Function to perform a bayesian search using Optuna 
-            - X (array): features
-            - y (array): target
-            - scoring (str): scoring metric
-            - direction (str): direction of the optimization
-            - cv (int): number of folds for cross-validation
-            - n_trials (int): number of trials
-            - verbose (bool): whether to print the results
-        '''
+    def bayesian_search():
+        ''' TODO: To be implemented... '''
+        pass
 
-        if X is None and y is None:
-            X = self.X 
-            y = self.y
 
-        if scoring not in sklearn.metrics.SCORERS.keys():
-            raise ValueError(
-                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
-
-        def create_model(trial):
-            model = self.bayesian_grid[self.name](trial)
-            return model
-
-        def objective(trial):
-            model = create_model(trial)
-            model.fit(X, y)
-            score = model.score(X, y)
-            return score
-        
-        study = optuna.create_study(direction=direction)
-        study.optimize(objective, n_trials=n_trials)
-        self.best_estimator = self.estimator.set_params(**study.best_params)
-
-class MLPipelines(MachineLearningEstimator):
-
-    def __init__(self, estimator, param_grid, label, csv_dir):
-        ''' Class to perform machine learning pipelines 
-            Inherits from MachineLearningEstimator class
-            - estimator (sklearn estimator): estimator to be used
-            - param_grid (dict): hyperparameters to be tuned
-            - label (str): name of the target column
-            - csv_dir (str): path to the csv file
-        '''
-        super().__init__(estimator, param_grid, label, csv_dir)
-
-    def bootsrap(self, n_iter=100, test_size=0.2, optimizer='grid_search', 
-                 random_iter=25, n_trials=100, cv=5, scoring='accuracy'):
-        ''' Performs boostrap validation on a given estimator.
-            - n_iter: number of iterations to perform boostrap validation
-            - test_size: test size for each iteration
-            - optimizer: 'grid_search' for GridSearchCV
-                         'reandom_search' for RandomizedSearchCV
-                         'bayesian_search' for optuna
-            - random_iter: number of iterations for RandomizedSearchCV
-            - n_trials: number of trials for optuna
-            - cv: number of folds for cross-validation
-            - scoring: scoring metric
-    
-        returns:
-            - eval_metrics (list): list of evaluation metrics for each iteration
-        '''                
-        if scoring not in sklearn.metrics.SCORERS.keys():
-            raise ValueError(f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
-
-        eval_metrics = []
-
-        for i in range(n_iter):
-            X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=test_size, random_state=i)
-            if self.param_grid is None or self.param_grid == {}:
-                self.estimator.fit(X_train, y_train)
-            else:
-                if optimizer == 'grid_search':
-                    self.grid_search(X_train, y_train, scoring=scoring, cv=cv, verbose=False)
-                elif optimizer == 'random_search':
-                    self.random_search(X_train, y_train, scoring=scoring, cv=cv, n_iter=random_iter, verbose=False)
-                elif optimizer == 'bayesian_search':
-                    self.bayesian_search(X_train, y_train, scoring=scoring, direction='maximize', cv=cv, n_trials=n_trials, verbose=False)
-                    self.best_estimator.fit(X_train, y_train)
-                else:
-                    raise ValueError(f'Invalid optimizer: {optimizer}. Select one of the following: grid_search, bayesian_search')
-            
-            y_pred = self.best_estimator.predict(X_test)
-            eval_metrics.append(get_scorer(scoring)._score_func(y_test, y_pred))
-
-        print(f'Average {scoring}: {np.mean(eval_metrics)}')
-        print(f'Standard deviation {scoring}: {np.std(eval_metrics)}')
-        return eval_metrics
-   
 
