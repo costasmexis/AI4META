@@ -171,7 +171,7 @@ class MachineLearningEstimator(DataLoader):
             print(f'Best parameters: {self.best_params}')
             print(f'Best {scoring}: {self.best_score}')
 
-    def bayesian_search(self, X=None, y=None, scoring='accuracy', cv=5, direction='maximize', n_trials=100):
+    def bayesian_search(self, X=None, y=None, scoring='accuracy', cv=5, direction='maximize', n_trials=100, verbose=True):
         
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
@@ -187,10 +187,12 @@ class MachineLearningEstimator(DataLoader):
             return score
         
         study = optuna.create_study(direction='maximize')
-        study.optimize(objective, n_trials=100)
-        
-        ''' TODO Finish this'''
-        
-        return None
+        study.optimize(objective, n_trials=n_trials)
+        self.best_params = study.best_params
+        self.best_score = study.best_value
+        self.best_estimator = self.bayesian_grid[self.name](study.best_trial)
+        if verbose:
+            print(f'Best parameters: {self.best_params}')
+            print(f'Best {scoring}: {self.best_score}')
         
         
