@@ -142,3 +142,15 @@ class MLPipelines(MachineLearningEstimator):
         nested_scores = [item for sublist in nested_scores for item in sublist]
         
         return nested_scores
+    
+    ''' MODEL SELECTION USING NCV '''
+    def model_selection(self):
+        
+        # Iterate through all the estimators
+        for estimator in self.available_clfs.keys():
+            print(f'Performing nested cross-validation for {estimator}...')
+            self.name = estimator
+            self.estimator = self.available_clfs[estimator]
+            self.nested_cross_validation()
+
+        pass
