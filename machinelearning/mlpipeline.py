@@ -88,5 +88,57 @@ class MLPipelines(MachineLearningEstimator):
         print(f'Standard deviation {scoring}: {np.std(eval_metrics)}')
         return eval_metrics
 
-    def nested_cross_validation(self):
-        pass
+    def nested_cross_validation(self, inner_scoring='accuracy', outer_scoring='accuracy',
+                                inner_splits=3, outer_splits=5, optimizer='grid_search', 
+                                n_trials=100, n_iter=25, num_trials=10, n_jobs=-1, verbose=0):
+        ''' 
+        Function to perform nested cross-validation for a given model and dataset in order to 
+        perform model selection.
+
+            - optimizer (str): 'grid_search' (GridSearchCV) 
+                            'random_search' (RandomizedSearchCV) 
+                            'bayesian_search' (optuna)
+            - n_trials (int): Number of trials for optuna
+            - n_iter (int):  Number of iterations for RandomizedSearchCV
+            - num_trials (int): Number of trials for the nested cross-validation
+            - n_jobs (int): Number of jobs to run in parallel
+            - verbose (int): Verbosity level
+
+        returns:
+            - clf (object): Best model
+            - nested_scores (list): Nested cross-validation scores
+        '''
+
+        # Check if both inner and outer scoring metrics are valid 
+        if inner_scoring not in sklearn.metrics.SCORERS.keys():
+            raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
+        if outer_scoring not in sklearn.metrics.SCORERS.keys():
+            raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
+
+        print(f'Performing nested cross-validation for {self.estimator.__class__.__name__}...')
+                
+        nested_scores = []
+        for i in tqdm(range(num_trials)):
+            inner_cv = StratifiedKFold(n_splits=inner_splits, shuffle=True, random_state=i)
+            outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=i)
+            
+            if optimizer == 'grid_search':
+                clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
+                                param_grid=self.param_grid, cv=inner_cv, n_jobs=n_jobs, verbose=verbose)
+            elif optimizer == 'random_search':
+                clf = RandomizedSearchCV(estimator=self.estimator, scoring=inner_scoring,
+                                         param_distributions=self.param_grid, cv=inner_cv, n_jobs=n_jobs, 
+                                        verbose=verbose, n_iter=n_iter)
+            elif optimizer == 'bayesian_search':
+                clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
+                                                        param_distributions=self.param_grid, cv=inner_cv, n_jobs=n_jobs, 
+                                                        verbose=verbose, n_trials=n_trials)
+            else:
+                raise Exception("Unsupported optimizer.")
+            
+            nested_score = cross_val_score(clf, X=self.X, y=self.y, cv=outer_cv, scoring=outer_scoring, n_jobs=n_jobs)
+            nested_scores.append(nested_score)
+
+        nested_scores = [item for sublist in nested_scores for item in sublist]
+        
+        return nested_scores
