@@ -4,7 +4,7 @@ import optuna
 from tqdm import tqdm
 import sklearn
 from sklearn.model_selection import train_test_split, cross_val_score, \
-    GridSearchCV, RandomizedSearchCV, StratifiedKFold
+    GridSearchCV, RandomizedSearchCV, StratifiedKFold, KFold
 from sklearn.metrics import get_scorer
 from sklearn.linear_model import LogisticRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -13,10 +13,14 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
+from sklearn.cross_decomposition import PLSRegression
 from xgboost import XGBClassifier
-
+from .Bayesian_Grid import bayesian_grid
 from dataloader import DataLoader
-
+from optuna.integration import OptunaSearchCV
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, roc_auc_score, matthews_corrcoef, mean_squared_error
 
 class MachineLearningEstimator(DataLoader):
     def __init__(self, estimator, param_grid, label, csv_dir):
@@ -31,6 +35,7 @@ class MachineLearningEstimator(DataLoader):
         self.estimator = estimator
         self.name = estimator.__class__.__name__
         self.param_grid = param_grid
+        self.bayesian_grid = bayesian_grid
         self.best_params = None
         self.best_score = None
         self.best_estimator = None
@@ -41,85 +46,42 @@ class MachineLearningEstimator(DataLoader):
             'LinearDiscriminantAnalysis': LinearDiscriminantAnalysis(),
             'LogisticRegression': LogisticRegression(),
             'XGBClassifier': XGBClassifier(),
-            'NaiveBayes': GaussianNB(),
+            'GaussianNB': GaussianNB(),
             'KNeighborsClassifier': KNeighborsClassifier(),
             'DecisionTreeClassifier': DecisionTreeClassifier(),
-            'SVC': SVC()
-        }
-        
-        self.bayesian_grid = {
-            'RandomForestClassifier': lambda trial: RandomForestClassifier(
-                n_estimators=trial.suggest_int('n_estimators', 2, 200),
-                criterion='gini',  # or trial.suggest_categorical('criterion', ['gini', 'entropy'])
-                max_depth=trial.suggest_int('max_depth', 1, 50),
-                min_samples_leaf=trial.suggest_int('min_samples_leaf', 1, 10),
-                min_samples_split=trial.suggest_int('min_samples_split', 2, 10),
-                bootstrap=trial.suggest_categorical('bootstrap', [True, False]),
-                n_jobs=-1,
-            ),
-            'KNeighborsClassifier': lambda trial: KNeighborsClassifier(
-                n_neighbors=trial.suggest_int('n_neighbors', 2, 15),
-                weights=trial.suggest_categorical('weights', ['uniform', 'distance']),
-                algorithm=trial.suggest_categorical('algorithm', ['auto', 'ball_tree', 'kd_tree', 'brute']),
-                p=trial.suggest_int('p', 1, 2),
-                leaf_size=trial.suggest_int('leaf_size', 5, 50),
-                n_jobs=-1
-            ),
-            'DecisionTreeClassifier': lambda trial: DecisionTreeClassifier(
-                trial.suggest_categorical('criterion', ['gini', 'entropy']),
-                splitter=trial.suggest_categorical('splitter', ['best', 'random']),
-                max_depth=trial.suggest_int('max_depth', 1, 100),
-                min_samples_split=trial.suggest_int('min_samples_split', 2, 10),
-                min_weight_fraction_leaf=trial.suggest_float('min_weight_fraction_leaf', 0.0, 0.5),
-            ),
-            'SVC': lambda trial: SVC(
-                C=trial.suggest_int('C', 1, 10),
-                kernel=trial.suggest_categorical('kernel', ['linear', 'rbf', 'sigmoid']),
-                probability=trial.suggest_categorical('probability', [True, False]),
-                shrinking=trial.suggest_categorical('shrinking', [True, False]),
-                decision_function_shape=trial.suggest_categorical('decision_function_shape', ['ovo', 'ovr'])
-            ),
-            'GradientBoostingClassifier': lambda trial: GradientBoostingClassifier(
-                loss=trial.suggest_categorical('loss', ['log_loss', 'exponential']),
-                learning_rate=trial.suggest_float('learning_rate', 0.01, 0.5),
-                n_estimators=trial.suggest_int('n_estimators', 2, 200),
-                criterion=trial.suggest_categorical('criterion', ['friedman_mse', 'squared_error']),
-                max_depth=trial.suggest_int('max_depth', 1, 50),
-                min_samples_split=trial.suggest_int('min_samples_split', 2, 10),
-                min_samples_leaf=trial.suggest_int('min_samples_leaf', 1, 10)
-            ),
-            'XGBClassifier': lambda trial: XGBClassifier(
-                learning_rate=trial.suggest_float('learning_rate', 0.01, 0.5),
-                n_estimators=trial.suggest_int('n_estimators', 2, 200),
-                max_depth=trial.suggest_int('max_depth', 1, 50),
-                min_child_weight=trial.suggest_int('min_child_weight', 1, 10),
-                gamma=trial.suggest_float('gamma', 0.0, 0.5),
-                subsample=trial.suggest_float('subsample', 0.1, 1.0),
-                colsample_bytree=trial.suggest_float('colsample_bytree', 0.1, 1.0),
-                nthread=-1,
-                verbosity=0
-            ),
-            'LinearDiscriminantAnalysis': lambda trial: LinearDiscriminantAnalysis(
-                solver=trial.suggest_categorical('solver', ['svd', 'lsqr', 'eigen']),
-                shrinkage=trial.suggest_float('shrinkage', 0.0, 1.0),
-                n_components=trial.suggest_int('n_components', 1, 10)
-            ),
-            'LogisticRegression': lambda trial: LogisticRegression(
-                penalty=trial.suggest_categorical('penalty', ['l1', 'l2', 'elasticnet', 'none']),
-                C=trial.suggest_float('C', 0.1, 10.0),
-                solver=trial.suggest_categorical('solver', ['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga']),
-                max_iter=trial.suggest_int('max_iter', 100, 1000),
-                n_jobs=-1
-            ),
-            'NaiveBayes': lambda trial: GaussianNB(
-                var_smoothing=trial.suggest_float('var_smoothing', 1e-9, 1e-5)
-            )
+            'SVC': SVC(),
+            'PLSRegression': PLSRegression()
         }
         
         # Check if the estimator is valid 
         if self.name not in self.available_clfs.keys():
             raise ValueError(f'Invalid estimator: {self.name}. Select one of the following: {list(self.available_clfs.keys())}')
+   
+    def encode_labels(self):
+        self.label_encoder = LabelEncoder()
         
+        self.y = self.label_encoder.fit_transform(self.y)
+        
+        label_mapping = {class_label: index for index, class_label in enumerate(self.label_encoder.classes_)}
+        print("Label mapping:", label_mapping)
+    
+    # def PLS_performance(self, model, X_test, y_test, scoring='accuracy'):
+    #     y_pred = model.predict(X_test)
+
+    #     if isinstance(model, PLSRegression):
+    #        y_pred = (y_pred[:, 0] > 0.5).astype('uint8')
+          
+    # #     if self.inner_scoring == 'roc_auc':
+    # #        score = roc_auc_score(y_test, y_pred)
+    # #     elif self.inner_scoring == 'matthews_corrcoef':
+    # #        score = matthews_corrcoef(y_test, y_pred)
+    # #   # elif self.inner_scoring == 'specificity':
+    # #   #   score = mean_squared_error(y_test, y_pred)
+    # #     elif self.inner_scoring == 'accuracy':
+            
+    #     score = accuracy_score(y_test, y_pred)
+    #     return score
+
     def grid_search(self, X=None, y=None, scoring='accuracy', cv=5, verbose=True):
         ''' Function to perform a grid search
             - X (array): features
@@ -159,7 +121,7 @@ class MachineLearningEstimator(DataLoader):
                 f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
 
         if X is None and y is None:
-            X = self.X 
+            X = self.X
             y = self.y
 
         random_search = RandomizedSearchCV(self.estimator, self.param_grid, scoring=scoring, cv=cv, n_iter=n_iter)
@@ -171,26 +133,86 @@ class MachineLearningEstimator(DataLoader):
             print(f'Best parameters: {self.best_params}')
             print(f'Best {scoring}: {self.best_score}')
 
-    def bayesian_search(self, X=None, y=None, scoring='accuracy', cv=5, direction='maximize', n_trials=100, verbose=True):
-        
+   
+    def bayesian_search(self, X=None, y=None, scoring='accuracy', cv=5, direction='maximize', n_trials=100, verbose=True, box=False):
+        grid = self.bayesian_grid['ManualSearch']
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
             
         if X is None and y is None:
-            X = self.X 
+            X = self.X#.values
             y = self.y
                               
         def objective(trial):
-            clf = self.bayesian_grid[self.name](trial)
-            score = cross_val_score(clf, X, y, scoring=scoring, cv=cv).mean()
-            return score
+            clf = grid[self.name](trial)
+            # if clf.__class__ == PLSRegression:
+            #     cv_splitter = KFold(n_splits=cv, shuffle=True)
+            #     model_scores = []
+            #     # print(type(X), type(y),X)
+            #     for train_idx, test_idx in cv_splitter.split(X, y):
+            #         # X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+            #         # y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+            #         X_train, X_test = X[train_idx], X[test_idx]
+            #         y_train, y_test = y[train_idx], y[test_idx]
+            #         clf.fit(X_train, y_train)
+            #         score = self.PLS_performance(clf, X_test, y_test)
+            #         model_scores.append(score) 
+            #     final_score = np.mean(model_scores)  
+            # else:
+            final_score = cross_val_score(clf, X, y, scoring=scoring, cv=cv).mean()
+            return final_score
+
         
-        study = optuna.create_study(direction='maximize')
+        study = optuna.create_study(direction=direction)
         study.optimize(objective, n_trials=n_trials)
         self.best_params = study.best_params
         self.best_score = study.best_value
-        self.best_estimator = self.bayesian_grid[self.name](study.best_trial)
+        self.best_estimator = grid[self.name](study.best_trial)
+
+        print(f'Best parameters: {self.best_params}')
+        print(f'Best {scoring}: {self.best_score}')
+        
+        # if box and self.estimator.__class__ == PLSRegression:
+        #     print("Boxplot is not available for PLSRegression")
+        
+        if box:
+            best_scores = [trial.value for trial in study.trials if trial.value is not None]
+            plt.style.use('seaborn-whitegrid')
+            plt.boxplot(best_scores, widths=0.75, whis=2)
+            plt.ylim(0, 1)
+            plt.title(f"Cross-Validation Scores Across Trials for {self.name}")
+            plt.ylabel('Scores')
+            plt.xlabel(f'{cv}-Fold Cross-Validation')
+            plt.show()
+
+    
+    # def bayesian_search(self, X=None, y=None, scoring='accuracy', cv=5, n_trials=100, verbose=True):
+    #     if scoring not in sklearn.metrics.get_scorer_names():
+    #         raise ValueError(
+    #             f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
+
+    #     if X is None and y is None:
+    #         X = self.X 
+    #         y = self.y
+
+    #     # Set up OptunaSearchCV with the Bayesian grid 
+    #     optuna_search = OptunaSearchCV(
+    #         estimator=self.available_clfs[self.name],  # Ensure this matches the classifier names in bayesian_grid
+    #         param_distributions=self.bayesian_grid[self.name],
+    #         n_trials=n_trials,
+    #         scoring=scoring,
+    #         cv=cv,
+    #         verbose=verbose
+    #     )
+
+    #     # Perform the search
+    #     optuna_search.fit(X, y)
+
+    #     # Store the results
+    #     self.best_params = optuna_search.best_params_
+    #     self.best_score = optuna_search.best_score_
+    #     self.best_estimator = optuna_search.best_estimator_
         if verbose:
             print(f'Best parameters: {self.best_params}')
             print(f'Best {scoring}: {self.best_score}')
