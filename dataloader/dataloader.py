@@ -1,6 +1,7 @@
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from mrmr import mrmr_classif
+from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif, SelectPercentile
 
 class DataLoader:
     def __init__(self, label, csv_dir):
@@ -56,11 +57,29 @@ class DataLoader:
         else:
             raise Exception("Unsupported normalization method.")
         
-    def feature_selection(self, method='mrmr', n_features=10):
+    def feature_selection(self, method='mrmr', n_features=10, inner_method='chi2', percentile=10):
         ''' Function to perform feature selection.'''
         if method == 'mrmr':
             self.selected_features = mrmr_classif(self.X, self.y.values, K=n_features)
             self.X = self.X[self.selected_features]
+        elif method == 'selectkbest':
+            if inner_method == 'chi2':
+                self.X = SelectKBest(chi2, k=n_features).fit_transform(self.X, self.y)
+            elif inner_method == 'f_classif':
+                self.X = SelectKBest(f_classif, k=n_features).fit_transform(self.X, self.y)
+            elif inner_method == 'mutual_info_classif':
+                self.X = SelectKBest(mutual_info_classif, k=n_features).fit_transform(self.X, self.y)
+            else: raise Exception("Unsupported inner function. \nChoose from chi2, f_classif and mutual_info_classif.")
+        elif method == 'selectpercentile':
+            if percentile<=100 and percentile>=0:
+                if inner_method == 'chi2':
+                    self.X = SelectPercentile(chi2, percentile=percentile).fit_transform(self.X, self.y)
+                elif inner_method == 'f_classif':
+                    self.X = SelectPercentile(f_classif, percentile=percentile).fit_transform(self.X, self.y)
+                elif inner_method == 'mutual_info_classif':
+                    self.X = SelectPercentile(mutual_info_classif, percentile=percentile).fit_transform(self.X, self.y)
+                else: raise Exception("Unsupported inner function. \nChoose from chi2, f_classif and mutual_info_classif.")
+            else: raise Exception("Percentile must be between 0 and 100.")
         else:
             raise Exception("Unsupported feature selection method.")
     
