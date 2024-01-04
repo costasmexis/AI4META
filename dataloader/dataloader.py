@@ -1,13 +1,15 @@
 import pandas as pd
+from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from mrmr import mrmr_classif
 
 class DataLoader:
     def __init__(self, label, csv_dir):
-        ''' Class to load a metabolomics dataset from a file. 
-            - label: the name of the target column.
-            - csv_dir: the path to the csv file.
-        '''
+        """Class to load a metabolomics dataset from a file.
+        Args:
+            label (str): name of the target column.
+            csv_dir (str): path to the csv file.
+        """
         self.csv_dir = csv_dir
         self.label = label
         self.data = None
@@ -18,9 +20,10 @@ class DataLoader:
         self.__load_data() 
     
     def __load_data(self, index_col=0):
-        ''' Function to load data from a file. 
-            - index_col (0): the index column of the dataset
-        '''
+        """Function to load data from a file.
+        Args:
+            index_col (int, optional): index column of dataset. Defaults to 0.
+        """
         file_extension = self.csv_dir.split('.')[-1]
         if file_extension in self.supported_extensions:
             sep = ',' if file_extension == 'csv' else '\t'
@@ -30,6 +33,15 @@ class DataLoader:
                 
         self.X = self.data.drop(self.label, axis=1)
         self.y = self.data[self.label].copy()
+    
+    '''
+    TODO FINISH encode_labels and encode_categorical
+    '''
+    def encode_labels(self):
+        self.label_encoder = LabelEncoder()
+        self.y = self.label_encoder.fit_transform(self.y)
+        label_mapping = {class_label: index for index, class_label in enumerate(self.label_encoder.classes_)}
+        print("Label mapping:", label_mapping)
     
     def encode_categorical(self):
         ''' Function to encode the target varable. From str to 1/0.'''
