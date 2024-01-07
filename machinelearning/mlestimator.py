@@ -19,7 +19,6 @@ from .Bayesian_Grid import bayesian_grid
 from dataloader import DataLoader
 from optuna.integration import OptunaSearchCV
 import matplotlib.pyplot as plt
-from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, roc_auc_score, matthews_corrcoef, mean_squared_error
 
 class MachineLearningEstimator(DataLoader):
@@ -49,21 +48,25 @@ class MachineLearningEstimator(DataLoader):
             'GaussianNB': GaussianNB(),
             'KNeighborsClassifier': KNeighborsClassifier(),
             'DecisionTreeClassifier': DecisionTreeClassifier(),
-            'SVC': SVC(),
-            'PLSRegression': PLSRegression()
+            'SVC': SVC()
+            # 'LDA_nosvd': LinearDiscriminantAnalysis(),
+            # 'LDA_svd': LinearDiscriminantAnalysis(solver='svd'),
+            # 'LR_l1': LogisticRegression(penalty='l1'),
+            # 'LR_l2': LogisticRegression(penalty='l2'),
+            # 'LR_none': LogisticRegression(penalty='none'),
         }
-        
-        # Check if the estimator is valid 
-        if self.name not in self.available_clfs.keys():
+   
+        # # Check if the estimator is valid 
+        if self.name not in self.available_clfs.keys() or self.name == None:
             raise ValueError(f'Invalid estimator: {self.name}. Select one of the following: {list(self.available_clfs.keys())}')
    
-    def encode_labels(self):
-        self.label_encoder = LabelEncoder()
+    # def encode_labels(self):
+    #     self.label_encoder = LabelEncoder()
         
-        self.y = self.label_encoder.fit_transform(self.y)
+    #     self.y = self.label_encoder.fit_transform(self.y)
         
-        label_mapping = {class_label: index for index, class_label in enumerate(self.label_encoder.classes_)}
-        print("Label mapping:", label_mapping)
+    #     label_mapping = {class_label: index for index, class_label in enumerate(self.label_encoder.classes_)}
+    #     print("Label mapping:", label_mapping)
     
     # def PLS_performance(self, model, X_test, y_test, scoring='accuracy'):
     #     y_pred = model.predict(X_test)

@@ -9,10 +9,10 @@ from sklearn.cross_decomposition import PLSRegression
 from sklearn.svm import SVC
 import optuna
 
-bayesian_grid = {'NestedCV': {
-    'RandomForestClassifier': {
+bayesian_grid = {'NestedCV': 
+    {'RandomForestClassifier': {
         'n_estimators': optuna.distributions.IntDistribution(2, 200),
-        'criterion': optuna.distributions.CategoricalDistribution(['gini']),#, 'entropy']),
+        'criterion': optuna.distributions.CategoricalDistribution(['gini','entropy']),
         'max_depth': optuna.distributions.IntDistribution(1, 50),
         'min_samples_leaf': optuna.distributions.IntDistribution(1, 10),
         'min_samples_split': optuna.distributions.IntDistribution(2, 10),
@@ -32,9 +32,10 @@ bayesian_grid = {'NestedCV': {
         'min_samples_split': optuna.distributions.IntDistribution(2, 10),
         'min_weight_fraction_leaf': optuna.distributions.IntDistribution(0.0, 0.5)
     },
-    'SVC': {
+    'SVC': { 
         'C': optuna.distributions.IntDistribution(1, 10),
-        'kernel': optuna.distributions.CategoricalDistribution(['linear', 'rbf', 'sigmoid']),
+        'kernel': optuna.distributions.CategoricalDistribution(['linear', 'rbf', 'sigmoid','poly']),
+        'degree' : optuna.distributions.IntDistribution(1, 10),
         'probability': optuna.distributions.CategoricalDistribution([True, False]),
         'shrinking': optuna.distributions.CategoricalDistribution([True, False]),
         'decision_function_shape': optuna.distributions.CategoricalDistribution(['ovo', 'ovr'])
@@ -48,34 +49,65 @@ bayesian_grid = {'NestedCV': {
         'min_samples_split': optuna.distributions.IntDistribution(2, 10),
         'min_samples_leaf': optuna.distributions.IntDistribution(1, 10)
     },
-    # 'XGBClassifier': {
-    #     'learning_rate': optuna.distributions.FloatDistribution(0.01, 0.5),
-    #     'n_estimators': optuna.distributions.IntDistribution(2, 200),
-    #     'max_depth': optuna.distributions.IntDistribution(1, 50),
-    #     'min_child_weight': optuna.distributions.IntDistribution(1, 10),
-    #     'gamma': optuna.distributions.FloatDistribution(0.0, 0.5),
-    #     'subsample': optuna.distributions.FloatDistribution(0.1, 1.0),
-    #     'colsample_bytree': optuna.distributions.FloatDistribution(0.1, 1.0)
+    'XGBClassifier': {
+        'learning_rate': optuna.distributions.FloatDistribution(0.01, 0.5),
+        'n_estimators': optuna.distributions.IntDistribution(5, 200),
+        'max_depth': optuna.distributions.IntDistribution(1, 50),
+        'min_child_weight': optuna.distributions.IntDistribution(1, 10),
+        'gamma': optuna.distributions.FloatDistribution(0, 5),
+        'subsample': optuna.distributions.FloatDistribution(0.1, 1.0),
+        'colsample_bytree': optuna.distributions.FloatDistribution(0.1, 1.0),
+        'njobs': optuna.distributions.CategoricalDistribution([-1]),
+        'booster' : optuna.distributions.CategoricalDistribution(['gbtree', 'gblinear','dart']),
+        'tree_method' : optuna.distributions.CategoricalDistribution(['auto', 'exact', 'approx', 'hist', 'gpu_hist']),
+        'reg_alpha': optuna.distributions.FloatDistribution(0, 5),
+        'reg_lambda': optuna.distributions.FloatDistribution(0, 5),
+        'scale_pos_weight': optuna.distributions.FloatDistribution(0, 5),
+        'objective': optuna.distributions.CategoricalDistribution(['binary:logistic'])
+    },
+    # 'LinearDiscriminantAnalysis_nonSVD': { 
+    'LinearDiscriminantAnalysis': {
+    # 'LinearDiscriminantAnalysis': lambda trial: LinearDiscriminantAnalysis(
+    #     solver=trial.suggest_categorical('solver', ['lsqr', 'eigen', 'svd']),
+    #     shrinkage=(None if trial.params['solver'] == 'svd' else trial.suggest_float('shrinkage', 0.0, 1.0)),
+        'solver': optuna.distributions.CategoricalDistribution(['lsqr', 'eigen']),
+        'shrinkage': optuna.distributions.FloatDistribution(0.0, 1.0),
+        'tol': optuna.distributions.CategoricalDistribution([1e-3,1e-4,1e-5]),
+        'store_covariance': optuna.distributions.CategoricalDistribution([True,False])
+    },
+    # # 'LinearDiscriminantAnalysis_SVD': { 
+    # 'LDA_svd': {
+    #     'solver': optuna.distributions.CategoricalDistribution(['svd']),
+    #     'tol': optuna.distributions.CategoricalDistribution([1e-3,1e-4,1e-5]),
+    #     'store_covariance': optuna.distributions.CategoricalDistribution([True,False])
     # },
-    # 'LinearDiscriminantAnalysis': {
-    #     'solver': optuna.distributions.CategoricalDistribution(['svd', 'lsqr', 'eigen']),
-    #     'shrinkage': optuna.distributions.FloatDistribution(0.0, 1.0),
-    #     'n_components': optuna.distributions.IntDistribution(1, 10)
-    # },
+    # 'LogisticRegression_l1': { 
     'LogisticRegression': {
-        'penalty': optuna.distributions.CategoricalDistribution(['l1', 'l2', 'elasticnet', 'none']),
+        'penalty': optuna.distributions.CategoricalDistribution(['l1','l2',None,'elasticnet']),
         'C': optuna.distributions.FloatDistribution(0.1, 10.0),
-        'solver': optuna.distributions.CategoricalDistribution(['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga']),
+        'solver': optuna.distributions.CategoricalDistribution(['newton-cg', 'lbfgs', 'sag','saga','newton-cholesky','liblinear']),
         'max_iter': optuna.distributions.IntDistribution(100, 1000)
     },
-    'GaussianNB': {
+    # # 'LogisticRegression_l2': { 
+    # 'LR_l2': {
+    #     'penalty': optuna.distributions.CategoricalDistribution(['l2']),
+    #     'C': optuna.distributions.FloatDistribution(0.1, 10.0),
+    #     'solver': optuna.distributions.CategoricalDistribution(['newton-cg', 'lbfgs', 'sag','saga','newton-cholesky','liblinear']),
+    #     'max_iter': optuna.distributions.IntDistribution(100, 1000)
+    # },
+    # # 'LogisticRegression_none': {    
+    # 'LR_none': {
+    #     'penalty': optuna.distributions.CategoricalDistribution(['none']),
+    #     'C': optuna.distributions.FloatDistribution(0.1, 10.0),
+    #     'solver': optuna.distributions.CategoricalDistribution(['lbfgs','newton-cg', 'sag','saga','newton-cholesky']),
+    # },
+    'GaussianNB': { 
         'var_smoothing': optuna.distributions.FloatDistribution(1e-9, 1e-5)
-    }
-  },'ManualSearch': {
-# bayesian_grid =  {
+    }},
+    'ManualSearch': {
             'RandomForestClassifier': lambda trial: RandomForestClassifier(
                 n_estimators=trial.suggest_int('n_estimators', 2, 200),
-                criterion='gini',  # or trial.suggest_categorical('criterion', ['gini', 'entropy'])
+                criterion=trial.suggest_categorical('criterion', ['gini', 'entropy']),
                 max_depth=trial.suggest_int('max_depth', 1, 50),
                 min_samples_leaf=trial.suggest_int('min_samples_leaf', 1, 10),
                 min_samples_split=trial.suggest_int('min_samples_split', 2, 10),
@@ -136,33 +168,22 @@ bayesian_grid = {'NestedCV': {
                 store_covariance=(trial.suggest_categorical('store_covariance', [True, False]) 
                                   if trial.params.get('solver') == 'svd' else False),
                 tol = trial.suggest_categorical('tol',[1e-3,1e-4,1e-5])
-                # n_components=trial.suggest_int('n_components', 1, 10)
             ),
-            # 'LogisticRegression': lambda trial: LogisticRegression(
-            #     penalty=trial.suggest_categorical('penalty', ['l1', 'l2','none']),
-            #     C=trial.suggest_float('C', 0.1, 10.0),
-            #     solver=trial.suggest_categorical('solver', ['liblinear','saga']) if 'l1' in trial.params else trial.suggest_categorical('solver', ['newton-cg', 'lbfgs', 'sag']),
-            #     max_iter=trial.suggest_int('max_iter', 100, 1000),
-            #     fit_intercept = trial.suggest_categorical('fit_intercept', [True, False]),
-            #     n_jobs=-1
-            # ),
             'LogisticRegression': lambda trial: LogisticRegression(
                 penalty=trial.suggest_categorical('penalty', ['l1', 'l2', 'none']),
                 C=trial.suggest_float('C', 0.1, 10.0),
                 solver=(trial.suggest_categorical('solver_1', ['liblinear', 'saga']) 
-                        if trial.params['penalty'] in ['l1'] 
-                        else trial.suggest_categorical('solver_2', ['newton-cg', 'lbfgs', 'sag', 'saga'])),
+                    if trial.params['penalty'] == 'l1' 
+                    else (trial.suggest_categorical('solver_2', ['newton-cg', 'lbfgs', 'sag','saga','newton-cholesky','liblinear'])
+                          if trial.params['penalty'] == 'l2' 
+                          else trial.suggest_categorical('solver_3', ['lbfgs','newton-cg', 'sag','saga','newton-cholesky']))),
                 max_iter=trial.suggest_int('max_iter', 100, 1000),
                 fit_intercept=trial.suggest_categorical('fit_intercept', [True, False]),
                 n_jobs=-1
             ),
             'GaussianNB': lambda trial: GaussianNB(
                 var_smoothing=trial.suggest_float('var_smoothing', 1e-9, 1e-5)
-            ),
-            'PLSRegression': lambda trial: PLSRegression(
-                n_components = 2,
-                scale = trial.suggest_categorical('scale',[True,False]),
-                tol = trial.suggest_categorical('tol',[1e-7,1e-6,1e-5]))
+            )
         }
     }
 

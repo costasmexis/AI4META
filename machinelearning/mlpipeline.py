@@ -17,6 +17,8 @@ from xgboost import XGBClassifier
 
 from dataloader import DataLoader
 from .mlestimator import MachineLearningEstimator
+from .Bayesian_Grid import bayesian_grid
+import matplotlib.pyplot as plt
 
 class MLPipelines(MachineLearningEstimator):
 
@@ -29,6 +31,7 @@ class MLPipelines(MachineLearningEstimator):
             - csv_dir (str): path to the csv file
         '''
         super().__init__(estimator, param_grid, label, csv_dir)
+        self.bayesian_grid = bayesian_grid  
 
     def cross_validation(self, scoring='accuracy', cv=5) -> list:
         ''' Function to perform a simple cross validation
@@ -131,7 +134,7 @@ class MLPipelines(MachineLearningEstimator):
                                         verbose=verbose, n_iter=n_iter)
             elif optimizer == 'bayesian_search':
                 clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
-                                                        param_distributions=self.param_grid, cv=inner_cv, n_jobs=n_jobs, 
+                                                        param_distributions=self.bayesian_grid['NestedCV'][self.name], cv=inner_cv, n_jobs=n_jobs, 
                                                         verbose=verbose, n_trials=n_trials)
             else:
                 raise Exception("Unsupported optimizer.")
@@ -144,13 +147,43 @@ class MLPipelines(MachineLearningEstimator):
         return nested_scores
     
     ''' MODEL SELECTION USING NCV '''
-    def model_selection(self):
+    def model_selection(self,optimizer = 'grid_search', n_trials=100, n_iter=25, num_trials=10, score = 'accuracy', exclude=None, result=False):
+        all_scores = []
+        results = []
         
-        # Iterate through all the estimators
-        for estimator in self.available_clfs.keys():
+        if exclude is not None:
+            exclude_classes = [classifier.__class__ for classifier in exclude]
+        else:
+            exclude_classes = []
+
+        clfs = [clf for clf in self.available_clfs.keys() if self.available_clfs[clf].__class__ not in exclude_classes]      
+              
+        for estimator in tqdm(clfs):
+            # scores_est = []
+            
             print(f'Performing nested cross-validation for {estimator}...')
             self.name = estimator
             self.estimator = self.available_clfs[estimator]
-            self.nested_cross_validation()
-
-        pass
+            scores_est = self.nested_cross_validation(optimizer=optimizer, n_trials=n_trials, n_iter=n_iter,
+                                          num_trials=num_trials, inner_scoring=score, outer_scoring=score)
+            scores_array = np.array([round(num, 4) for num in scores_est])
+            all_scores.append(scores_array)
+            results.append({
+            'Estimator': estimator,
+            'Scores': scores_array,
+            'Mean Score': np.mean(scores_array),
+            'Max Score': np.max(scores_array)
+        })
+        plt.boxplot(all_scores, labels=clfs)
+        plt.title("Model Selection Results")
+        plt.ylabel("Score")
+        plt.xticks(rotation=90)  
+        plt.show()
+        
+        if result:
+            return pd.DataFrame(results)
+        
+    
+    
+    
+     

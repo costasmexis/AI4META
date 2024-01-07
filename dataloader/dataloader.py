@@ -2,6 +2,8 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from mrmr import mrmr_classif
 from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif, SelectPercentile
+from sklearn.preprocessing import LabelEncoder
+
 
 class DataLoader:
     def __init__(self, label, csv_dir):
@@ -32,9 +34,18 @@ class DataLoader:
         self.X = self.data.drop(self.label, axis=1)
         self.y = self.data[self.label].copy()
     
-    def encode_categorical(self):
+    # def encode_categorical(self):
+        
+    #     self.y = self.y.astype('category').cat.codes
+        
+    def encode_labels(self):
         ''' Function to encode the target varable. From str to 1/0.'''
-        self.y = self.y.astype('category').cat.codes
+        self.label_encoder = LabelEncoder()
+        
+        self.y = self.label_encoder.fit_transform(self.y)
+        
+        label_mapping = {class_label: index for index, class_label in enumerate(self.label_encoder.classes_)}
+        print("Label mapping:", label_mapping)
     
     def missing_values(self, method='drop'):
         ''' Function to handle missing values in the dataset.'''
