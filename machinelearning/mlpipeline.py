@@ -1,22 +1,30 @@
-import pandas as pd
 import numpy as np
 import optuna
-from tqdm import tqdm
+import pandas as pd
+import matplotlib.pyplot as plt
 import sklearn
-from sklearn.model_selection import train_test_split, cross_val_score, \
-    GridSearchCV, RandomizedSearchCV, StratifiedKFold
-from sklearn.metrics import get_scorer
-from sklearn.linear_model import LogisticRegression
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import get_scorer
+from sklearn.model_selection import (
+    GridSearchCV,
+    RandomizedSearchCV,
+    StratifiedKFold,
+    cross_val_score,
+    train_test_split,
+)
 from sklearn.naive_bayes import GaussianNB
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from tqdm import tqdm
 from xgboost import XGBClassifier
 
 from dataloader import DataLoader
+
 from .mlestimator import MachineLearningEstimator
+from .optuna_grid import optuna_grid
 
 class MLPipelines(MachineLearningEstimator):
 
@@ -91,23 +99,26 @@ class MLPipelines(MachineLearningEstimator):
     def nested_cross_validation(self, inner_scoring='accuracy', outer_scoring='accuracy',
                                 inner_splits=3, outer_splits=5, optimizer='grid_search', 
                                 n_trials=100, n_iter=25, num_trials=10, n_jobs=-1, verbose=0):
-        ''' 
-        Function to perform nested cross-validation for a given model and dataset in order to 
-        perform model selection.
+        """ Function to perform nested cross-validation for a given model and dataset in order to perform model selection
 
-            - optimizer (str): 'grid_search' (GridSearchCV) 
-                            'random_search' (RandomizedSearchCV) 
-                            'bayesian_search' (optuna)
-            - n_trials (int): Number of trials for optuna
-            - n_iter (int):  Number of iterations for RandomizedSearchCV
-            - num_trials (int): Number of trials for the nested cross-validation
-            - n_jobs (int): Number of jobs to run in parallel
-            - verbose (int): Verbosity level
+        Args:
+            inner_scoring (str, optional): _description_. Defaults to 'accuracy'.
+            outer_scoring (str, optional): _description_. Defaults to 'accuracy'.
+            inner_splits (int, optional): _description_. Defaults to 3.
+            outer_splits (int, optional): _description_. Defaults to 5.
+            optimizer (str, optional): 'gird_search'   (GridSearchCV)
+                                       'random_search' (RandomizedSearchCV))
+                                       'bayesian_search' (Optuna) 
+                                    Defaults to 'grid_search'.
+            n_trials (int, optional): No. of trials for optuna. Defaults to 100.
+            n_iter (int, optional): No. of iterations for RandomizedSearchCV. Defaults to 25.
+            num_trials (int, optional): No. of trials for the nested cross-validation. Defaults to 10.
+            n_jobs (int, optional): No. of jobs to run in parallel. Defaults to -1.
+            verbose (int, optional): Verbosity level. Defaults to 0.
 
-        returns:
-            - clf (object): Best model
-            - nested_scores (list): Nested cross-validation scores
-        '''
+        Returns:
+            nested_scores (list): nested scores
+        """
 
         # Check if both inner and outer scoring metrics are valid 
         if inner_scoring not in sklearn.metrics.SCORERS.keys():
@@ -131,7 +142,7 @@ class MLPipelines(MachineLearningEstimator):
                                         verbose=verbose, n_iter=n_iter)
             elif optimizer == 'bayesian_search':
                 clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
-                                                        param_distributions=self.param_grid, cv=inner_cv, n_jobs=n_jobs, 
+                                                        param_distributions=self.optuna_grid['NestedCV'][self.name], cv=inner_cv, n_jobs=n_jobs, 
                                                         verbose=verbose, n_trials=n_trials)
             else:
                 raise Exception("Unsupported optimizer.")
@@ -143,14 +154,56 @@ class MLPipelines(MachineLearningEstimator):
         
         return nested_scores
     
-    ''' MODEL SELECTION USING NCV '''
-    def model_selection(self):
+    def model_selection(self,optimizer = 'grid_search', n_trials=100, n_iter=25, 
+                        num_trials=10, score = 'accuracy', exclude=None, result=False, box=True):
+        """ Function to perform model selection using Nested Cross Validation
+
+        Args:
+            optimizer (str, optional): _description_. Defaults to 'grid_search'.
+            n_trials (int, optional): _description_. Defaults to 100.
+            n_iter (int, optional): _description_. Defaults to 25.
+            num_trials (int, optional): _description_. Defaults to 10.
+            score (str, optional): _description_. Defaults to 'accuracy'.
+            exclude (_type_, optional): _description_. Defaults to None.
+            result (bool, optional): _description_. Defaults to False.
+            box (bool, optional): _description_. Defaults to True.
+        Returns:
+            _type_: _description_
+        """
         
-        # Iterate through all the estimators
-        for estimator in self.available_clfs.keys():
+        all_scores = []
+        results = []
+        
+        if exclude is not None:
+            exclude_classes = [classifier.__class__ for classifier in exclude]
+        else:
+            exclude_classes = []
+
+        clfs = [clf for clf in self.available_clfs.keys() if self.available_clfs[clf].__class__ not in exclude_classes]      
+              
+        for estimator in tqdm(clfs):
+
             print(f'Performing nested cross-validation for {estimator}...')
             self.name = estimator
             self.estimator = self.available_clfs[estimator]
-            self.nested_cross_validation()
-
-        pass
+            scores_est = self.nested_cross_validation(optimizer=optimizer, n_trials=n_trials, n_iter=n_iter,
+                                          num_trials=num_trials, inner_scoring=score, outer_scoring=score)
+            scores_array = np.array([round(num, 4) for num in scores_est])
+            all_scores.append(scores_array)
+            results.append({
+            'Estimator': estimator,
+            'Scores': scores_array,
+            'Mean Score': np.mean(scores_array),
+            'Max Score': np.max(scores_array)
+        })
+        
+        if box:
+            plt.boxplot(all_scores, labels=clfs)
+            plt.title("Model Selection Results")
+            plt.ylabel("Score")
+            plt.xticks(rotation=90)  
+            plt.show()
+        
+        if result:
+            return pd.DataFrame(results)
+        

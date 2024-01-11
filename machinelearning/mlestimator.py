@@ -1,22 +1,28 @@
-import pandas as pd
 import numpy as np
 import optuna
-from tqdm import tqdm
+import pandas as pd
 import sklearn
-from sklearn.model_selection import train_test_split, cross_val_score, \
-    GridSearchCV, RandomizedSearchCV, StratifiedKFold
-from sklearn.metrics import get_scorer
-from sklearn.linear_model import LogisticRegression
+import matplotlib.pyplot as plt
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import get_scorer
+from sklearn.model_selection import (
+    GridSearchCV,
+    RandomizedSearchCV,
+    StratifiedKFold,
+    cross_val_score,
+    train_test_split,
+)
 from sklearn.naive_bayes import GaussianNB
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from tqdm import tqdm
 from xgboost import XGBClassifier
 
 from dataloader import DataLoader
-
+from .bayesian_grid import optuna_grid
 
 class MachineLearningEstimator(DataLoader):
     def __init__(self, estimator, param_grid, label, csv_dir):
@@ -47,87 +53,19 @@ class MachineLearningEstimator(DataLoader):
             'SVC': SVC()
         }
         
-        self.bayesian_grid = {
-            'RandomForestClassifier': lambda trial: RandomForestClassifier(
-                n_estimators=trial.suggest_int('n_estimators', 2, 200),
-                criterion='gini',  # or trial.suggest_categorical('criterion', ['gini', 'entropy'])
-                max_depth=trial.suggest_int('max_depth', 1, 50),
-                min_samples_leaf=trial.suggest_int('min_samples_leaf', 1, 10),
-                min_samples_split=trial.suggest_int('min_samples_split', 2, 10),
-                bootstrap=trial.suggest_categorical('bootstrap', [True, False]),
-                n_jobs=-1,
-            ),
-            'KNeighborsClassifier': lambda trial: KNeighborsClassifier(
-                n_neighbors=trial.suggest_int('n_neighbors', 2, 15),
-                weights=trial.suggest_categorical('weights', ['uniform', 'distance']),
-                algorithm=trial.suggest_categorical('algorithm', ['auto', 'ball_tree', 'kd_tree', 'brute']),
-                p=trial.suggest_int('p', 1, 2),
-                leaf_size=trial.suggest_int('leaf_size', 5, 50),
-                n_jobs=-1
-            ),
-            'DecisionTreeClassifier': lambda trial: DecisionTreeClassifier(
-                trial.suggest_categorical('criterion', ['gini', 'entropy']),
-                splitter=trial.suggest_categorical('splitter', ['best', 'random']),
-                max_depth=trial.suggest_int('max_depth', 1, 100),
-                min_samples_split=trial.suggest_int('min_samples_split', 2, 10),
-                min_weight_fraction_leaf=trial.suggest_float('min_weight_fraction_leaf', 0.0, 0.5),
-            ),
-            'SVC': lambda trial: SVC(
-                C=trial.suggest_int('C', 1, 10),
-                kernel=trial.suggest_categorical('kernel', ['linear', 'rbf', 'sigmoid']),
-                probability=trial.suggest_categorical('probability', [True, False]),
-                shrinking=trial.suggest_categorical('shrinking', [True, False]),
-                decision_function_shape=trial.suggest_categorical('decision_function_shape', ['ovo', 'ovr'])
-            ),
-            'GradientBoostingClassifier': lambda trial: GradientBoostingClassifier(
-                loss=trial.suggest_categorical('loss', ['log_loss', 'exponential']),
-                learning_rate=trial.suggest_float('learning_rate', 0.01, 0.5),
-                n_estimators=trial.suggest_int('n_estimators', 2, 200),
-                criterion=trial.suggest_categorical('criterion', ['friedman_mse', 'squared_error']),
-                max_depth=trial.suggest_int('max_depth', 1, 50),
-                min_samples_split=trial.suggest_int('min_samples_split', 2, 10),
-                min_samples_leaf=trial.suggest_int('min_samples_leaf', 1, 10)
-            ),
-            'XGBClassifier': lambda trial: XGBClassifier(
-                learning_rate=trial.suggest_float('learning_rate', 0.01, 0.5),
-                n_estimators=trial.suggest_int('n_estimators', 2, 200),
-                max_depth=trial.suggest_int('max_depth', 1, 50),
-                min_child_weight=trial.suggest_int('min_child_weight', 1, 10),
-                gamma=trial.suggest_float('gamma', 0.0, 0.5),
-                subsample=trial.suggest_float('subsample', 0.1, 1.0),
-                colsample_bytree=trial.suggest_float('colsample_bytree', 0.1, 1.0),
-                nthread=-1,
-                verbosity=0
-            ),
-            'LinearDiscriminantAnalysis': lambda trial: LinearDiscriminantAnalysis(
-                solver=trial.suggest_categorical('solver', ['svd', 'lsqr', 'eigen']),
-                shrinkage=trial.suggest_float('shrinkage', 0.0, 1.0),
-                n_components=trial.suggest_int('n_components', 1, 10)
-            ),
-            'LogisticRegression': lambda trial: LogisticRegression(
-                penalty=trial.suggest_categorical('penalty', ['l1', 'l2', 'elasticnet', 'none']),
-                C=trial.suggest_float('C', 0.1, 10.0),
-                solver=trial.suggest_categorical('solver', ['newton-cg', 'lbfgs', 'liblinear', 'sag', 'saga']),
-                max_iter=trial.suggest_int('max_iter', 100, 1000),
-                n_jobs=-1
-            ),
-            'NaiveBayes': lambda trial: GaussianNB(
-                var_smoothing=trial.suggest_float('var_smoothing', 1e-9, 1e-5)
-            )
-        }
-        
-        # Check if the estimator is valid 
+        # Check if the estimator is valid
         if self.name not in self.available_clfs.keys():
             raise ValueError(f'Invalid estimator: {self.name}. Select one of the following: {list(self.available_clfs.keys())}')
-        
+      
     def grid_search(self, X=None, y=None, scoring='accuracy', cv=5, verbose=True):
-        ''' Function to perform a grid search
-            - X (array): features
-            - y (array): target
-            - scoring (str): scoring metric
-            - cv (int): number of folds for cross-validation
-            - verbose (bool): whether to print the results
-        '''
+        """ Function to perform a grid search
+        Args:
+            X (array, optional): Features. Defaults to None.
+            y (array, optional): Target. Defaults to None.
+            scoring (str, optional): Scoring metric. Defaults to 'accuracy'.
+            cv (int, optional): No. of folds for cross-validation. Defaults to 5.
+            verbose (bool, optional): Whether to print the results. Defaults to True.
+        """
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
@@ -146,14 +84,15 @@ class MachineLearningEstimator(DataLoader):
             print(f'Best {scoring}: {self.best_score}')
 
     def random_search(self, X=None, y=None, scoring='accuracy', cv=5, n_iter=100, verbose=True):
-        ''' Function to perform a random search
-            - X (array): features
-            - y (array): target
-            - scoring (str): scoring metric
-            - cv (int): number of folds for cross-validation
-            - n_iter (int): number of iterations
-            - verbose (bool): whether to print the results
-        '''
+        """ Function to perform a random search
+        Args:
+            X (array, optional): Features. Defaults to None.
+            y (array, optional): Target. Defaults to None.
+            scoring (str, optional): Scoring metric. Defaults to 'accuracy'.
+            cv (int, optional): No. of folds for cross-validation. Defaults to 5.
+            n_iter (int, optional): No. of iterations. Defaults to 100.
+            verbose (bool, optional): Whether to print the results. Defaults to True.
+        """
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
@@ -171,28 +110,56 @@ class MachineLearningEstimator(DataLoader):
             print(f'Best parameters: {self.best_params}')
             print(f'Best {scoring}: {self.best_score}')
 
-    def bayesian_search(self, X=None, y=None, scoring='accuracy', cv=5, direction='maximize', n_trials=100, verbose=True):
+    def bayesian_search(self, X=None, y=None, scoring='accuracy', 
+                        cv=5, direction='maximize', n_trials=100, 
+                        verbose=True, box=False):
+        """ Function to perform a bayesian search
+
+        Args:
+            X (_type_, optional): _description_. Defaults to None.
+            y (_type_, optional): _description_. Defaults to None.
+            scoring (str, optional): _description_. Defaults to 'accuracy'.
+            cv (int, optional): _description_. Defaults to 5.
+            direction (str, optional): _description_. Defaults to 'maximize'.
+            n_trials (int, optional): _description_. Defaults to 100.
+            verbose (bool, optional): _description_. Defaults to True.
+            box (bool, optional): _description_. Defaults to False.
+        Returns:
+            _type_: _description_
+        """
         
+        grid = self.optuna_grid['ManualSearch']
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
             
         if X is None and y is None:
-            X = self.X 
+            X = self.X
             y = self.y
                               
         def objective(trial):
-            clf = self.bayesian_grid[self.name](trial)
-            score = cross_val_score(clf, X, y, scoring=scoring, cv=cv).mean()
-            return score
-        
-        study = optuna.create_study(direction='maximize')
+            clf = grid[self.name](trial)
+            final_score = cross_val_score(clf, X, y, scoring=scoring, cv=cv).mean()
+            return final_score
+
+        study = optuna.create_study(direction=direction)
         study.optimize(objective, n_trials=n_trials)
         self.best_params = study.best_params
         self.best_score = study.best_value
-        self.best_estimator = self.bayesian_grid[self.name](study.best_trial)
+        self.best_estimator = grid[self.name](study.best_trial)
+
         if verbose:
             print(f'Best parameters: {self.best_params}')
             print(f'Best {scoring}: {self.best_score}')
         
+        if box:
+            best_scores = [trial.value for trial in study.trials if trial.value is not None]
+            plt.style.use('seaborn-whitegrid')
+            plt.boxplot(best_scores, widths=0.75, whis=2)
+            plt.ylim(0, 1)
+            plt.title(f"Cross-Validation Scores Across Trials for {self.name}")
+            plt.ylabel('Scores')
+            plt.xlabel(f'{cv}-Fold Cross-Validation')
+            plt.show()
+
         

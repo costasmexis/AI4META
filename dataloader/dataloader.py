@@ -56,7 +56,7 @@ class DataLoader:
         else:
             raise Exception("Unsupported missing values method.")
         
-    def normalize(self, method='minmax'):``
+    def normalize(self, method='minmax'):
         """ Function to normalize the dataset.
         Args:
             method (str, optional): Method to use for normalization. Defaults to 'minmax'.
