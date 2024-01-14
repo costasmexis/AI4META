@@ -22,7 +22,7 @@ from tqdm import tqdm
 from xgboost import XGBClassifier
 
 from dataloader import DataLoader
-from .bayesian_grid import optuna_grid
+from .optuna_grid import optuna_grid
 
 class MachineLearningEstimator(DataLoader):
     def __init__(self, estimator, param_grid, label, csv_dir):
@@ -47,7 +47,7 @@ class MachineLearningEstimator(DataLoader):
             'LinearDiscriminantAnalysis': LinearDiscriminantAnalysis(),
             'LogisticRegression': LogisticRegression(),
             'XGBClassifier': XGBClassifier(),
-            'NaiveBayes': GaussianNB(),
+            'GaussianNB': GaussianNB(),
             'KNeighborsClassifier': KNeighborsClassifier(),
             'DecisionTreeClassifier': DecisionTreeClassifier(),
             'SVC': SVC()
@@ -100,7 +100,6 @@ class MachineLearningEstimator(DataLoader):
         if X is None and y is None:
             X = self.X 
             y = self.y
-
         random_search = RandomizedSearchCV(self.estimator, self.param_grid, scoring=scoring, cv=cv, n_iter=n_iter)
         random_search.fit(X, y)
         self.best_params = random_search.best_params_
@@ -112,7 +111,7 @@ class MachineLearningEstimator(DataLoader):
 
     def bayesian_search(self, X=None, y=None, scoring='accuracy', 
                         cv=5, direction='maximize', n_trials=100, 
-                        verbose=True, box=False):
+                        verbose=True):#, box=False):
         """ Function to perform a bayesian search
 
         Args:
@@ -128,7 +127,7 @@ class MachineLearningEstimator(DataLoader):
             _type_: _description_
         """
         
-        grid = self.optuna_grid['ManualSearch']
+        grid = optuna_grid['ManualSearch']
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
@@ -149,17 +148,18 @@ class MachineLearningEstimator(DataLoader):
         self.best_estimator = grid[self.name](study.best_trial)
 
         if verbose:
-            print(f'Best parameters: {self.best_params}')
-            print(f'Best {scoring}: {self.best_score}')
+            print(f'For the {self.name} model: \nBest parameters: {self.best_params}\nBest {scoring}: {self.best_score}')
+            # print(f'Best parameters: {self.best_params}')
+            # print(f'Best {scoring}: {self.best_score}')
         
-        if box:
-            best_scores = [trial.value for trial in study.trials if trial.value is not None]
-            plt.style.use('seaborn-whitegrid')
-            plt.boxplot(best_scores, widths=0.75, whis=2)
-            plt.ylim(0, 1)
-            plt.title(f"Cross-Validation Scores Across Trials for {self.name}")
-            plt.ylabel('Scores')
-            plt.xlabel(f'{cv}-Fold Cross-Validation')
-            plt.show()
+        # if box:
+        #     best_scores = [trial.value for trial in study.trials if trial.value is not None]
+        #     plt.style.use('seaborn-whitegrid')
+        #     plt.boxplot(best_scores, widths=0.75, whis=2)
+        #     plt.ylim(0, 1)
+        #     plt.title(f"Cross-Validation Scores Across Trials for {self.name}")
+        #     plt.ylabel('Scores')
+        #     plt.xlabel(f'{cv}-Fold Cross-Validation')
+        #     plt.show()
 
         

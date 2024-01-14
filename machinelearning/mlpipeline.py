@@ -45,9 +45,9 @@ class MLPipelines(MachineLearningEstimator):
         returns:
             - scores (list): list of scores for each fold
         '''
-        if scoring not in sklearn.metrics.SCORERS.keys():
+        if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
-                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
+                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
         
         scores = cross_val_score(self.estimator, self.X, self.y, cv=cv, scoring=scoring)
         print(f'Average {scoring}: {np.mean(scores)}')
@@ -121,10 +121,10 @@ class MLPipelines(MachineLearningEstimator):
         """
 
         # Check if both inner and outer scoring metrics are valid 
-        if inner_scoring not in sklearn.metrics.SCORERS.keys():
-            raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
-        if outer_scoring not in sklearn.metrics.SCORERS.keys():
-            raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.SCORERS.keys())}')
+        if inner_scoring not in sklearn.metrics.get_scorer_names():
+            raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
+        if outer_scoring not in sklearn.metrics.get_scorer_names():
+            raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
 
         print(f'Performing nested cross-validation for {self.estimator.__class__.__name__}...')
                 
@@ -142,7 +142,7 @@ class MLPipelines(MachineLearningEstimator):
                                         verbose=verbose, n_iter=n_iter)
             elif optimizer == 'bayesian_search':
                 clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
-                                                        param_distributions=self.optuna_grid['NestedCV'][self.name], cv=inner_cv, n_jobs=n_jobs, 
+                                                        param_distributions=optuna_grid['NestedCV'][self.name], cv=inner_cv, n_jobs=n_jobs, 
                                                         verbose=verbose, n_trials=n_trials)
             else:
                 raise Exception("Unsupported optimizer.")
@@ -155,7 +155,7 @@ class MLPipelines(MachineLearningEstimator):
         return nested_scores
     
     def model_selection(self,optimizer = 'grid_search', n_trials=100, n_iter=25, 
-                        num_trials=10, score = 'accuracy', exclude=None, result=False, box=True):
+                        num_trials=10, score = 'accuracy', exclude=None, result=False, box=True , train_best=None):
         """ Function to perform model selection using Nested Cross Validation
 
         Args:
@@ -204,6 +204,23 @@ class MLPipelines(MachineLearningEstimator):
             plt.xticks(rotation=90)  
             plt.show()
         
+        # best_estimator_name = max(results, key=lambda x: x['Mean Score'])['Estimator']
+        self.name = max(results, key=lambda x: x['Mean Score'])['Estimator']
+        self.estimator = self.available_clfs[self.name]
+        # self.best_estimator = self.available_clfs[best_estimator_name]
+        # self.estimator = self.available_clfs[best_estimator_name]
+        # print(self.estimator)
+        if train_best == 'bayesian_search':
+            self.bayesian_search(cv=5, n_trials=100, verbose=True)
+        elif train_best == 'grid_search':
+            self.grid_search(cv=5, verbose=True)
+        elif train_best == 'random_search':
+            self.random_search(cv=5, n_iter=25, verbose=True)
+        elif train_best is None:
+            print(f'Best estimator: {self.name}')
+        else:   
+            raise ValueError(f'Invalid type of best estimator train. Choose between "bayesian_search", "grid_search", "random_search" or None.')
+        
         if result:
             return pd.DataFrame(results)
-        
+            

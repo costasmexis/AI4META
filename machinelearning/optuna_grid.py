@@ -8,7 +8,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
 import optuna
 
-bayesian_grid = {'NestedCV': 
+optuna_grid = {'NestedCV': 
     {'RandomForestClassifier': {
         'n_estimators': optuna.distributions.IntDistribution(2, 200),
         'criterion': optuna.distributions.CategoricalDistribution(['gini','entropy']),
@@ -49,16 +49,16 @@ bayesian_grid = {'NestedCV':
         'min_samples_leaf': optuna.distributions.IntDistribution(1, 10)
     },
     'XGBClassifier': {
-        'learning_rate': optuna.distributions.FloatDistribution(0.01, 0.5),
-        'n_estimators': optuna.distributions.IntDistribution(5, 200),
+        'learning_rate': optuna.distributions.FloatDistribution(0.01, 1),
+        'n_estimators': optuna.distributions.IntDistribution(2, 500),
         'max_depth': optuna.distributions.IntDistribution(1, 50),
         'min_child_weight': optuna.distributions.IntDistribution(1, 10),
-        'gamma': optuna.distributions.FloatDistribution(0, 5),
-        'subsample': optuna.distributions.FloatDistribution(0.1, 1.0),
+        'gamma': optuna.distributions.FloatDistribution(0, 10),
+        'subsample': optuna.distributions.FloatDistribution(0.001, 1.0),
         'colsample_bytree': optuna.distributions.FloatDistribution(0.1, 1.0),
-        'njobs': optuna.distributions.CategoricalDistribution([-1]),
-        'booster' : optuna.distributions.CategoricalDistribution(['gbtree', 'gblinear','dart']),
-        'tree_method' : optuna.distributions.CategoricalDistribution(['auto', 'exact', 'approx', 'hist', 'gpu_hist']),
+        'n_jobs': optuna.distributions.CategoricalDistribution([-1]),
+        'booster' : optuna.distributions.CategoricalDistribution(['gbtree', 'dart']),#'gblinear',
+        'tree_method' : optuna.distributions.CategoricalDistribution(['auto', 'exact', 'approx', 'hist']),
         'reg_alpha': optuna.distributions.FloatDistribution(0, 5),
         'reg_lambda': optuna.distributions.FloatDistribution(0, 5),
         'scale_pos_weight': optuna.distributions.FloatDistribution(0, 5),
@@ -122,19 +122,19 @@ bayesian_grid = {'NestedCV':
                 min_samples_leaf=trial.suggest_int('min_samples_leaf', 1, 10)
             ),
             'XGBClassifier': lambda trial: XGBClassifier(
-                learning_rate=trial.suggest_float('learning_rate', 0.01, 0.5, log=True),
+                learning_rate=trial.suggest_float('learning_rate', 0.001, 0.5),
                 n_estimators=trial.suggest_int('n_estimators', 2, 500),
                 max_depth=trial.suggest_int('max_depth', 1, 50),
                 min_child_weight=trial.suggest_int('min_child_weight', 1, 10),
                 gamma=trial.suggest_float('gamma', 0, 5),
-                subsample=trial.suggest_float('subsample', 0.1, 1.0),
-                colsample_bytree=trial.suggest_float('colsample_bytree', 0.1, 1.0),
+                subsample=trial.suggest_float('subsample', 0.001, 1.0),
+                colsample_bytree=trial.suggest_float('colsample_bytree', 0.001, 1.0),
                 reg_alpha = trial.suggest_float('reg_alpha', 0, 1),
-                reg_lambda = trial.suggest_float('reg_lambda', 0.1, 100, log=True),
+                reg_lambda = trial.suggest_float('reg_lambda', 0.001, 1),
                 n_jobs=-1,
                 scale_pos_weight = trial.suggest_float('scale_pos_weight', 1, 100, log=True),
                 objective = 'binary:logistic', #trial.suggest_categorical('objective', ['binary:logistic', 'multi:softprob'])
-                booster = trial.suggest_categorical('booster', ['gbtree', 'gblinear', 'dart']),
+                booster = trial.suggest_categorical('booster', ['gbtree', 'dart']), #'gblinear'
                 tree_method = trial.suggest_categorical('tree_method', ['auto', 'exact', 'approx', 'hist']),
             ),
             'LinearDiscriminantAnalysis': lambda trial: LinearDiscriminantAnalysis(

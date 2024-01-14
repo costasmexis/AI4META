@@ -40,8 +40,9 @@ class DataLoader:
     
     def __encode_labels(self):
         """ Function to encode the target varable. From str to 1/0. """
-        self.y = LabelEncoder().fit_transform(self.y)
-        self.label_mapping = {class_label: index for index, class_label in enumerate(self.label_encoder.classes_)}
+        label_encoder = LabelEncoder()
+        self.y = label_encoder.fit_transform(self.y)
+        self.label_mapping = {class_label: index for index, class_label in enumerate(label_encoder.classes_)}
         print("Label mapping:", self.label_mapping)
     
     def missing_values(self, method='drop'):
