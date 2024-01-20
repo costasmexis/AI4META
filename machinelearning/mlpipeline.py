@@ -155,7 +155,8 @@ class MLPipelines(MachineLearningEstimator):
         return nested_scores
     
     def model_selection(self,optimizer = 'grid_search', n_trials=100, n_iter=25, 
-                        num_trials=10, score = 'accuracy', exclude=None, result=False, box=True , train_best=None):
+                        num_trials=10, score = 'accuracy', exclude=None, scores_df=False, 
+                        box=True , train_best=None, return_model=False):
         """ Function to perform model selection using Nested Cross Validation
 
         Args:
@@ -183,7 +184,7 @@ class MLPipelines(MachineLearningEstimator):
               
         for estimator in tqdm(clfs):
 
-            print(f'Performing nested cross-validation for {estimator}...')
+            # print(f'Performing nested cross-validation for {estimator}...')
             self.name = estimator
             self.estimator = self.available_clfs[estimator]
             scores_est = self.nested_cross_validation(optimizer=optimizer, n_trials=n_trials, n_iter=n_iter,
@@ -202,6 +203,7 @@ class MLPipelines(MachineLearningEstimator):
             plt.title("Model Selection Results")
             plt.ylabel("Score")
             plt.xticks(rotation=90)  
+            plt.grid(True)
             plt.show()
         
         # best_estimator_name = max(results, key=lambda x: x['Mean Score'])['Estimator']
@@ -211,16 +213,23 @@ class MLPipelines(MachineLearningEstimator):
         # self.estimator = self.available_clfs[best_estimator_name]
         # print(self.estimator)
         if train_best == 'bayesian_search':
-            self.bayesian_search(cv=5, n_trials=100, verbose=True)
+            best_model = self.bayesian_search(cv=5, n_trials=100, verbose=True,return_model=return_model)
         elif train_best == 'grid_search':
-            self.grid_search(cv=5, verbose=True)
+            best_model = self.grid_search(cv=5, verbose=True,return_model=return_model)
         elif train_best == 'random_search':
-            self.random_search(cv=5, n_iter=25, verbose=True)
+            best_model = self.random_search(cv=5, n_iter=25, verbose=True,return_model=return_model)
         elif train_best is None:
             print(f'Best estimator: {self.name}')
         else:   
             raise ValueError(f'Invalid type of best estimator train. Choose between "bayesian_search", "grid_search", "random_search" or None.')
         
-        if result:
-            return pd.DataFrame(results)
+        scores_dataframe = pd.DataFrame(results) if scores_df else None
+
+        if return_model and scores_df:
+            return best_model, scores_dataframe
+        elif return_model:
+            return best_model
+        elif scores_df:
+            return scores_dataframe
+
             

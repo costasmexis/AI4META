@@ -57,7 +57,7 @@ class MachineLearningEstimator(DataLoader):
         if self.name not in self.available_clfs.keys():
             raise ValueError(f'Invalid estimator: {self.name}. Select one of the following: {list(self.available_clfs.keys())}')
       
-    def grid_search(self, X=None, y=None, scoring='accuracy', cv=5, verbose=True):
+    def grid_search(self, X=None, y=None, scoring='accuracy', cv=5, verbose=True, return_model=False):
         """ Function to perform a grid search
         Args:
             X (array, optional): Features. Defaults to None.
@@ -83,7 +83,10 @@ class MachineLearningEstimator(DataLoader):
             print(f'Best parameters: {self.best_params}')
             print(f'Best {scoring}: {self.best_score}')
 
-    def random_search(self, X=None, y=None, scoring='accuracy', cv=5, n_iter=100, verbose=True):
+        if return_model:
+           return self.best_estimator
+
+    def random_search(self, X=None, y=None, scoring='accuracy', cv=5, n_iter=100, verbose=True, return_model=False):
         """ Function to perform a random search
         Args:
             X (array, optional): Features. Defaults to None.
@@ -108,10 +111,13 @@ class MachineLearningEstimator(DataLoader):
         if verbose:
             print(f'Best parameters: {self.best_params}')
             print(f'Best {scoring}: {self.best_score}')
+        
+        if return_model:
+           return self.best_estimator
 
     def bayesian_search(self, X=None, y=None, scoring='accuracy', 
                         cv=5, direction='maximize', n_trials=100, 
-                        verbose=True):#, box=False):
+                        verbose=True, return_model=False):#, box=False):
         """ Function to perform a bayesian search
 
         Args:
@@ -146,11 +152,15 @@ class MachineLearningEstimator(DataLoader):
         self.best_params = study.best_params
         self.best_score = study.best_value
         self.best_estimator = grid[self.name](study.best_trial)
+        
+        self.best_estimator.fit(X, y) #fit in all X,y data
 
         if verbose:
             print(f'For the {self.name} model: \nBest parameters: {self.best_params}\nBest {scoring}: {self.best_score}')
-            # print(f'Best parameters: {self.best_params}')
-            # print(f'Best {scoring}: {self.best_score}')
+
+        if return_model:
+            return self.best_estimator #returns the best fitted estimator
+            
         
         # if box:
         #     best_scores = [trial.value for trial in study.trials if trial.value is not None]
