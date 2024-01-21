@@ -25,8 +25,10 @@ from dataloader import DataLoader
 
 from .mlestimator import MachineLearningEstimator
 from .optuna_grid import optuna_grid
+from .Features_explanation import Features_explanation
 
-class MLPipelines(MachineLearningEstimator):
+
+class MLPipelines(MachineLearningEstimator,Features_explanation):
 
     def __init__(self, estimator, param_grid, label, csv_dir):
         ''' Class to perform machine learning pipelines 

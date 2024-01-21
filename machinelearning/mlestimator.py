@@ -78,6 +78,7 @@ class MachineLearningEstimator(DataLoader):
         grid_search.fit(X, y)
         self.best_params = grid_search.best_params_
         self.best_score = grid_search.best_score_
+        self.name = self.best_estimator.__class__.__name__
         self.best_estimator = grid_search.best_estimator_
         if verbose:
             print(f'Best parameters: {self.best_params}')
@@ -107,6 +108,7 @@ class MachineLearningEstimator(DataLoader):
         random_search.fit(X, y)
         self.best_params = random_search.best_params_
         self.best_score = random_search.best_score_
+        self.name = self.best_estimator.__class__.__name__
         self.best_estimator = random_search.best_estimator_
         if verbose:
             print(f'Best parameters: {self.best_params}')
@@ -152,6 +154,7 @@ class MachineLearningEstimator(DataLoader):
         self.best_params = study.best_params
         self.best_score = study.best_value
         self.best_estimator = grid[self.name](study.best_trial)
+        self.name = self.best_estimator.__class__.__name__
         
         self.best_estimator.fit(X, y) #fit in all X,y data
 
