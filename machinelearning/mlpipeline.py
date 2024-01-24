@@ -215,11 +215,11 @@ class MLPipelines(MachineLearningEstimator,Features_explanation):
         # self.estimator = self.available_clfs[best_estimator_name]
         # print(self.estimator)
         if train_best == 'bayesian_search':
-            best_model = self.bayesian_search(cv=5, n_trials=100, verbose=True,return_model=return_model)
+            self.best_estimator = self.bayesian_search(cv=5, n_trials=100, verbose=True,return_model=return_model)
         elif train_best == 'grid_search':
-            best_model = self.grid_search(cv=5, verbose=True,return_model=return_model)
+            self.best_estimator = self.grid_search(cv=5, verbose=True,return_model=return_model)
         elif train_best == 'random_search':
-            best_model = self.random_search(cv=5, n_iter=25, verbose=True,return_model=return_model)
+            self.best_estimator = self.random_search(cv=5, n_iter=25, verbose=True,return_model=return_model)
         elif train_best is None:
             print(f'Best estimator: {self.name}')
         else:   
@@ -228,9 +228,9 @@ class MLPipelines(MachineLearningEstimator,Features_explanation):
         scores_dataframe = pd.DataFrame(results) if scores_df else None
 
         if return_model and scores_df:
-            return best_model, scores_dataframe
+            return self.best_estimator, scores_dataframe
         elif return_model:
-            return best_model
+            return self.best_estimator
         elif scores_df:
             return scores_dataframe
 
