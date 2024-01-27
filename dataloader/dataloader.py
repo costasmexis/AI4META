@@ -93,7 +93,7 @@ class DataLoader:
         scoring_function = method_mapping[inner_method]    
         
         if method == 'mrmr':
-            self.selected_features = mrmr_classif(self.X, self.y.values, K=n_features)
+            self.selected_features = mrmr_classif(self.X, self.y, K=n_features)
             self.X = self.X[self.selected_features]
         else:
             if not isinstance(self.scaler, MinMaxScaler):
