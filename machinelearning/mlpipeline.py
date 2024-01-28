@@ -215,7 +215,7 @@ class MLPipelines(MachineLearningEstimator):
         # self.estimator = self.available_clfs[best_estimator_name]
         # print(self.estimator)
         if train_best == 'bayesian_search':
-            self.best_estimator = self.bayesian_search(cv=5, n_trials=100, verbose=True,return_model=return_model)
+            self.best_estimator = self.bayesian_search(cv=5, n_trials=n_trials, verbose=True,return_model=return_model)
         elif train_best == 'grid_search':
             self.best_estimator = self.grid_search(cv=5, verbose=True,return_model=return_model)
         elif train_best == 'random_search':

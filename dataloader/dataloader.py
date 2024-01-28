@@ -42,9 +42,11 @@ class DataLoader:
         """ Function to encode the target varable. From str to 1/0. """
         label_encoder = LabelEncoder()
         self.y = label_encoder.fit_transform(self.y)
-        self.label_mapping = {class_label: index for index, class_label in enumerate(label_encoder.classes_)}
+        # self.label_mapping = {class_label: index for index, class_label in enumerate(label_encoder.classes_)}
+        # print("Label mapping:", self.label_mapping)
+        self.label_mapping = {index: class_label for index, class_label in enumerate(label_encoder.classes_)}
         print("Label mapping:", self.label_mapping)
-    
+        
     def missing_values(self, method='drop'):
         ''' Function to handle missing values in the dataset.'''
         total_missing = self.data.isnull().sum().sum()
