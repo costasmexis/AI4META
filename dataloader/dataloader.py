@@ -68,12 +68,16 @@ class DataLoader:
             raise Exception("Unsupported missing values method.")
 
     def normalize(self, method="minmax"):
-        """Function to normalize the dataset.
+        """Function to normalize the dataset
+
         Args:
-            method (str, optional): Method to use for normalization. Defaults to 'minmax'.
+            method (str, optional): Method to use for normalization. Defaults to "minmax".
                 - minmax: MinMaxScaler
                 - standard: StandardScaler
-        """
+
+        Raises:
+            Exception: _description_
+        """        
         if method in ["minmax", "standard"]:
             self.scaler = MinMaxScaler() if method == "minmax" else StandardScaler()
             self.X = pd.DataFrame(
@@ -85,13 +89,15 @@ class DataLoader:
     def feature_selection(
         self, method="mrmr", n_features=10, inner_method="chi2", percentile=10
     ):
-        """Function to perform Feature Selection.
+        """Function to perform Feature Selection
+
         Args:
-            method (str, optional): Method to use for feature selection. Defaults to 'mrmr'.
+            method (str, optional): Method to use for feature selection. Defaults to "mrmr".
             n_features (int, optional): Number of features to be selected. Defaults to 10.
-            inner_method (str, optional) ['chi2', 'f_classif', 'mutual_info_classif']: Inner method for SelectKBest. Defaults to 'chi2'.
+            inner_method (str, optional):  Inner method for SelectKBest. Defaults to "chi2".
             percentile (int, optional): Percentile for SelectPercentile. Defaults to 10.
-        """
+        """        
+
         if method not in ["mrmr", "kbest", "percentile"]:
             raise Exception(
                 "Unsupported feature selection method. Select one of 'mrmr', 'kbest', 'percentile'"
@@ -126,9 +132,10 @@ class DataLoader:
                 ).fit_transform(self.X, self.y)
 
     def create_test_data(self, output_dir="./test_data.csv"):
-        """Function to generate a test data template csv file.
+        """Function to create a .csv for test data
+
         Args:
-            output_dir (str, optional): The directory to save the csv file. Defaults to './test_data.csv'.
+            output_dir (str, optional): Path to file. Defaults to "./test_data.csv".
         """
         test_data = pd.DataFrame(columns=self.X.columns.values)
         test_data.to_csv(output_dir)

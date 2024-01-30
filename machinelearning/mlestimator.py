@@ -62,13 +62,14 @@ class MachineLearningEstimator(DataLoader):
 
     def grid_search(self, X=None, y=None, scoring="accuracy", cv=5, verbose=True):
         """Function to perform a grid search
+
         Args:
-            X (array, optional): Features. Defaults to None.
-            y (array, optional): Target. Defaults to None.
-            scoring (str, optional): Scoring metric. Defaults to 'accuracy'.
+            X (_type_, optional): Features. Defaults to None.
+            y (_type_, optional): Target. Defaults to None.
+            scoring (str, optional): Scoring metric. Defaults to "accuracy".
             cv (int, optional): No. of folds for cross-validation. Defaults to 5.
             verbose (bool, optional): Whether to print the results. Defaults to True.
-        """
+        """        
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
@@ -93,14 +94,15 @@ class MachineLearningEstimator(DataLoader):
         self, X=None, y=None, scoring="accuracy", cv=5, n_iter=100, verbose=True
     ):
         """Function to perform a random search
+
         Args:
-            X (array, optional): Features. Defaults to None.
-            y (array, optional): Target. Defaults to None.
-            scoring (str, optional): Scoring metric. Defaults to 'accuracy'.
+            X (_type_, optional): Features. Defaults to None.
+            y (_type_, optional): Target. Defaults to None.
+            scoring (str, optional): Scoring metric. Defaults to "accuracy".
             cv (int, optional): No. of folds for cross-validation. Defaults to 5.
             n_iter (int, optional): No. of iterations. Defaults to 100.
             verbose (bool, optional): Whether to print the results. Defaults to True.
-        """
+        """        
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
@@ -141,8 +143,6 @@ class MachineLearningEstimator(DataLoader):
             n_trials (int, optional): _description_. Defaults to 100.
             verbose (bool, optional): _description_. Defaults to True.
             box (bool, optional): _description_. Defaults to False.
-        Returns:
-            _type_: _description_
         """
 
         grid = optuna_grid["ManualSearch"]
@@ -170,15 +170,3 @@ class MachineLearningEstimator(DataLoader):
             print(
                 f"For the {self.name} model: \nBest parameters: {self.best_params}\nBest {scoring}: {self.best_score}"
             )
-            # print(f'Best parameters: {self.best_params}')
-            # print(f'Best {scoring}: {self.best_score}')
-
-        # if box:
-        #     best_scores = [trial.value for trial in study.trials if trial.value is not None]
-        #     plt.style.use('seaborn-whitegrid')
-        #     plt.boxplot(best_scores, widths=0.75, whis=2)
-        #     plt.ylim(0, 1)
-        #     plt.title(f"Cross-Validation Scores Across Trials for {self.name}")
-        #     plt.ylabel('Scores')
-        #     plt.xlabel(f'{cv}-Fold Cross-Validation')
-        #     plt.show()

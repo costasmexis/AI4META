@@ -145,24 +145,20 @@ class MLPipelines(MachineLearningEstimator):
         """Function to perform nested cross-validation for a given model and dataset in order to perform model selection
 
         Args:
-            inner_scoring (str, optional): _description_. Defaults to 'accuracy'.
-            outer_scoring (str, optional): _description_. Defaults to 'accuracy'.
+            inner_scoring (str, optional): _description_. Defaults to "accuracy".
+            outer_scoring (str, optional): _description_. Defaults to "accuracy".
             inner_splits (int, optional): _description_. Defaults to 3.
             outer_splits (int, optional): _description_. Defaults to 5.
-            optimizer (str, optional): 'gird_search'   (GridSearchCV)
-                                       'random_search' (RandomizedSearchCV))
-                                       'bayesian_search' (Optuna)
-                                    Defaults to 'grid_search'.
-            n_trials (int, optional): No. of trials for optuna. Defaults to 100.
-            n_iter (int, optional): No. of iterations for RandomizedSearchCV. Defaults to 25.
-            num_trials (int, optional): No. of trials for the nested cross-validation. Defaults to 10.
-            n_jobs (int, optional): No. of jobs to run in parallel. Defaults to -1.
-            verbose (int, optional): Verbosity level. Defaults to 0.
+            optimizer (str, optional): _description_. Defaults to "grid_search".
+            n_trials (int, optional): _description_. Defaults to 100.
+            n_iter (int, optional): _description_. Defaults to 25.
+            num_trials (int, optional): _description_. Defaults to 10.
+            n_jobs (int, optional): _description_. Defaults to -1.
+            verbose (int, optional): _description_. Defaults to 0.
 
         Returns:
-            nested_scores (list): nested scores
-        """
-
+            list: nested scores
+        """  
         # Check if both inner and outer scoring metrics are valid
         if inner_scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
