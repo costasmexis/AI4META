@@ -26,14 +26,19 @@ from .optuna_grid import optuna_grid
 
 
 class MachineLearningEstimator(DataLoader):
-    def __init__(self, estimator, param_grid, label, csv_dir):
-        """Class to hold the machine learning estimator and related data
-        Inherits from DataLoader class
-        - estimator (sklearn estimator): estimator to be used
-        - param_grid (dict): hyperparameters to be tuned
-        - label (str): name of the target column
-        - csv_dir (str): path to the csv file
-        """
+    """ Class to hold the machine learning estimator information and related data 
+
+    :param estimator: Estimator to be used
+    :type estimator: sklearn estimator
+    :param param_grid: Hyperparameters grid to be searched
+    :type param_grid: dict
+    :param label: Name of target column
+    :type label: str
+    :param csv_dir: Path to the csv file
+    :type csv_dir: str
+    """        
+    def __init__(self, estimator, param_grid: dict, label: str, csv_dir: str):
+
         super().__init__(label, csv_dir)
         self.estimator = estimator
         self.name = estimator.__class__.__name__
@@ -61,14 +66,18 @@ class MachineLearningEstimator(DataLoader):
             )
 
     def grid_search(self, X=None, y=None, scoring="accuracy", cv=5, verbose=True):
-        """Function to perform a grid search
+        """ Performs a grid search
 
-        Args:
-            X (_type_, optional): Features. Defaults to None.
-            y (_type_, optional): Target. Defaults to None.
-            scoring (str, optional): Scoring metric. Defaults to "accuracy".
-            cv (int, optional): No. of folds for cross-validation. Defaults to 5.
-            verbose (bool, optional): Whether to print the results. Defaults to True.
+        :param X: Features vector, defaults to ``None``
+        :type X: np.array, optional
+        :param y: Target vector, defaults to ``None``
+        :type y: np.array, optional
+        :param scoring: Scoring metric, defaults to ``accuracy``
+        :type scoring: str, optional
+        :param cv: Number of folds for Cross Validation, defaults to 5
+        :type cv: int, optional
+        :param verbose: Verbose, defaults to ``True``
+        :type verbose: bool, optional
         """        
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
@@ -93,15 +102,20 @@ class MachineLearningEstimator(DataLoader):
     def random_search(
         self, X=None, y=None, scoring="accuracy", cv=5, n_iter=100, verbose=True
     ):
-        """Function to perform a random search
+        """ Performs a random search
 
-        Args:
-            X (_type_, optional): Features. Defaults to None.
-            y (_type_, optional): Target. Defaults to None.
-            scoring (str, optional): Scoring metric. Defaults to "accuracy".
-            cv (int, optional): No. of folds for cross-validation. Defaults to 5.
-            n_iter (int, optional): No. of iterations. Defaults to 100.
-            verbose (bool, optional): Whether to print the results. Defaults to True.
+        :param X: Features vector, defaults to ``None``
+        :type X: np.array, optional
+        :param y: Target vector, defaults to ``None``
+        :type y: np.array, optional
+        :param scoring: Scoring metric, defaults to ``accuracy``
+        :type scoring: str, optional
+        :param cv: Number of folds for Cross Validation, defaults to 5
+        :type cv: int, optional
+        :param n_iter: Number of interations for Random Search, defaults to 100
+        :type n_iter: int, optional
+        :param verbose: Verbose, defaults to ``True``
+        :type verbose: bool, optional
         """        
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
@@ -131,20 +145,24 @@ class MachineLearningEstimator(DataLoader):
         direction="maximize",
         n_trials=100,
         verbose=True,
-    ):  # , box=False):
-        """Function to perform a bayesian search
+    ):  
+        """ Performs a bayesian search
 
-        Args:
-            X (_type_, optional): _description_. Defaults to None.
-            y (_type_, optional): _description_. Defaults to None.
-            scoring (str, optional): _description_. Defaults to 'accuracy'.
-            cv (int, optional): _description_. Defaults to 5.
-            direction (str, optional): _description_. Defaults to 'maximize'.
-            n_trials (int, optional): _description_. Defaults to 100.
-            verbose (bool, optional): _description_. Defaults to True.
-            box (bool, optional): _description_. Defaults to False.
-        """
-
+        :param X: Features vector, defaults to ``None``
+        :type X: np.array, optional
+        :param y: Target vector, defaults to ``None``
+        :type y: np.array, optional
+        :param scoring: Scoring metric, defaults to ``accuracy``
+        :type scoring: str, optional
+        :param cv: Number of folds for Cross Validation, defaults to 5
+        :type cv: int, optional
+        :param direction: *Minimize* or *Maximize* the scoring metric, defaults to ``maximize``
+        :type direction: str, optional
+        :param n_trials: Number of trials for bayesian search, defaults to 100
+        :type n_trials: int, optional
+        :param verbose: Verbose, defaults to ``True``
+        :type verbose: bool, optional
+        """        
         grid = optuna_grid["ManualSearch"]
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(

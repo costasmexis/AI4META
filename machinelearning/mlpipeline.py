@@ -28,23 +28,30 @@ from .optuna_grid import optuna_grid
 
 
 class MLPipelines(MachineLearningEstimator):
-    def __init__(self, estimator, param_grid, label, csv_dir):
-        """Class to perform machine learning pipelines
-        Inherits from MachineLearningEstimator class
-        - estimator (sklearn estimator): estimator to be used
-        - param_grid (dict): hyperparameters to be tuned
-        - label (str): name of the target column
-        - csv_dir (str): path to the csv file
-        """
-        super().__init__(estimator, param_grid, label, csv_dir)
+    """ Class to perform machine learning pipelines
+
+    :param estimator: Estimator to be used
+    :type estimator: sklearn estimator
+    :param param_grid: Hyperparameters grid to be searched
+    :type param_grid: dict
+    :param label: me of target column
+    :type label: str
+    :param csv_dir: Path to the csv file
+    :type csv_dir: str
+    """       
+    def __init__(self, estimator, param_grid: dict, label: str, csv_dir: str):
+         super().__init__(estimator, param_grid, label, csv_dir)
 
     def cross_validation(self, scoring="accuracy", cv=5) -> list:
-        """Function to perform a simple cross validation
-            - scoring (str): scoring metric
-            - cv (int): number of folds for cross-validation
-        returns:
-            - scores (list): list of scores for each fold
-        """
+        """ Performs cross validation on a given estimator
+
+        :param scoring: Scoring metric, defaults to ``accuracy``
+        :type scoring: str, optional
+        :param cv: Number of folds for Cross Validation, defaults to 5
+        :type cv: int, optional
+        :return: List of scores for each fold
+        :rtype: list
+        """        
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
@@ -66,19 +73,24 @@ class MLPipelines(MachineLearningEstimator):
         scoring="accuracy",
     ):
         """Performs boostrap validation on a given estimator.
-            - n_iter: number of iterations to perform boostrap validation
-            - test_size: test size for each iteration
-            - optimizer: 'grid_search' for GridSearchCV
-                         'reandom_search' for RandomizedSearchCV
-                         'bayesian_search' for optuna
-            - random_iter: number of iterations for RandomizedSearchCV
-            - n_trials: number of trials for optuna
-            - cv: number of folds for cross-validation
-            - scoring: scoring metric
 
-        returns:
-            - eval_metrics (list): list of evaluation metrics for each iteration
-        """
+        :param n_iter: Number of iterations to perform bootstrap validation, defaults to 100
+        :type n_iter: int, optional
+        :param test_size: Test size for each iteration, defaults to 0.2
+        :type test_size: float, optional
+        :param optimizer: Method to use for hyperparameter optimization, defaults to ``grid_search``
+        :type optimizer: str, optional
+        :param random_iter: Number of iterations for ``RandomSearchCV``, defaults to 25
+        :type random_iter: int, optional
+        :param n_trials: Number of trials for ``Optuna``, defaults to 100
+        :type n_trials: int, optional
+        :param cv: Number of folds for Cross Validation, defaults to 5
+        :type cv: int, optional
+        :param scoring: Scoring metric, defaults to ``accuracy``
+        :type scoring: str, optional
+        :return: List of evaluation metrics for each iteration
+        :rtype: list
+        """        
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
@@ -142,23 +154,32 @@ class MLPipelines(MachineLearningEstimator):
         n_jobs=-1,
         verbose=0,
     ):
-        """Function to perform nested cross-validation for a given model and dataset in order to perform model selection
+        """Performs nested cross-validation for a given model and dataset in order to perform model selection
 
-        Args:
-            inner_scoring (str, optional): _description_. Defaults to "accuracy".
-            outer_scoring (str, optional): _description_. Defaults to "accuracy".
-            inner_splits (int, optional): _description_. Defaults to 3.
-            outer_splits (int, optional): _description_. Defaults to 5.
-            optimizer (str, optional): _description_. Defaults to "grid_search".
-            n_trials (int, optional): _description_. Defaults to 100.
-            n_iter (int, optional): _description_. Defaults to 25.
-            num_trials (int, optional): _description_. Defaults to 10.
-            n_jobs (int, optional): _description_. Defaults to -1.
-            verbose (int, optional): _description_. Defaults to 0.
-
-        Returns:
-            list: nested scores
-        """  
+        :param inner_scoring: Inner loop scoring metric, defaults to ``accuracy``
+        :type inner_scoring: str, optional
+        :param outer_scoring: Outer loop scoring metric, defaults to ``accuracy``
+        :type outer_scoring: str, optional
+        :param inner_splits: Number of folds for inner loop cross validation, defaults to 3
+        :type inner_splits: int, optional
+        :param outer_splits: Number of folds for outer loop cross validation, defaults to 5
+        :type outer_splits: int, optional
+        :param optimizer: Method to be used for hyperparameter optimization, defaults to ``grid_search``
+        :type optimizer: str, optional
+        :param n_trials: Number of trials for ``Optuna``, defaults to 100
+        :type n_trials: int, optional
+        :param n_iter: Number of iterations for ``RandomizedSearchCV``, defaults to 25
+        :type n_iter: int, optional
+        :param num_trials: Number of runs for the Nested Cross Validation, defaults to 10
+        :type num_trials: int, optional
+        :param n_jobs: Number of workers to be used, defaults to -1
+        :type n_jobs: int, optional
+        :param verbose: Verbose, defaults to 0
+        :type verbose: int, optional
+        :return: Nested scores for each run 
+        :rtype: list
+        """        
+        
         # Check if both inner and outer scoring metrics are valid
         if inner_scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
@@ -240,21 +261,29 @@ class MLPipelines(MachineLearningEstimator):
         box=True,
         train_best=None,
     ):
-        """Function to perform model selection using Nested Cross Validation
+        """Performs model selection for a given dataset
 
-        Args:
-            optimizer (str, optional): _description_. Defaults to 'grid_search'.
-            n_trials (int, optional): _description_. Defaults to 100.
-            n_iter (int, optional): _description_. Defaults to 25.
-            num_trials (int, optional): _description_. Defaults to 10.
-            score (str, optional): _description_. Defaults to 'accuracy'.
-            exclude (_type_, optional): _description_. Defaults to None.
-            result (bool, optional): _description_. Defaults to False.
-            box (bool, optional): _description_. Defaults to True.
-        Returns:
-            _type_: _description_
-        """
-
+        :param optimizer: _description_, defaults to "grid_search"
+        :type optimizer: str, optional
+        :param n_trials: _description_, defaults to 100
+        :type n_trials: int, optional
+        :param n_iter: _description_, defaults to 25
+        :type n_iter: int, optional
+        :param num_trials: _description_, defaults to 10
+        :type num_trials: int, optional
+        :param score: _description_, defaults to "accuracy"
+        :type score: str, optional
+        :param exclude: _description_, defaults to None
+        :type exclude: _type_, optional
+        :param result: _description_, defaults to False
+        :type result: bool, optional
+        :param box: _description_, defaults to True
+        :type box: bool, optional
+        :param train_best: _description_, defaults to None
+        :type train_best: _type_, optional
+        :return: Scores for each estimator
+        :rtype: pd.DataFrame
+        """        
         all_scores = []
         results = []
 
@@ -302,9 +331,6 @@ class MLPipelines(MachineLearningEstimator):
         # best_estimator_name = max(results, key=lambda x: x['Mean Score'])['Estimator']
         self.name = max(results, key=lambda x: x["Mean Score"])["Estimator"]
         self.estimator = self.available_clfs[self.name]
-        # self.best_estimator = self.available_clfs[best_estimator_name]
-        # self.estimator = self.available_clfs[best_estimator_name]
-        # print(self.estimator)
         if train_best == "bayesian_search":
             self.bayesian_search(cv=5, n_trials=100, verbose=True)
         elif train_best == "grid_search":

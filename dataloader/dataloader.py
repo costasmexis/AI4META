@@ -12,12 +12,14 @@ from mrmr import mrmr_classif
 
 
 class DataLoader:
-    def __init__(self, label, csv_dir):
-        """Class to load a metabolomics dataset from a file.
-        Args:
-            label (str): name of the target column.
-            csv_dir (str): path to the csv file.
-        """
+    """Load a metabolomics dataset from a file.
+
+    :param label: Name of the target column
+    :type label: str
+    :param csv_dir: Path to the csv file
+    :type csv_dir: str
+    """
+    def __init__(self, label: str, csv_dir: str):
         self.csv_dir = csv_dir
         self.label = label
         self.data = None
@@ -31,10 +33,11 @@ class DataLoader:
         self.__encode_labels()
 
     def __load_data(self, index_col=0):
-        """Function to load data from a file.
-        Args:
-            index_col (int, optional): index column of dataset. Defaults to 0.
-        """
+        """ Load data from file
+
+        :param index_col: Index column of dataset, defaults to 0
+        :type index_col: int, optional
+        """        
         file_extension = self.csv_dir.split(".")[-1]
         if file_extension in self.supported_extensions:
             sep = "," if file_extension == "csv" else "\t"
@@ -56,7 +59,11 @@ class DataLoader:
         print("Label mapping:", self.label_mapping)
 
     def missing_values(self, method="drop"):
-        """Function to handle missing values in the dataset."""
+        """Handle missing values in the dataset
+
+        :param method: Method to use, defaults to ``drop``
+        :type method: str, optional
+        """        
         total_missing = self.data.isnull().sum().sum()
         print(f"Number of missing values: {total_missing}")
         if method == "drop":
@@ -68,16 +75,11 @@ class DataLoader:
             raise Exception("Unsupported missing values method.")
 
     def normalize(self, method="minmax"):
-        """Function to normalize the dataset
+        """Normalize the dataset
 
-        Args:
-            method (str, optional): Method to use for normalization. Defaults to "minmax".
-                - minmax: MinMaxScaler
-                - standard: StandardScaler
-
-        Raises:
-            Exception: _description_
-        """        
+        :param method: Method to use for normalization, defaults to ``minmax``
+        :type method: str, optional
+        """
         if method in ["minmax", "standard"]:
             self.scaler = MinMaxScaler() if method == "minmax" else StandardScaler()
             self.X = pd.DataFrame(
@@ -89,15 +91,17 @@ class DataLoader:
     def feature_selection(
         self, method="mrmr", n_features=10, inner_method="chi2", percentile=10
     ):
-        """Function to perform Feature Selection
+        """Feature selection method
 
-        Args:
-            method (str, optional): Method to use for feature selection. Defaults to "mrmr".
-            n_features (int, optional): Number of features to be selected. Defaults to 10.
-            inner_method (str, optional):  Inner method for SelectKBest. Defaults to "chi2".
-            percentile (int, optional): Percentile for SelectPercentile. Defaults to 10.
-        """        
-
+        :param method: Feature selection method, defaults to ``mrmr``
+        :type method: str, optional
+        :param n_features: Number of features to be selected, defaults to 10
+        :type n_features: int, optional
+        :param inner_method: Inner method for *SelectKBest*, defaults to ``chi2``
+        :type inner_method: str, optional
+        :param percentile: Percentile for *SelectPercentile*, defaults to 10
+        :type percentile: int, optional
+        """
         if method not in ["mrmr", "kbest", "percentile"]:
             raise Exception(
                 "Unsupported feature selection method. Select one of 'mrmr', 'kbest', 'percentile'"
@@ -132,11 +136,11 @@ class DataLoader:
                 ).fit_transform(self.X, self.y)
 
     def create_test_data(self, output_dir="./test_data.csv"):
-        """Function to create a .csv for test data
+        """Create a .csv file for test data
 
-        Args:
-            output_dir (str, optional): Path to file. Defaults to "./test_data.csv".
-        """
+        :param output_dir: Path to file, defaults to ``./test_data.csv``
+        :type output_dir: str, optional
+        """                
         test_data = pd.DataFrame(columns=self.X.columns.values)
         test_data.to_csv(output_dir)
 
