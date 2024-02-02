@@ -3,6 +3,7 @@ import optuna
 import pandas as pd
 import sklearn
 import matplotlib.pyplot as plt
+# from sklearn.metrics import matthews_corrcoef
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -25,7 +26,7 @@ from dataloader import DataLoader
 from .optuna_grid import optuna_grid
 
 class MachineLearningEstimator(DataLoader):
-    def __init__(self, estimator, param_grid, label, csv_dir):
+    def __init__(self, label, csv_dir, estimator=None, param_grid=None):
         ''' Class to hold the machine learning estimator and related data 
             Inherits from DataLoader class
             - estimator (sklearn estimator): estimator to be used
@@ -53,16 +54,18 @@ class MachineLearningEstimator(DataLoader):
             'SVC': SVC()
         }
         
-        # Check if the estimator is valid
-        if self.name not in self.available_clfs.keys():
-            raise ValueError(f'Invalid estimator: {self.name}. Select one of the following: {list(self.available_clfs.keys())}')
-      
-    def grid_search(self, X=None, y=None, scoring='accuracy', cv=5, verbose=True, return_model=False):
+        if self.estimator is not None:
+            # Check if the estimator is valid
+            if self.name not in self.available_clfs.keys():
+                raise ValueError(f'Invalid estimator: {self.name}. Select one of the following: {list(self.available_clfs.keys())}')
+        else: print(f'There is no selected classifier.')
+
+    def grid_search(self, X=None, y=None, scoring='matthews_corrcoef', cv=5, verbose=True, return_model=False):
         """ Function to perform a grid search
         Args:
             X (array, optional): Features. Defaults to None.
             y (array, optional): Target. Defaults to None.
-            scoring (str, optional): Scoring metric. Defaults to 'accuracy'.
+            scoring (str, optional): Scoring metric. Defaults to 'matthews_corrcoef'.
             cv (int, optional): No. of folds for cross-validation. Defaults to 5.
             verbose (bool, optional): Whether to print the results. Defaults to True.
         """
@@ -87,12 +90,12 @@ class MachineLearningEstimator(DataLoader):
         if return_model:
            return self.best_estimator
 
-    def random_search(self, X=None, y=None, scoring='accuracy', cv=5, n_iter=100, verbose=True, return_model=False):
+    def random_search(self, X=None, y=None, scoring='matthews_corrcoef', cv=5, n_iter=100, verbose=True, return_model=False):
         """ Function to perform a random search
         Args:
             X (array, optional): Features. Defaults to None.
             y (array, optional): Target. Defaults to None.
-            scoring (str, optional): Scoring metric. Defaults to 'accuracy'.
+            scoring (str, optional): Scoring metric. Defaults to 'matthews_corrcoef'.
             cv (int, optional): No. of folds for cross-validation. Defaults to 5.
             n_iter (int, optional): No. of iterations. Defaults to 100.
             verbose (bool, optional): Whether to print the results. Defaults to True.
@@ -117,7 +120,7 @@ class MachineLearningEstimator(DataLoader):
         if return_model:
            return self.best_estimator
 
-    def bayesian_search(self, X=None, y=None, scoring='accuracy', 
+    def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', 
                         cv=5, direction='maximize', n_trials=100, 
                         verbose=True, return_model=False):#, box=False):
         """ Function to perform a bayesian search
@@ -125,7 +128,7 @@ class MachineLearningEstimator(DataLoader):
         Args:
             X (_type_, optional): _description_. Defaults to None.
             y (_type_, optional): _description_. Defaults to None.
-            scoring (str, optional): _description_. Defaults to 'accuracy'.
+            scoring (str, optional): _description_. Defaults to 'matthews_corrcoef'.
             cv (int, optional): _description_. Defaults to 5.
             direction (str, optional): _description_. Defaults to 'maximize'.
             n_trials (int, optional): _description_. Defaults to 100.

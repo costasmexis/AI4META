@@ -99,7 +99,7 @@ optuna_grid = {
         },
         "LogisticRegression": {
             "penalty": optuna.distributions.CategoricalDistribution(
-                ["l1", "l2", None, "elasticnet"]
+                ["l1", "l2", None]#, "elasticnet"]
             ),
             "C": optuna.distributions.FloatDistribution(0.1, 10.0),
             "solver": optuna.distributions.CategoricalDistribution(

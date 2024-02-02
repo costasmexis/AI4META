@@ -3,6 +3,7 @@ import optuna
 import pandas as pd
 import matplotlib.pyplot as plt
 import sklearn
+# from sklearn.metrics import matthews_corrcoef
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -30,7 +31,7 @@ from .optuna_grid import optuna_grid
 
 class MLPipelines(MachineLearningEstimator):
 
-    def __init__(self, estimator, param_grid, label, csv_dir):
+    def __init__(self, label, csv_dir, estimator=None, param_grid=None):
         ''' Class to perform machine learning pipelines 
             Inherits from MachineLearningEstimator class
             - estimator (sklearn estimator): estimator to be used
@@ -38,9 +39,9 @@ class MLPipelines(MachineLearningEstimator):
             - label (str): name of the target column
             - csv_dir (str): path to the csv file
         '''
-        super().__init__(estimator, param_grid, label, csv_dir)
+        super().__init__(label, csv_dir, estimator, param_grid)
 
-    def cross_validation(self, scoring='accuracy', cv=5) -> list:
+    def cross_validation(self, scoring='matthews_corrcoef', cv=5) -> list:
         ''' Function to perform a simple cross validation
             - scoring (str): scoring metric
             - cv (int): number of folds for cross-validation
@@ -56,7 +57,7 @@ class MLPipelines(MachineLearningEstimator):
         print(f'Standard deviation {scoring}: {np.std(scores)}')
         return scores
 
-    def bootsrap(self, n_iter=100, test_size=0.2, optimizer='grid_search', random_iter=25, n_trials=100, cv=5, scoring='accuracy'):
+    def bootsrap(self, n_iter=100, test_size=0.2, optimizer='grid_search', random_iter=25, n_trials=100, cv=5, scoring='matthews_corrcoef'):
         ''' Performs boostrap validation on a given estimator.
             - n_iter: number of iterations to perform boostrap validation
             - test_size: test size for each iteration
@@ -98,14 +99,14 @@ class MLPipelines(MachineLearningEstimator):
         print(f'Standard deviation {scoring}: {np.std(eval_metrics)}')
         return eval_metrics
 
-    def nested_cross_validation(self, inner_scoring='accuracy', outer_scoring='accuracy',
+    def nested_cross_validation(self, inner_scoring='matthews_corrcoef', outer_scoring='matthews_corrcoef',
                                 inner_splits=3, outer_splits=5, optimizer='grid_search', 
                                 n_trials=100, n_iter=25, num_trials=10, n_jobs=-1, verbose=0):
         """ Function to perform nested cross-validation for a given model and dataset in order to perform model selection
 
         Args:
-            inner_scoring (str, optional): _description_. Defaults to 'accuracy'.
-            outer_scoring (str, optional): _description_. Defaults to 'accuracy'.
+            inner_scoring (str, optional): _description_. Defaults to matthews_corrcoef.
+            outer_scoring (str, optional): _description_. Defaults to matthews_corrcoef.
             inner_splits (int, optional): _description_. Defaults to 3.
             outer_splits (int, optional): _description_. Defaults to 5.
             optimizer (str, optional): 'gird_search'   (GridSearchCV)
@@ -131,34 +132,61 @@ class MLPipelines(MachineLearningEstimator):
         print(f'Performing nested cross-validation for {self.estimator.__class__.__name__}...')
                 
         nested_scores = []
+        best_params_list = []
         for i in tqdm(range(num_trials)):
             inner_cv = StratifiedKFold(n_splits=inner_splits, shuffle=True, random_state=i)
             outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=i)
-            
-            if optimizer == 'grid_search':
-                clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
+            outer_scorer = get_scorer(outer_scoring)
+            for train_index, test_index in outer_cv.split(self.X, self.y):
+                X_train, X_test = self.X.iloc[train_index], self.X.iloc[test_index]
+                y_train, y_test = self.y[train_index], self.y[test_index]
+        
+                if optimizer == 'grid_search':
+                    clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
                                 param_grid=self.param_grid, cv=inner_cv, n_jobs=n_jobs, verbose=verbose)
-            elif optimizer == 'random_search':
-                clf = RandomizedSearchCV(estimator=self.estimator, scoring=inner_scoring,
-                                         param_distributions=self.param_grid, cv=inner_cv, n_jobs=n_jobs, 
-                                        verbose=verbose, n_iter=n_iter)
-            elif optimizer == 'bayesian_search':
-                clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
+                elif optimizer == 'random_search':
+                    clf = RandomizedSearchCV(estimator=self.estimator, scoring=inner_scoring,
+                                             param_distributions=self.param_grid, cv=inner_cv, n_jobs=n_jobs, 
+                                             verbose=verbose, n_iter=n_iter)
+                elif optimizer == 'bayesian_search':
+                    clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
                                                         param_distributions=optuna_grid['NestedCV'][self.name], cv=inner_cv, n_jobs=n_jobs, 
                                                         verbose=verbose, n_trials=n_trials)
-            else:
-                raise Exception("Unsupported optimizer.")
-            
-            nested_score = cross_val_score(clf, X=self.X, y=self.y, cv=outer_cv, scoring=outer_scoring, n_jobs=n_jobs)
-            nested_scores.append(nested_score)
+                else:
+                    raise Exception("Unsupported optimizer.")        
+                
+                clf.fit(X_train, y_train)
+                best_params_list.append(clf.best_params_)
+                y_pred = clf.predict(X_test)
+                nested_score = outer_scorer(clf, X_test, y_test)
+                nested_scores.append(nested_score)
 
-        nested_scores = [item for sublist in nested_scores for item in sublist]
+
+            # if optimizer == 'grid_search':
+            #     clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
+            #                     param_grid=self.param_grid, cv=inner_cv, n_jobs=n_jobs, verbose=verbose)
+            # elif optimizer == 'random_search':
+            #     clf = RandomizedSearchCV(estimator=self.estimator, scoring=inner_scoring,
+            #                              param_distributions=self.param_grid, cv=inner_cv, n_jobs=n_jobs, 
+            #                             verbose=verbose, n_iter=n_iter)
+            # elif optimizer == 'bayesian_search':
+            #     clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
+            #                                             param_distributions=optuna_grid['NestedCV'][self.name], cv=inner_cv, n_jobs=n_jobs, 
+            #                                             verbose=verbose, n_trials=n_trials)
+            # else:
+            #     raise Exception("Unsupported optimizer.")
+            
+            # nested_score = cross_val_score(clf, X=self.X, y=self.y, cv=outer_cv, scoring=outer_scoring, n_jobs=n_jobs)
+            # nested_scores.append(nested_score)
+
+        # nested_scores = [item for sublist in nested_scores for item in sublist]
         
-        return nested_scores
+        return np.array(nested_scores),np.array(best_params_list)
     
     def model_selection(self,optimizer = 'grid_search', n_trials=100, n_iter=25, 
-                        num_trials=10, score = 'accuracy', exclude=None, scores_df=False, 
-                        box=True , train_best=None, return_model=False):
+                        num_trials=10, score = 'matthews_corrcoef', exclude=None,
+                        search_on=None, scores_df=False, alpha=1,
+                        plot='box' , train_best=None, return_model=False):
         """ Function to perform model selection using Nested Cross Validation
 
         Args:
@@ -166,10 +194,11 @@ class MLPipelines(MachineLearningEstimator):
             n_trials (int, optional): _description_. Defaults to 100.
             n_iter (int, optional): _description_. Defaults to 25.
             num_trials (int, optional): _description_. Defaults to 10.
-            score (str, optional): _description_. Defaults to 'accuracy'.
-            exclude (_type_, optional): _description_. Defaults to None.
+            score (str, optional): _description_. Defaults to matthews_corrcoef.
+            search_on(list, optional): _description_. Defaults to None.
+            exclude (list, optional): _description_. Defaults to None.
             result (bool, optional): _description_. Defaults to False.
-            box (bool, optional): _description_. Defaults to True.
+            plot (str, optional): _description_. Defaults to True.
         Returns:
             _type_: _description_
         """
@@ -179,6 +208,9 @@ class MLPipelines(MachineLearningEstimator):
         
         if exclude is not None:
             exclude_classes = [classifier.__class__ for classifier in exclude]
+        elif search_on is not None:
+            classes = [classifier.__class__ for classifier in search_on]
+            exclude_classes = [classifier.__class__ for classifier in self.available_clfs.values() if classifier.__class__ not in classes]
         else:
             exclude_classes = []
 
@@ -189,27 +221,41 @@ class MLPipelines(MachineLearningEstimator):
             # print(f'Performing nested cross-validation for {estimator}...')
             self.name = estimator
             self.estimator = self.available_clfs[estimator]
-            scores_est = self.nested_cross_validation(optimizer=optimizer, n_trials=n_trials, n_iter=n_iter,
+            scores_est,best_params_arr = self.nested_cross_validation(optimizer=optimizer, n_trials=n_trials, n_iter=n_iter,
                                           num_trials=num_trials, inner_scoring=score, outer_scoring=score)
-            scores_array = np.array([round(num, 4) for num in scores_est])
-            all_scores.append(scores_array)
+            # scores_array = np.array([round(num, 4) for num in scores_est])
+            all_scores.append(scores_est)
             results.append({
             'Estimator': estimator,
-            'Scores': scores_array,
-            'Mean Score': np.mean(scores_array),
-            'Max Score': np.max(scores_array)
+            'Scores': scores_est,
+            'Mean': np.mean(scores_est),
+            'Max': np.max(scores_est),
+            'Std': np.std(scores_est),
+            'Median': np.median(scores_est),
+            'Evaluated': np.mean(scores_est)-alpha*np.std(scores_est),
+            'Best_Params': best_params_arr
         })
         
-        if box:
+        if plot == 'box':
             plt.boxplot(all_scores, labels=clfs)
             plt.title("Model Selection Results")
             plt.ylabel("Score")
             plt.xticks(rotation=90)  
             plt.grid(True)
             plt.show()
+        elif plot == 'violin':
+            plt.violinplot(all_scores)
+            plt.title("Model Selection Results")
+            plt.ylabel("Score")
+            plt.xticks(range(1, len(clfs) + 1), clfs, rotation=90)
+            plt.grid(True)
+            plt.show()
+        elif plot == None: pass
+        else: raise ValueError(f'The "{plot}" is not a valid option for plotting. Choose between "box", "violin" or None.')
+        
         
         # best_estimator_name = max(results, key=lambda x: x['Mean Score'])['Estimator']
-        self.name = max(results, key=lambda x: x['Mean Score'])['Estimator']
+        self.name = max(results, key=lambda x: x['Evaluated'])['Estimator']
         self.estimator = self.available_clfs[self.name]
         # self.best_estimator = self.available_clfs[best_estimator_name]
         # self.estimator = self.available_clfs[best_estimator_name]
