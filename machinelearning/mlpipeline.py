@@ -39,13 +39,13 @@ class MLPipelines(MachineLearningEstimator):
     :param csv_dir: Path to the csv file
     :type csv_dir: str
     """       
-    def __init__(self, estimator, param_grid: dict, label: str, csv_dir: str):
+    def __init__(self, label: str, csv_dir: str, estimator: object = None, param_grid: dict = None, ):
          super().__init__(estimator, param_grid, label, csv_dir)
 
-    def cross_validation(self, scoring="accuracy", cv=5) -> list:
+    def cross_validation(self, scoring: str = "matthews_corrcoef", cv: int = 5) -> list:
         """ Performs cross validation on a given estimator
 
-        :param scoring: Scoring metric, defaults to ``accuracy``
+        :param scoring: Scoring metric, defaults to ``matthews_corrcoef``
         :type scoring: str, optional
         :param cv: Number of folds for Cross Validation, defaults to 5
         :type cv: int, optional
@@ -70,7 +70,8 @@ class MLPipelines(MachineLearningEstimator):
         random_iter=25,
         n_trials=100,
         cv=5,
-        scoring="accuracy",
+        scoring="matthews_corrcoef",
+        verbose=False
     ):
         """Performs boostrap validation on a given estimator.
 
@@ -86,7 +87,7 @@ class MLPipelines(MachineLearningEstimator):
         :type n_trials: int, optional
         :param cv: Number of folds for Cross Validation, defaults to 5
         :type cv: int, optional
-        :param scoring: Scoring metric, defaults to ``accuracy``
+        :param scoring: Scoring metric, defaults to ``matthews_corrcoef``
         :type scoring: str, optional
         :return: List of evaluation metrics for each iteration
         :rtype: list
@@ -97,7 +98,6 @@ class MLPipelines(MachineLearningEstimator):
             )
 
         eval_metrics = []
-
         for i in range(n_iter):
             X_train, X_test, y_train, y_test = train_test_split(
                 self.X, self.y, test_size=test_size, random_state=i
@@ -116,7 +116,7 @@ class MLPipelines(MachineLearningEstimator):
                         scoring=scoring,
                         cv=cv,
                         n_iter=random_iter,
-                        verbose=False,
+                        verbose=verbose,
                     )
                 elif optimizer == "bayesian_search":
                     self.bayesian_search(
@@ -126,7 +126,7 @@ class MLPipelines(MachineLearningEstimator):
                         direction="maximize",
                         cv=cv,
                         n_trials=n_trials,
-                        verbose=False,
+                        verbose=verbose,
                     )
                     self.best_estimator.fit(X_train, y_train)
                 else:
@@ -143,22 +143,22 @@ class MLPipelines(MachineLearningEstimator):
 
     def nested_cross_validation(
         self,
-        inner_scoring="accuracy",
-        outer_scoring="accuracy",
+        inner_scoring="matthews_corrcoef",
+        outer_scoring="matthews_corrcoef",
         inner_splits=3,
         outer_splits=5,
         optimizer="grid_search",
         n_trials=100,
         n_iter=25,
-        num_trials=10,
+        n_runs=10,
         n_jobs=-1,
         verbose=0,
     ):
         """Performs nested cross-validation for a given model and dataset in order to perform model selection
 
-        :param inner_scoring: Inner loop scoring metric, defaults to ``accuracy``
+        :param inner_scoring: Inner loop scoring metric, defaults to ``matthews_corrcoef``
         :type inner_scoring: str, optional
-        :param outer_scoring: Outer loop scoring metric, defaults to ``accuracy``
+        :param outer_scoring: Outer loop scoring metric, defaults to ``matthews_corrcoef``
         :type outer_scoring: str, optional
         :param inner_splits: Number of folds for inner loop cross validation, defaults to 3
         :type inner_splits: int, optional
@@ -170,8 +170,8 @@ class MLPipelines(MachineLearningEstimator):
         :type n_trials: int, optional
         :param n_iter: Number of iterations for ``RandomizedSearchCV``, defaults to 25
         :type n_iter: int, optional
-        :param num_trials: Number of runs for the Nested Cross Validation, defaults to 10
-        :type num_trials: int, optional
+        :param n_runs: Number of runs for the Nested Cross Validation, defaults to 10
+        :type n_runs: int, optional
         :param n_jobs: Number of workers to be used, defaults to -1
         :type n_jobs: int, optional
         :param verbose: Verbose, defaults to 0
@@ -195,7 +195,7 @@ class MLPipelines(MachineLearningEstimator):
         )
 
         nested_scores = []
-        for i in tqdm(range(num_trials)):
+        for i in tqdm(range(n_runs)):
             inner_cv = StratifiedKFold(
                 n_splits=inner_splits, shuffle=True, random_state=i
             )
@@ -226,7 +226,7 @@ class MLPipelines(MachineLearningEstimator):
                 clf = optuna.integration.OptunaSearchCV(
                     estimator=self.estimator,
                     scoring=inner_scoring,
-                    param_distributions=optuna_grid["NestedCV"][self.name],
+                    param_distributions=optuna_grid["NestedCV"][self.estimator.__class__.__name__],
                     cv=inner_cv,
                     n_jobs=n_jobs,
                     verbose=verbose,
@@ -254,12 +254,13 @@ class MLPipelines(MachineLearningEstimator):
         optimizer="grid_search",
         n_trials=100,
         n_iter=25,
-        num_trials=10,
-        score="accuracy",
+        n_runs=10,
+        score="matthews_corrcoef",
         exclude=None,
         result=False,
         box=True,
-        train_best=None,
+        train_best=True,
+        verbose=True
     ):
         """Performs model selection for a given dataset
 
@@ -269,9 +270,9 @@ class MLPipelines(MachineLearningEstimator):
         :type n_trials: int, optional
         :param n_iter: _description_, defaults to 25
         :type n_iter: int, optional
-        :param num_trials: _description_, defaults to 10
-        :type num_trials: int, optional
-        :param score: _description_, defaults to "accuracy"
+        :param n_runs: _description_, defaults to 10
+        :type n_runs: int, optional
+        :param score: _description_, defaults to "matthews_corrcoef"
         :type score: str, optional
         :param exclude: _description_, defaults to None
         :type exclude: _type_, optional
@@ -280,7 +281,7 @@ class MLPipelines(MachineLearningEstimator):
         :param box: _description_, defaults to True
         :type box: bool, optional
         :param train_best: _description_, defaults to None
-        :type train_best: _type_, optional
+        :type train_best: bool, optional
         :return: Scores for each estimator
         :rtype: pd.DataFrame
         """        
@@ -300,13 +301,13 @@ class MLPipelines(MachineLearningEstimator):
 
         for estimator in tqdm(clfs):
             print(f"Performing nested cross-validation for {estimator}...")
-            self.name = estimator
+            # self.name = estimator
             self.estimator = self.available_clfs[estimator]
             scores_est = self.nested_cross_validation(
                 optimizer=optimizer,
-                n_trials=n_trials,
+                n_runs=n_runs,
                 n_iter=n_iter,
-                num_trials=num_trials,
+                n_trials=n_trials,
                 inner_scoring=score,
                 outer_scoring=score,
             )
@@ -321,28 +322,27 @@ class MLPipelines(MachineLearningEstimator):
                 }
             )
 
+        self.estimator = self.available_clfs[max(results, key=lambda x: x["Mean Score"])["Estimator"]]
+
+        if train_best == "bayesian_search":
+            self.bayesian_search(cv=5, n_trials=n_iter, verbose=verbose)
+        elif train_best == "grid_search":
+            self.grid_search(cv=5, verbose=verbose)
+        elif train_best == "random_search":
+            self.random_search(cv=5, n_iter=n_iter, verbose=verbose)
+        elif train_best is None:
+            print(f"Best estimator: {self.best_estimator}")
+        else:
+            raise ValueError(
+                f'Invalid type of best estimator train. Choose between "bayesian_search", "grid_search", "random_search" or None.'
+            )
+            
         if box:
             plt.boxplot(all_scores, labels=clfs)
             plt.title("Model Selection Results")
             plt.ylabel("Score")
             plt.xticks(rotation=90)
             plt.show()
-
-        # best_estimator_name = max(results, key=lambda x: x['Mean Score'])['Estimator']
-        self.name = max(results, key=lambda x: x["Mean Score"])["Estimator"]
-        self.estimator = self.available_clfs[self.name]
-        if train_best == "bayesian_search":
-            self.bayesian_search(cv=5, n_trials=100, verbose=True)
-        elif train_best == "grid_search":
-            self.grid_search(cv=5, verbose=True)
-        elif train_best == "random_search":
-            self.random_search(cv=5, n_iter=25, verbose=True)
-        elif train_best is None:
-            print(f"Best estimator: {self.name}")
-        else:
-            raise ValueError(
-                f'Invalid type of best estimator train. Choose between "bayesian_search", "grid_search", "random_search" or None.'
-            )
 
         if result:
             return pd.DataFrame(results)

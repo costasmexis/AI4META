@@ -41,7 +41,6 @@ class MachineLearningEstimator(DataLoader):
 
         super().__init__(label, csv_dir)
         self.estimator = estimator
-        self.name = estimator.__class__.__name__
         self.param_grid = param_grid
         self.best_params = None
         self.best_score = None
@@ -59,10 +58,12 @@ class MachineLearningEstimator(DataLoader):
             "SVC": SVC(),
         }
 
-        # Check if the estimator is valid
-        if self.name not in self.available_clfs.keys():
+        # Check if estimator is NoneType
+        if self.estimator is None:
+            print('You have not provided an estimator.')
+        elif self.estimator.__class__.__name__ not in self._available_clfs.keys():
             raise ValueError(
-                f"Invalid estimator: {self.name}. Select one of the following: {list(self.available_clfs.keys())}"
+                f"Invalid estimator: {self.estimator.__class__.__name__}. Select one of the following: {list(self._available_clfs.keys())}"
             )
 
     def grid_search(self, X=None, y=None, scoring="accuracy", cv=5, verbose=True):
@@ -174,7 +175,7 @@ class MachineLearningEstimator(DataLoader):
             y = self.y
 
         def objective(trial):
-            clf = grid[self.name](trial)
+            clf = grid[self.estimator.__class__.__name__](trial)
             final_score = cross_val_score(clf, X, y, scoring=scoring, cv=cv).mean()
             return final_score
 
@@ -182,9 +183,9 @@ class MachineLearningEstimator(DataLoader):
         study.optimize(objective, n_trials=n_trials)
         self.best_params = study.best_params
         self.best_score = study.best_value
-        self.best_estimator = grid[self.name](study.best_trial)
+        self.best_estimator = self.estimator.__class__(**self.best_params).fit(self.X, self.y)
 
         if verbose:
             print(
-                f"For the {self.name} model: \nBest parameters: {self.best_params}\nBest {scoring}: {self.best_score}"
+                f"For the {self.estimator.__class__.__name__} model: \nBest parameters: {self.best_params}\nBest {scoring}: {self.best_score}"
             )
