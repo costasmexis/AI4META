@@ -227,6 +227,7 @@ class MLPipelines(MachineLearningEstimator):
             scores_est,best_params_arr = self.nested_cross_validation(optimizer=optimizer, n_trials=n_trials, n_iter=n_iter,
                                           num_trials=num_trials, inner_scoring=score, outer_scoring=score)
             # scores_array = np.array([round(num, 4) for num in scores_est])
+            print(type(scores_est))
             all_scores.append(scores_est)
             results.append({
             'Estimator': estimator,

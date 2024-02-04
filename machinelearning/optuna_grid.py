@@ -126,6 +126,12 @@ optuna_grid = {
             'min_split_gain': optuna.distributions.FloatDistribution(0.0, 1.0),
             'n_jobs': optuna.distributions.CategoricalDistribution([-1]),
             'verbose': optuna.distributions.CategoricalDistribution([-1]),
+        },
+        'GaussianProcessClassifier':{
+            'optimizer': optuna.distributions.CategoricalDistribution(['fmin_l_bfgs_b', None]),
+            'max_iter_predict': optuna.distributions.IntDistribution(50, 200),
+            'warm_start': optuna.distributions.CategoricalDistribution([True, False]),
+            'n_jobs': optuna.distributions.CategoricalDistribution([-1])
         }
     },
     "ManualSearch": {
@@ -224,18 +230,14 @@ optuna_grid = {
             solver=(
                 trial.suggest_categorical("solver_1", ["liblinear", "saga"])
                 if trial.params["penalty"] == "l1"
-                else (
-                    trial.suggest_categorical(
+                else (trial.suggest_categorical(
                         "solver_2",
-                        [
-                            "newton-cg",
+                        ["newton-cg",
                             "lbfgs",
                             "sag",
                             "saga",
                             "newton-cholesky",
-                            "liblinear",
-                        ],
-                    )
+                            "liblinear",],)
                     if trial.params["penalty"] == "l2"
                     else trial.suggest_categorical(
                         "solver_3",
@@ -262,8 +264,11 @@ optuna_grid = {
         bagging_fraction=trial.suggest_float('bagging_fraction', 0.1, 0.9) if trial.params.get('boosting_type', 'gbdt') not in ['goss', 'rf'] else 1.0,
         bagging_freq=trial.suggest_int('bagging_freq', 1, 7) if trial.params.get('boosting_type', 'gbdt') == 'rf' else 0,
         feature_fraction=trial.suggest_float('feature_fraction', 0.1, 0.9) if trial.params.get('boosting_type', 'gbdt') != 'goss' else 1.0,
-        verbose=-1
-    )
-
-    },
+        verbose=-1),
+        'GaussianProcessClassifier' : lambda trial: GaussianProcessClassifier(
+        optimizer=trial.suggest_categorical("optimizer", ["fmin_l_bfgs_b",None]),
+        max_iter_predict=trial.suggest_int("max_iter_predict", 50, 1000),
+        warm_start=trial.suggest_categorical("warm_start", [True, False]),
+        n_jobs=-1)
+    }
 }
