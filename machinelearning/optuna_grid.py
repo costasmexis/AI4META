@@ -132,6 +132,20 @@ optuna_grid = {
             'max_iter_predict': optuna.distributions.IntDistribution(50, 200),
             'warm_start': optuna.distributions.CategoricalDistribution([True, False]),
             'n_jobs': optuna.distributions.CategoricalDistribution([-1])
+        },
+        'CatBoostClassifier': {
+            'iterations': optuna.distributions.IntDistribution(50, 700),
+            'learning_rate': optuna.distributions.FloatDistribution(0.01, 0.5),
+            'depth': optuna.distributions.IntDistribution(1, 15),
+            'l2_leaf_reg': optuna.distributions.FloatDistribution(1e-8, 2),
+            'border_count': optuna.distributions.IntDistribution(1, 255),
+            'bagging_temperature': optuna.distributions.FloatDistribution(0.0, 10.0),
+            'random_strength': optuna.distributions.FloatDistribution(0.0, 10.0),
+            'leaf_estimation_method': optuna.distributions.CategoricalDistribution(["Newton", "Gradient"]),
+            'verbose': optuna.distributions.CategoricalDistribution([0]),
+            'model_size_reg': optuna.distributions.FloatDistribution(1e-4, 2),
+            'rsm': optuna.distributions.FloatDistribution(0.01, 1.0),
+            'loss_function': optuna.distributions.CategoricalDistribution(['Logloss', 'CrossEntropy']),
         }
     },
     "ManualSearch": {
@@ -241,10 +255,7 @@ optuna_grid = {
                     if trial.params["penalty"] == "l2"
                     else trial.suggest_categorical(
                         "solver_3",
-                        ["lbfgs", "newton-cg", "sag", "saga", "newton-cholesky"],
-                    )
-                )
-            ),
+                        ["lbfgs", "newton-cg", "sag", "saga", "newton-cholesky"]))),
             max_iter=trial.suggest_int("max_iter", 100, 1000),
             fit_intercept=trial.suggest_categorical("fit_intercept", [True, False]),
             n_jobs=-1,
@@ -269,6 +280,19 @@ optuna_grid = {
         optimizer=trial.suggest_categorical("optimizer", ["fmin_l_bfgs_b",None]),
         max_iter_predict=trial.suggest_int("max_iter_predict", 50, 1000),
         warm_start=trial.suggest_categorical("warm_start", [True, False]),
-        n_jobs=-1)
+        n_jobs=-1),
+        'CatBoostClassifier' : lambda trial: CatBoostClassifier(
+        iterations=trial.suggest_int("iterations", 50, 1000),
+        learning_rate=trial.suggest_float("learning_rate", 0.01, 0.5),
+        depth=trial.suggest_int("depth", 1, 15),
+        l2_leaf_reg=trial.suggest_float("l2_leaf_reg", 1e-8, 100.0, log=True),
+        border_count=trial.suggest_int("border_count", 1, 255),
+        bagging_temperature=trial.suggest_float("bagging_temperature", 0.0, 10.0),
+        random_strength=trial.suggest_float("random_strength", 0.0, 10.0),
+        leaf_estimation_method=trial.suggest_categorical("leaf_estimation_method", ["Newton", "Gradient",None]),
+        verbose=0,
+        model_size_reg=trial.suggest_float("model_size_reg", 0.01, 10.0, log=True),
+        rsm=trial.suggest_float("rsm", 0.01, 1.0),
+        loss_function=trial.suggest_categorical("loss_function", ["Logloss", "CrossEntropy",None]))
     }
 }
