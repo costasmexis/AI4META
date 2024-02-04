@@ -21,6 +21,9 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
 from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from sklearn.gaussian_process import GaussianProcessClassifier
+from catboost import CatBoostClassifier
 
 from dataloader import DataLoader
 from .optuna_grid import optuna_grid
@@ -51,7 +54,10 @@ class MachineLearningEstimator(DataLoader):
             'GaussianNB': GaussianNB(),
             'KNeighborsClassifier': KNeighborsClassifier(),
             'DecisionTreeClassifier': DecisionTreeClassifier(),
-            'SVC': SVC()
+            'SVC': SVC(),
+            'LGBMClassifier': LGBMClassifier(),
+            'GaussianProcessClassifier': GaussianProcessClassifier(),
+            'CatBoostClassifier': CatBoostClassifier()
         }
         
         if self.estimator is not None:

@@ -6,6 +6,9 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
+from lightgbm import LGBMClassifier
+from sklearn.gaussian_process import GaussianProcessClassifier
+from catboost import CatBoostClassifier
 import optuna
 
 optuna_grid = {
@@ -110,6 +113,20 @@ optuna_grid = {
         "GaussianNB": {
             "var_smoothing": optuna.distributions.FloatDistribution(1e-9, 1e-5)
         },
+        'LGBMClassifier': {
+            'boosting_type': optuna.distributions.CategoricalDistribution(['gbdt', 'dart', 'goss']),
+            'num_leaves': optuna.distributions.IntDistribution(2, 256),
+            'learning_rate': optuna.distributions.FloatDistribution(0.01, 0.5),
+            'n_estimators': optuna.distributions.IntDistribution(2, 200),
+            # 'min_child_samples': optuna.distributions.IntDistribution(5, 100),
+            # 'reg_alpha': optuna.distributions.FloatDistribution(0.0, 1.0),
+            # 'reg_lambda': optuna.distributions.FloatDistribution(0.0, 1.0),
+            'subsample_for_bin': optuna.distributions.IntDistribution(100000, 400000),
+            'objective': optuna.distributions.CategoricalDistribution(['binary']),
+            'min_split_gain': optuna.distributions.FloatDistribution(0.0, 1.0),
+            'n_jobs': optuna.distributions.CategoricalDistribution([-1]),
+            'verbose': optuna.distributions.CategoricalDistribution([-1]),
+        }
     },
     "ManualSearch": {
         "RandomForestClassifier": lambda trial: RandomForestClassifier(
@@ -233,5 +250,20 @@ optuna_grid = {
         "GaussianNB": lambda trial: GaussianNB(
             var_smoothing=trial.suggest_float("var_smoothing", 1e-9, 1e-5)
         ),
+        'LGBMClassifier': lambda trial: LGBMClassifier(
+        boosting_type=trial.suggest_categorical('boosting_type', ['gbdt', 'dart','goss', 'rf']),
+        num_leaves=trial.suggest_int('num_leaves', 2, 256),
+        learning_rate=trial.suggest_float('learning_rate', 0.01, 0.5),
+        n_estimators=trial.suggest_int('n_estimators', 2, 200),
+        subsample_for_bin=trial.suggest_int('subsample_for_bin', 100000, 400000),
+        objective='binary',
+        min_split_gain=trial.suggest_float('min_split_gain', 0.0, 1.0),
+        n_jobs=-1,
+        bagging_fraction=trial.suggest_float('bagging_fraction', 0.1, 0.9) if trial.params.get('boosting_type', 'gbdt') not in ['goss', 'rf'] else 1.0,
+        bagging_freq=trial.suggest_int('bagging_freq', 1, 7) if trial.params.get('boosting_type', 'gbdt') == 'rf' else 0,
+        feature_fraction=trial.suggest_float('feature_fraction', 0.1, 0.9) if trial.params.get('boosting_type', 'gbdt') != 'goss' else 1.0,
+        verbose=-1
+    )
+
     },
 }

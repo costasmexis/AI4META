@@ -7,6 +7,9 @@ import sklearn
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from lightgbm import LGBMClassifier
+from sklearn.gaussian_process import GaussianProcessClassifier
+from catboost import CatBoostClassifier
 from sklearn.metrics import get_scorer
 from sklearn.model_selection import (
     GridSearchCV,
