@@ -27,6 +27,7 @@ from catboost import CatBoostClassifier
 
 from dataloader import DataLoader
 from .optuna_grid import optuna_grid
+from optuna.samplers import TPESampler,RandomSampler
 
 class MachineLearningEstimator(DataLoader):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
@@ -127,7 +128,7 @@ class MachineLearningEstimator(DataLoader):
            return self.best_estimator
 
     def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', 
-                        cv=5, direction='maximize', n_trials=100, 
+                        cv=5, direction='maximize', n_trials=100, set_sampler=None,
                         verbose=True, return_model=False):#, box=False):
         """ Function to perform a bayesian search
 
@@ -158,7 +159,15 @@ class MachineLearningEstimator(DataLoader):
             final_score = cross_val_score(clf, X, y, scoring=scoring, cv=cv).mean()
             return final_score
 
-        study = optuna.create_study(direction=direction)
+        if set_sampler == 'TPESampler':
+            study = optuna.create_study(sampler=TPESampler(),direction=direction)
+        elif set_sampler == 'RandomSampler':
+            study = optuna.create_study(sampler=RandomSampler(),direction=direction)
+        # elif set_sampler == 'CmaEsSampler':
+        #     study = optuna.create_study(sampler=CmaEsSampler(),direction=direction)
+        elif set_sampler == None:
+            study = optuna.create_study(direction=direction)
+        else: raise ValueError('Invalid sampler, Choose between TPESampler, RandomSampler or None')
         study.optimize(objective, n_trials=n_trials)
         self.best_params = study.best_params
         self.best_score = study.best_value
