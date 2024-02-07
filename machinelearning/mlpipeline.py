@@ -190,20 +190,32 @@ class MLPipelines(MachineLearningEstimator):
                         num_trials=10, score = 'matthews_corrcoef', exclude=None,
                         search_on=None, scores_df=False, alpha=1,
                         plot='box' , train_best=None, return_model=False):
-        """ Function to perform model selection using Nested Cross Validation
+        """
+        Perform model selection using Nested Cross Validation.
 
-        Args:
-            optimizer (str, optional): _description_. Defaults to 'grid_search'.
-            n_trials (int, optional): _description_. Defaults to 100.
-            n_iter (int, optional): _description_. Defaults to 25.
-            num_trials (int, optional): _description_. Defaults to 10.
-            score (str, optional): _description_. Defaults to matthews_corrcoef.
-            search_on(list, optional): _description_. Defaults to None.
-            exclude (list, optional): _description_. Defaults to None.
-            result (bool, optional): _description_. Defaults to False.
-            plot (str, optional): _description_. Defaults to True.
+        Parameters:
+            optimizer (str, optional): The optimization method to use. Defaults to 'grid_search'.
+                Options: 'grid_search', 'random_search', 'bayesian_search'.
+            n_trials (int, optional): The number of trials for Bayesian optimization. Defaults to 100.
+            n_iter (int, optional): The number of iterations for Random search. Defaults to 25.
+            num_trials (int, optional): The number of cross-validation splits. Defaults to 10.
+            score (str, optional): The scoring metric. Defaults to 'matthews_corrcoef'.
+            exclude (list, optional): List of classifiers to exclude from selection. Defaults to None.
+            search_on (list, optional): List of classifiers to include in selection. Defaults to None.
+            scores_df (bool, optional): Whether to return a DataFrame of scores. Defaults to False.
+            alpha (float, optional): The weight of standard deviation in the evaluation score. Defaults to 1.
+            plot (str, optional): Type of plot for visualization ('box', 'violin', or None). Defaults to 'box'.
+            train_best (str, optional): The method to retrain the best estimator on the whole dataset.
+                Options: 'bayesian_search', 'grid_search', 'random_search', None. Defaults to None.
+            return_model (bool, optional): Whether to return the best fitted estimator. Defaults to False.
+
         Returns:
-            _type_: _description_
+            Fitted best estimator if return_model is True. Optionally returns a DataFrame of scores if scores_df is True.
+            The return type depends on the flags `return_model` and `scores_df`:
+                - If both are True, returns a tuple (best_estimator, scores_dataframe).
+                - If only return_model is True, returns best_estimator.
+                - If only scores_df is True, returns scores_dataframe.
+                - Otherwise, returns None.
         """
         
         all_scores = []
@@ -278,8 +290,10 @@ class MLPipelines(MachineLearningEstimator):
         scores_dataframe = pd.DataFrame(results) if scores_df else None
 
         if return_model and scores_df:
+            self.best_estimator = self.estimator.fit(self.X, self.y)
             return self.best_estimator, scores_dataframe
         elif return_model:
+            self.best_estimator = self.estimator.fit(self.X, self.y)
             return self.best_estimator
         elif scores_df:
             return scores_dataframe

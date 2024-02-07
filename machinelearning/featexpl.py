@@ -26,7 +26,7 @@ class FeaturesExplanation(MachineLearningEstimator):
         if explainer_type == 'general':
             self.explainer = shap.Explainer(self.best_estimator, self.X)
         elif explainer_type == 'tree':
-            if self.name not in ['DecisionTreeClassifier', 'RandomForestClassifier', 'XGBClassifier']:
+            if self.name not in ['DecisionTreeClassifier', 'RandomForestClassifier', 'XGBClassifier','CatBoostClassifier']:
                 raise ValueError("Only DecisionTreeClassifier, RandomForestClassifier, XGBClassifier are supported for tree explainer")
             elif self.name == 'XGBClassifier' and self.best_estimator.booster != 'gbtree':
                 raise ValueError("XGBClassifier requires 'booster' to be 'gbtree'")
@@ -37,6 +37,11 @@ class FeaturesExplanation(MachineLearningEstimator):
                 raise ValueError("Only LogisticRegression and LinearDiscriminantAnalysis are supported for linear explainer")
             else:
                 self.explainer = shap.LinearExplainer(self.best_estimator, self.X)
+        # elif explainer_type == 'kernel':
+            # if self.name not in ['SVC','GaussianNB']:
+            #     raise ValueError("Only SVC is supported for kernel explainer")
+            # else:
+                # self.explainer = shap.SamplingExplainer(self.best_estimator, self.X)
         else:
             raise ValueError("Unsupported explainer. Select one of 'general', 'tree', 'linear'")
         
@@ -50,7 +55,7 @@ class FeaturesExplanation(MachineLearningEstimator):
         else: 
             raise ValueError("Explainer is not defined")
 
-    def plot_shap_values(self,max_display=10,plot_type='summary',label=0):
+    def plot_shap_values(self,max_display=10,plot_type='summary',label=1):
         if plot_type == 'summary':
             try:
                 shap.summary_plot(shap_values=self.shap_values[:,:,label], features=self.X,feature_names=self.X.columns,max_display=max_display,sort=True)
