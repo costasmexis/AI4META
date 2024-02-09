@@ -5,6 +5,7 @@ import pandas as pd
 import sklearn
 from catboost import CatBoostClassifier
 from lightgbm import LGBMClassifier
+from optuna.samplers import TPESampler
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
@@ -198,8 +199,7 @@ class MachineLearningEstimator(DataLoader):
             final_score = cross_val_score(clf, X, y, scoring=scoring, cv=cv).mean()
             return final_score
         
-
-        study = optuna.create_study(direction=direction)
+        study = optuna.create_study(sampler=TPESampler(), direction=direction)
         study.optimize(objective, n_trials=n_trials)
         self.best_params = study.best_params
         self.best_score = study.best_value
