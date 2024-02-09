@@ -1,10 +1,13 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import optuna
 import pandas as pd
 import sklearn
-import matplotlib.pyplot as plt
+from catboost import CatBoostClassifier
+from lightgbm import LGBMClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import get_scorer
 from sklearn.model_selection import (
@@ -22,6 +25,7 @@ from tqdm import tqdm
 from xgboost import XGBClassifier
 
 from dataloader import DataLoader
+
 from .optuna_grid import optuna_grid
 
 
@@ -47,18 +51,20 @@ class MachineLearningEstimator(DataLoader):
         self.best_estimator = None
 
         self.available_clfs = {
-            "RandomForestClassifier": RandomForestClassifier(),
-            "GradientBoostingClassifier": GradientBoostingClassifier(),
-            "LinearDiscriminantAnalysis": LinearDiscriminantAnalysis(),
-            "LogisticRegression": LogisticRegression(),
-            "XGBClassifier": XGBClassifier(),
-            "GaussianNB": GaussianNB(),
-            "KNeighborsClassifier": KNeighborsClassifier(),
-            "DecisionTreeClassifier": DecisionTreeClassifier(),
-            "SVC": SVC(),
+            'RandomForestClassifier': RandomForestClassifier(),
+            'GradientBoostingClassifier': GradientBoostingClassifier(),
+            'LinearDiscriminantAnalysis': LinearDiscriminantAnalysis(),
+            'LogisticRegression': LogisticRegression(),
+            'XGBClassifier': XGBClassifier(),
+            'GaussianNB': GaussianNB(),
+            'KNeighborsClassifier': KNeighborsClassifier(),
+            'DecisionTreeClassifier': DecisionTreeClassifier(),
+            'SVC': SVC(),
+            'LGBMClassifier': LGBMClassifier(),
+            'GaussianProcessClassifier': GaussianProcessClassifier(),
+            'CatBoostClassifier': CatBoostClassifier()
         }
 
-        # Check if estimator is NoneType
         if self.estimator is None:
             print('You have not provided an estimator.')
         elif self.estimator.__class__.__name__ not in self._available_clfs.keys():
@@ -66,32 +72,29 @@ class MachineLearningEstimator(DataLoader):
                 f"Invalid estimator: {self.estimator.__class__.__name__}. Select one of the following: {list(self._available_clfs.keys())}"
             )
 
-    def grid_search(self, X=None, y=None, scoring="accuracy", cv=5, verbose=True):
+    def grid_search(self, X=self.X, y=self.y, scoring: str="matthews_corrcoef", cv: int=5, 
+                    verbose: bool=True, return_model: bool=False):
         """ Performs a grid search
 
         :param X: Features vector, defaults to ``None``
         :type X: np.array, optional
         :param y: Target vector, defaults to ``None``
         :type y: np.array, optional
-        :param scoring: Scoring metric, defaults to ``accuracy``
+        :param scoring: Scoring metric, defaults to ``matthews_corrcoef``
         :type scoring: str, optional
         :param cv: Number of folds for Cross Validation, defaults to 5
         :type cv: int, optional
         :param verbose: Verbose, defaults to ``True``
         :type verbose: bool, optional
+        :param return_model: Return the best model fitted on X, y, defaults to ``False``
+        :type return_model: bool, optional
         """        
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
             )
 
-        if X is None and y is None:
-            X = self.X
-            y = self.y
-
-        grid_search = GridSearchCV(
-            self.estimator, self.param_grid, scoring=scoring, cv=cv
-        )
+        grid_search = GridSearchCV(self.estimator, self.param_grid, scoring=scoring, cv=cv)
         grid_search.fit(X, y)
         self.best_params = grid_search.best_params_
         self.best_score = grid_search.best_score_
@@ -99,9 +102,11 @@ class MachineLearningEstimator(DataLoader):
         if verbose:
             print(f"Best parameters: {self.best_params}")
             print(f"Best {scoring}: {self.best_score}")
+        if return_model:
+            return self.best_estimator.fit(self.X, self.y )
 
     def random_search(
-        self, X=None, y=None, scoring="accuracy", cv=5, n_iter=100, verbose=True
+        self, X=self.X, y=self.y, scoring="matthews_corrcoef", cv=5, n_iter=100, verbose=True, return_model=False
     ):
         """ Performs a random search
 
@@ -109,7 +114,7 @@ class MachineLearningEstimator(DataLoader):
         :type X: np.array, optional
         :param y: Target vector, defaults to ``None``
         :type y: np.array, optional
-        :param scoring: Scoring metric, defaults to ``accuracy``
+        :param scoring: Scoring metric, defaults to ``matthews_corrcoef``
         :type scoring: str, optional
         :param cv: Number of folds for Cross Validation, defaults to 5
         :type cv: int, optional
@@ -117,15 +122,14 @@ class MachineLearningEstimator(DataLoader):
         :type n_iter: int, optional
         :param verbose: Verbose, defaults to ``True``
         :type verbose: bool, optional
+        :param return_model: Return the best model fitted on X, y, defaults to ``False``
+        :type return_model: bool, optional
         """        
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
             )
 
-        if X is None and y is None:
-            X = self.X
-            y = self.y
         random_search = RandomizedSearchCV(
             self.estimator, self.param_grid, scoring=scoring, cv=cv, n_iter=n_iter
         )
@@ -136,16 +140,19 @@ class MachineLearningEstimator(DataLoader):
         if verbose:
             print(f"Best parameters: {self.best_params}")
             print(f"Best {scoring}: {self.best_score}")
+        if return_model:
+            return self.best_estimator.fit(self.X, self.y)
 
     def bayesian_search(
         self,
-        X=None,
-        y=None,
-        scoring="accuracy",
+        X=self.X,
+        y=self.y,
+        scoring="matthews_corrcoef",
         cv=5,
         direction="maximize",
         n_trials=100,
         verbose=True,
+        return_model=False
     ):  
         """ Performs a bayesian search
 
@@ -153,7 +160,7 @@ class MachineLearningEstimator(DataLoader):
         :type X: np.array, optional
         :param y: Target vector, defaults to ``None``
         :type y: np.array, optional
-        :param scoring: Scoring metric, defaults to ``accuracy``
+        :param scoring: Scoring metric, defaults to ``matthews_corrcoef``
         :type scoring: str, optional
         :param cv: Number of folds for Cross Validation, defaults to 5
         :type cv: int, optional
@@ -163,6 +170,8 @@ class MachineLearningEstimator(DataLoader):
         :type n_trials: int, optional
         :param verbose: Verbose, defaults to ``True``
         :type verbose: bool, optional
+        :param return_model: Return the best model fitted on X, y, defaults to ``False``
+        :type return_model: bool, optional
         """        
         grid = optuna_grid["ManualSearch"]
         if scoring not in sklearn.metrics.get_scorer_names():
@@ -170,14 +179,11 @@ class MachineLearningEstimator(DataLoader):
                 f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
             )
 
-        if X is None and y is None:
-            X = self.X
-            y = self.y
-
         def objective(trial):
             clf = grid[self.estimator.__class__.__name__](trial)
             final_score = cross_val_score(clf, X, y, scoring=scoring, cv=cv).mean()
             return final_score
+        
 
         study = optuna.create_study(direction=direction)
         study.optimize(objective, n_trials=n_trials)
@@ -189,3 +195,6 @@ class MachineLearningEstimator(DataLoader):
             print(
                 f"For the {self.estimator.__class__.__name__} model: \nBest parameters: {self.best_params}\nBest {scoring}: {self.best_score}"
             )
+        if return_model:
+            return self.best_estimator.fit(self.X, self.y)
+        
