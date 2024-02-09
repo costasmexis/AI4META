@@ -1,14 +1,13 @@
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from mrmr import mrmr_classif
 from sklearn.feature_selection import (
     SelectKBest,
+    SelectPercentile,
     chi2,
     f_classif,
     mutual_info_classif,
-    SelectPercentile,
 )
-from mrmr import mrmr_classif
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler, StandardScaler
 
 
 class DataLoader:
@@ -19,6 +18,7 @@ class DataLoader:
     :param csv_dir: Path to the csv file
     :type csv_dir: str
     """
+
     def __init__(self, label: str, csv_dir: str):
         self.csv_dir = csv_dir
         self.label = label
@@ -27,35 +27,32 @@ class DataLoader:
         self.y = None
         self.label_mapping = None
         self.selected_features = None
-        self.supported_extensions = ["csv", "tsv", "txt"]
         self.scaler = None
         self.__load_data()
         self.__encode_labels()
 
     def __load_data(self, index_col=0):
-        """ Load data from file
+        """Load data from file
 
         :param index_col: Index column of dataset, defaults to 0
         :type index_col: int, optional
-        """        
+        """
+        supported_extensions = ["csv", "tsv", "txt"]
         file_extension = self.csv_dir.split(".")[-1]
-        if file_extension in self.supported_extensions:
-            sep = "," if file_extension == "csv" else "\t"
-            self.data = pd.read_csv(self.csv_dir, sep=sep, index_col=index_col)
-        else:
+        if file_extension not in supported_extensions:
             raise Exception("Unsupported file type.")
-
+        sep = "," if file_extension == "csv" else "\t"
+        self.data = pd.read_csv(self.csv_dir, sep=sep, index_col=index_col)
         self.X = self.data.drop(self.label, axis=1)
         self.y = self.data[self.label].copy()
 
     def __encode_labels(self):
-        """Function to encode the target varable. From str to 1/0."""
+        """Function to encode the target variable. From str to 1/0."""
         label_encoder = LabelEncoder()
-        self.y = label_encoder.fit_transform(self.y)
-        self.label_mapping = {
-            class_label: index
-            for index, class_label in enumerate(label_encoder.classes_)
-        }
+        self.y = label_encoder.fit_transform(self.data[self.label])
+        self.label_mapping = dict(
+            zip(label_encoder.classes_, label_encoder.transform(label_encoder.classes_))
+        )
         print("Label mapping:", self.label_mapping)
 
     def missing_values(self, method="drop"):
@@ -63,13 +60,13 @@ class DataLoader:
 
         :param method: Method to use, defaults to ``drop``
         :type method: str, optional
-        """        
+        """
         total_missing = self.data.isnull().sum().sum()
         print(f"Number of missing values: {total_missing}")
         if method == "drop":
             self.data.dropna(inplace=True)
         elif method in ["mean", "median"]:
-            fill_value = getattr(self.data, method)()
+            fill_value = self.data.mean() if method == "mean" else self.data.median()
             self.data.fillna(fill_value, inplace=True)
         else:
             raise Exception("Unsupported missing values method.")
@@ -127,20 +124,17 @@ class DataLoader:
             if not isinstance(self.scaler, MinMaxScaler):
                 raise Exception("Feature selection method requires MinMaxScaler.")
             if method == "kbest":
-                self.X = SelectKBest(scoring_function, k=n_features).fit_transform(
-                    self.X, self.y
-                )
+                selector = SelectKBest(scoring_function, k=n_features)
             elif method == "percentile":
-                self.X = SelectPercentile(
-                    scoring_function, percentile=percentile
-                ).fit_transform(self.X, self.y)
+                selector = SelectPercentile(scoring_function, percentile=percentile)
+            self.X = selector.fit_transform(self.X, self.y)
 
     def create_test_data(self, output_dir="./test_data.csv"):
         """Create a .csv file for test data
 
         :param output_dir: Path to file, defaults to ``./test_data.csv``
         :type output_dir: str, optional
-        """                
+        """
         test_data = pd.DataFrame(columns=self.X.columns.values)
         test_data.to_csv(output_dir)
 
