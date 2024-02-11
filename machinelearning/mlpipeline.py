@@ -157,7 +157,7 @@ class MLPipelines(MachineLearningEstimator):
                                                         verbose=verbose, n_trials=n_trials)
                 else:
                     raise Exception("Unsupported optimizer.")        
-                
+                # best_params_list.append(clf.best_params_)
                 clf.fit(X_train, y_train)
                 best_params_list.append(clf.best_params_)
                 y_pred = clf.predict(X_test)
