@@ -1,10 +1,21 @@
+import logging
+
 import matplotlib.pyplot as plt
 import numpy as np
 import optuna
 import pandas as pd
 import sklearn
+from dataloader import DataLoader
+from mrmr import mrmr_classif
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.feature_selection import (
+    SelectKBest,
+    SelectPercentile,
+    chi2,
+    f_classif,
+    mutual_info_classif,
+)
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import get_scorer
 from sklearn.model_selection import (
@@ -20,8 +31,6 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
 from xgboost import XGBClassifier
-
-from dataloader import DataLoader
 
 from .mlestimator import MachineLearningEstimator
 from .optuna_grid import optuna_grid
@@ -40,106 +49,17 @@ class MLPipelines(MachineLearningEstimator):
     :type csv_dir: str
     """       
     def __init__(self, label: str, csv_dir: str, estimator: object = None, param_grid: dict = None, ):
-         super().__init__(estimator, param_grid, label, csv_dir)
+        super().__init__(estimator, param_grid, label, csv_dir)
+        self.__set_optuna_verbosity(logging.ERROR)
+               
+    def __set_optuna_verbosity(self, level):
+        """Sets the verbosity level for Optuna
 
-    def cross_validation(self, scoring: str = "matthews_corrcoef", cv: int = 5) -> list:
-        """ Performs cross validation on a given estimator
-
-        :param scoring: Scoring metric, defaults to ``matthews_corrcoef``
-        :type scoring: str, optional
-        :param cv: Number of folds for Cross Validation, defaults to 5
-        :type cv: int, optional
-        :return: List of scores for each fold
-        :rtype: list
+        :param level: Verbosity level
+        :type level: ???
         """        
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
-            )
-
-        scores = cross_val_score(self.estimator, self.X, self.y, cv=cv, scoring=scoring)
-        print(f"Average {scoring}: {np.mean(scores)}")
-        print(f"Standard deviation {scoring}: {np.std(scores)}")
-        return scores
-
-    def bootsrap(
-        self,
-        n_iter=100,
-        test_size=0.2,
-        optimizer="grid_search",
-        random_iter=25,
-        n_trials=100,
-        cv=5,
-        scoring="matthews_corrcoef",
-        verbose=False
-    ):
-        """Performs boostrap validation on a given estimator.
-
-        :param n_iter: Number of iterations to perform bootstrap validation, defaults to 100
-        :type n_iter: int, optional
-        :param test_size: Test size for each iteration, defaults to 0.2
-        :type test_size: float, optional
-        :param optimizer: Method to use for hyperparameter optimization, defaults to ``grid_search``
-        :type optimizer: str, optional
-        :param random_iter: Number of iterations for ``RandomSearchCV``, defaults to 25
-        :type random_iter: int, optional
-        :param n_trials: Number of trials for ``Optuna``, defaults to 100
-        :type n_trials: int, optional
-        :param cv: Number of folds for Cross Validation, defaults to 5
-        :type cv: int, optional
-        :param scoring: Scoring metric, defaults to ``matthews_corrcoef``
-        :type scoring: str, optional
-        :return: List of evaluation metrics for each iteration
-        :rtype: list
-        """        
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
-            )
-
-        eval_metrics = []
-        for i in range(n_iter):
-            X_train, X_test, y_train, y_test = train_test_split(
-                self.X, self.y, test_size=test_size, random_state=i
-            )
-            if self.param_grid is None or self.param_grid == {}:
-                self.estimator.fit(X_train, y_train)
-            else:
-                if optimizer == "grid_search":
-                    self.grid_search(
-                        X_train, y_train, scoring=scoring, cv=cv, verbose=False
-                    )
-                elif optimizer == "random_search":
-                    self.random_search(
-                        X_train,
-                        y_train,
-                        scoring=scoring,
-                        cv=cv,
-                        n_iter=random_iter,
-                        verbose=verbose,
-                    )
-                elif optimizer == "bayesian_search":
-                    self.bayesian_search(
-                        X_train,
-                        y_train,
-                        scoring=scoring,
-                        direction="maximize",
-                        cv=cv,
-                        n_trials=n_trials,
-                        verbose=verbose,
-                    )
-                    self.best_estimator.fit(X_train, y_train)
-                else:
-                    raise ValueError(
-                        f"Invalid optimizer: {optimizer}. Select one of the following: grid_search, bayesian_search"
-                    )
-
-            y_pred = self.best_estimator.predict(X_test)
-            eval_metrics.append(get_scorer(scoring)._score_func(y_test, y_pred))
-
-        print(f"Average {scoring}: {np.mean(eval_metrics)}")
-        print(f"Standard deviation {scoring}: {np.std(eval_metrics)}")
-        return eval_metrics
+        optuna.logging.set_verbosity(level)
+        logging.getLogger("optuna").setLevel(level)
 
     def nested_cross_validation(
         self,
@@ -346,3 +266,12 @@ class MLPipelines(MachineLearningEstimator):
 
         if result:
             return pd.DataFrame(results)
+
+    def model_evaluation(self, scoring="matthews_corrcoef", cv=5):
+        """ Perfroms model evaluation for a given dataset and model using bootstrapping """
+        
+        print(f"Evaluating model {self.best_estimator.__class__.__name__}...")
+
+        scores = self.bootstrap(optimizer="evaluation")
+        self.best_estimator.fit(self.X, self.y)
+        return scores         

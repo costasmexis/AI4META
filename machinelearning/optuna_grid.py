@@ -186,7 +186,8 @@ optuna_grid = {
             ),
         ),
         "SVC": lambda trial: SVC(
-            C=trial.suggest_int("C", 1, 10),
+            C=trial.suggest_float("C", 10e-4, 10, log=True),
+            gamma=trial.suggest_float("gamma", 10e-4, 10, log=True),
             kernel=trial.suggest_categorical(
                 "kernel", ["linear", "rbf", "sigmoid", "poly"]
             ),
