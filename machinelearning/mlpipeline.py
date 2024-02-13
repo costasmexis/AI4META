@@ -33,12 +33,10 @@ from .optuna_grid import optuna_grid
 from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif, SelectPercentile
 from mrmr import mrmr_classif
 import logging
-from numba import jit, generated_jit, types
+from numba import jit, prange
 # from .Features_explanation import Features_explanation
 
-
 class MLPipelines(MachineLearningEstimator):
-
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
         ''' Class to perform machine learning pipelines 
             Inherits from MachineLearningEstimator class
@@ -112,7 +110,7 @@ class MLPipelines(MachineLearningEstimator):
         print(f'Average {scoring}: {np.mean(eval_metrics)}')
         print(f'Standard deviation {scoring}: {np.std(eval_metrics)}')
         return eval_metrics
-    @jit
+    @jit(parallel=True)
     def inner_loop(self, optimizer, inner_scoring, inner_cv, n_jobs, verbose,
                     n_iter, n_trials,X_train, y_train, X_test, y_test,
                     best_params_list, nested_scores, outer_scorer):
@@ -139,7 +137,6 @@ class MLPipelines(MachineLearningEstimator):
         return nested_scores, best_params_list
 
 
-    # @jit
     def nested_cross_validation(self, inner_scoring='matthews_corrcoef', outer_scoring='matthews_corrcoef',
                                 inner_splits=3, outer_splits=5, optimizer='grid_search', 
                                 n_trials=100, n_iter=25, num_trials=2, n_jobs=-1, verbose=0,
@@ -279,7 +276,7 @@ class MLPipelines(MachineLearningEstimator):
                         num_trials=10, score = 'matthews_corrcoef', exclude=None,
                         search_on=None, scores_df=False, alpha=1,num_features=None,
                         feature_selection_type='mrmr', plot='box' , train_best=None,
-                        return_model=False,choose_model=False):
+                        return_model=False,choose_model=False,percentile=95):
         """
         Perform model selection using Nested Cross Validation.
 
@@ -434,13 +431,13 @@ class MLPipelines(MachineLearningEstimator):
 
         X2fit = self.X.copy()
         if num_features is not None:
-            if feature_selection_type == 'mrmr':
+            if feature_selection_type == 'mrmr' and final_features != X2fit.shape[1]:
                 self.selected_features = mrmr_classif(X2fit, self.y, K=final_features)
                 X2fit = X2fit[self.selected_features]
-            elif feature_selection_type == 'kbest':
+            elif feature_selection_type == 'kbest' and final_features != X2fit.shape[1]:
                 X2fit = SelectKBest(chi2, k=final_features).fit_transform(X2fit, self.y)
-            elif feature_selection_type == 'percentile':
-                X2fit = SelectPercentile(chi2, percentile=final_features).fit_transform(X2fit, self.y)
+            elif feature_selection_type == 'percentile'and percentile != 100:
+                X2fit = SelectPercentile(chi2, percentile=percentile).fit_transform(X2fit, self.y)
             else:
                 raise Exception("Unsupported feature selection method. Select one of 'mrmr', 'kbest', 'percentile'")                
         elif num_features is None or final_features == X2fit.shape[1]:

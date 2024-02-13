@@ -3,7 +3,7 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif, SelectPercentile
 from mrmr import mrmr_classif
-from numba import jit, generated_jit, types
+from numba import jit, prange
 
 
 class DataLoader:
@@ -74,7 +74,7 @@ class DataLoader:
         else:
             raise Exception("Unsupported normalization method.")
     
-    @jit
+    @jit(parallel=True)
     def feature_selection(self, X=None, y=None, method='mrmr', n_features=10, inner_method='chi2', percentile=10):        
         """ Function to perform Feature Selection.
         Args:
@@ -94,6 +94,7 @@ class DataLoader:
             X = self.X
             y = self.y
             datasetXy=True
+
 
         method_mapping = {
             'chi2': chi2,
