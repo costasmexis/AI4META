@@ -3,6 +3,8 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif, SelectPercentile
 from mrmr import mrmr_classif
+from numba import jit, generated_jit, types
+
 
 class DataLoader:
     def __init__(self, label, csv_dir):
@@ -71,8 +73,9 @@ class DataLoader:
             self.X = pd.DataFrame(self.scaler.fit_transform(self.X), columns=self.X.columns)
         else:
             raise Exception("Unsupported normalization method.")
-        
-    def feature_selection(self, method='mrmr', n_features=10, inner_method='chi2', percentile=10):        
+    
+    @jit
+    def feature_selection(self, X=None, y=None, method='mrmr', n_features=10, inner_method='chi2', percentile=10):        
         """ Function to perform Feature Selection.
         Args:
             method (str, optional): Method to use for feature selection. Defaults to 'mrmr'.
@@ -86,6 +89,11 @@ class DataLoader:
             raise Exception("Unsupported inner method. Select one of 'chi2', 'f_classif', 'mutual_info_classif'")
         if percentile > 100 or percentile < 0:
             raise Exception("Percentile must be between 0 and 100.")
+        datasetXy=False
+        if X is None and y is None:
+            X = self.X
+            y = self.y
+            datasetXy=True
 
         method_mapping = {
             'chi2': chi2,
@@ -95,16 +103,28 @@ class DataLoader:
         scoring_function = method_mapping[inner_method]    
         
         if method == 'mrmr':
-            self.selected_features = mrmr_classif(self.X, self.y, K=n_features)
-            self.X = self.X[self.selected_features]
+            # self.selected_features = mrmr_classif(self.X, self.y, K=n_features)
+            # self.X = self.X[self.selected_features]
+            self.selected_features = mrmr_classif(X, y, K=n_features)
+            X = X[self.selected_features]
+
         else:
             if not isinstance(self.scaler, MinMaxScaler):
                 raise Exception("Feature selection method requires MinMaxScaler.")
             if method == 'kbest':
-                self.X = SelectKBest(scoring_function, k=n_features).fit_transform(self.X, self.y)
+                X = SelectKBest(scoring_function, k=n_features).fit_transform(X, y)
+                # self.X = SelectKBest(scoring_function, k=n_features).fit_transform(self.X, self.y)
+
             elif method == 'percentile':
-                self.X = SelectPercentile(scoring_function, percentile=percentile).fit_transform(self.X, self.y)
-                
+                # self.X = SelectPercentile(scoring_function, percentile=percentile).fit_transform(self.X, self.y)
+                X = SelectPercentile(scoring_function, percentile=percentile).fit_transform(X, y)
+        
+        if datasetXy:
+            self.X = X
+            self.y = y
+        else: return self.selected_features
+        
+
     def create_test_data(self, output_dir='./test_data.csv'):
         """ Function to generate a test data template csv file.
         Args:

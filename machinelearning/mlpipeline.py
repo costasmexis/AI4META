@@ -24,7 +24,7 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
 from xgboost import XGBClassifier
-
+# from joblib import Parallel, delayed
 from dataloader import DataLoader
 
 from .mlestimator import MachineLearningEstimator
@@ -33,6 +33,7 @@ from .optuna_grid import optuna_grid
 from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif, SelectPercentile
 from mrmr import mrmr_classif
 import logging
+from numba import jit, generated_jit, types
 # from .Features_explanation import Features_explanation
 
 
@@ -69,7 +70,7 @@ class MLPipelines(MachineLearningEstimator):
         print(f'Average {scoring}: {np.mean(scores)}')
         print(f'Standard deviation {scoring}: {np.std(scores)}')
         return scores
-
+    
     def bootsrap(self, n_iter=100, test_size=0.2, optimizer='grid_search', random_iter=25, n_trials=100, cv=5, scoring='matthews_corrcoef'):
         ''' Performs boostrap validation on a given estimator.
             - n_iter: number of iterations to perform boostrap validation
@@ -111,7 +112,7 @@ class MLPipelines(MachineLearningEstimator):
         print(f'Average {scoring}: {np.mean(eval_metrics)}')
         print(f'Standard deviation {scoring}: {np.std(eval_metrics)}')
         return eval_metrics
-    
+    @jit
     def inner_loop(self, optimizer, inner_scoring, inner_cv, n_jobs, verbose,
                     n_iter, n_trials,X_train, y_train, X_test, y_test,
                     best_params_list, nested_scores, outer_scorer):
@@ -130,20 +131,20 @@ class MLPipelines(MachineLearningEstimator):
         else:
             raise Exception("Unsupported optimizer.")   
         
-        # return clf
         clf.fit(X_train, y_train)
         best_params_list.append(clf.best_params_)
         y_pred = clf.predict(X_test)
         nested_score = outer_scorer(clf, X_test, y_test)
         nested_scores.append(nested_score)
         return nested_scores, best_params_list
-    
-    
 
+
+    # @jit
     def nested_cross_validation(self, inner_scoring='matthews_corrcoef', outer_scoring='matthews_corrcoef',
                                 inner_splits=3, outer_splits=5, optimizer='grid_search', 
-                                n_trials=100, n_iter=25, num_trials=10, n_jobs=-1, verbose=0,
-                                num_features=None, feature_selection_type='mrmr'):
+                                n_trials=100, n_iter=25, num_trials=2, n_jobs=-1, verbose=0,
+                                num_features=None, feature_selection_type='mrmr',percentile=10,
+                                feature_selection_method='chi2'):
         """ Function to perform nested cross-validation for a given model and dataset in order to perform model selection
 
         Args:
@@ -193,7 +194,8 @@ class MLPipelines(MachineLearningEstimator):
                 if num_features is not None:
                     if type(num_features) is int:
                         if num_features < X_train.shape[1]:
-                            self.selected_features = mrmr_classif(X_train, y_train, K=num_features)
+                            self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, n_features=num_features, inner_method=feature_selection_method, percentile=percentile)
+                            # self.selected_features = mrmr_classif(X_train, y_train, K=num_features)
                             X_train_selected = X_train[self.selected_features]
                             X_test_selected = X_test[self.selected_features]
                             nested_scores_tr, best_params_list_tr = self.inner_loop(optimizer, inner_scoring, inner_cv, n_jobs, verbose,
@@ -223,7 +225,7 @@ class MLPipelines(MachineLearningEstimator):
                                 number_of_features.append(num_feature)
                                 way_of_selection.append('none')
                             else:
-                                self.selected_features = mrmr_classif(X_train, y_train, K=num_feature)
+                                self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, n_features=num_feature, inner_method=feature_selection_method, percentile=percentile)
                                 X_train_selected = X_train[self.selected_features]
                                 X_test_selected = X_test[self.selected_features]
                                 nested_scores_tr, best_params_list_tr = self.inner_loop(optimizer, inner_scoring, inner_cv, n_jobs, verbose,
@@ -243,16 +245,6 @@ class MLPipelines(MachineLearningEstimator):
                     number_of_features.append(X_train.shape[1])
                     way_of_selection.append('full')
                 j+=1
-            # for score in range(len(nested_scores_tr)):
-            #     nested_scores.append(nested_scores_tr[score])
-            #     best_params_list.append(best_params_list_tr[score])
-            #     classifiers_list.append(str(self.name)+'_'+str(num_features)+'_'+str(feature_selection_type))
-                    # self.selected_features = mrmr_classif(self.X, self.y, K=num_features)
-                    # self.X = self.X[self.selected_features]
-                    # self.estimator = SelectFromModel(self.estimator, prefit=False, threshold=-np.inf, max_features=num_features)
-                    # self.estimator.fit(X_train, y_train)
-                    # X_train = self.estimator.transform(X_train)
-                    # X_test = self.estimator.transform(X_test)
                 
                 # if optimizer == 'grid_search':
                 #     clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
@@ -267,13 +259,13 @@ class MLPipelines(MachineLearningEstimator):
                 #                                         verbose=verbose, n_trials=n_trials)
                 # else:
                 #     raise Exception("Unsupported optimizer.")        
-
+# 
                 # clf.fit(X_train, y_train)
                 # best_params_list.append(clf.best_params_)
                 # y_pred = clf.predict(X_test)
                 # nested_score = outer_scorer(clf, X_test, y_test)
                 # nested_scores.append(nested_score)
-            
+
         df = pd.DataFrame({
             'Scores': nested_scores,
             'Best_Params': best_params_list,
@@ -281,6 +273,7 @@ class MLPipelines(MachineLearningEstimator):
             'Number_of_Features': number_of_features,
             'Way_of_Selection': way_of_selection})
         return df
+        # return np.array(nested_scores) , np.array(best_params_list)
     
     def model_selection(self,optimizer = 'grid_search', n_trials=100, n_iter=25, 
                         num_trials=10, score = 'matthews_corrcoef', exclude=None,
@@ -332,10 +325,14 @@ class MLPipelines(MachineLearningEstimator):
             print(f'Starting {estimator}...')
             self.name = estimator
             self.estimator = self.available_clfs[estimator]
+            # df = Parallel(n_jobs=-1)([delayed(self.nested_cross_validation)(optimizer=optimizer, n_trials=n_trials, n_iter=n_iter,
+            #                               num_trials=num_trials, inner_scoring=score, outer_scoring=score,
+            #                               feature_selection_type=feature_selection_type, num_features=num_features)])
             df = self.nested_cross_validation(optimizer=optimizer, n_trials=n_trials, n_iter=n_iter,
                                           num_trials=num_trials, inner_scoring=score, outer_scoring=score,
                                           feature_selection_type=feature_selection_type, num_features=num_features)
-            
+            print(f'Finished {estimator}.')
+    
             for classif in np.unique(df['Classifiers']):
                 print(f'Resulting {classif}...')
                 indices = np.where(df['Classifiers'] == classif)[0]
@@ -417,23 +414,23 @@ class MLPipelines(MachineLearningEstimator):
             self.estimator = self.available_clfs[self.name] 
 
 
-        # best_estimator_name = max(results, key=lambda x: x['Mean Score'])['Estimator']
-        # self.name = max(results, key=lambda x: x['Evaluated'])['Estimator']
-        # final_features = max(results, key=lambda x: x['Evaluated'])['Numbers_of_Features']
-        # self.estimator = self.available_clfs[self.name]
-        # self.best_estimator = self.available_clfs[best_estimator_name]
-        # self.estimator = self.available_clfs[best_estimator_name]
-        # print(self.estimator)
-        if train_best == 'bayesian_search':
-            self.best_estimator = self.bayesian_search(cv=5, n_trials=n_trials, verbose=True,return_model=return_model)
-        elif train_best == 'grid_search':
-            self.best_estimator = self.grid_search(cv=5, verbose=True,return_model=return_model)
-        elif train_best == 'random_search':
-            self.best_estimator = self.random_search(cv=5, n_iter=25, verbose=True,return_model=return_model)
-        elif train_best is None:
-            print(f'Best estimator: {self.name}')
-        else:   
-            raise ValueError(f'Invalid type of best estimator train. Choose between "bayesian_search", "grid_search", "random_search" or None.')
+        # # best_estimator_name = max(results, key=lambda x: x['Mean Score'])['Estimator']
+        # # self.name = max(results, key=lambda x: x['Evaluated'])['Estimator']
+        # # final_features = max(results, key=lambda x: x['Evaluated'])['Numbers_of_Features']
+        # # self.estimator = self.available_clfs[self.name]
+        # # self.best_estimator = self.available_clfs[best_estimator_name]
+        # # self.estimator = self.available_clfs[best_estimator_name]
+        # # print(self.estimator)
+        # if train_best == 'bayesian_search':
+        #     self.best_estimator = self.bayesian_search(cv=5, n_trials=n_trials, verbose=True,return_model=return_model)
+        # elif train_best == 'grid_search':
+        #     self.best_estimator = self.grid_search(cv=5, verbose=True,return_model=return_model)
+        # elif train_best == 'random_search':
+        #     self.best_estimator = self.random_search(cv=5, n_iter=25, verbose=True,return_model=return_model)
+        # elif train_best is None:
+        #     print(f'Best estimator: {self.name}')
+        # else:   
+        #     raise ValueError(f'Invalid type of best estimator train. Choose between "bayesian_search", "grid_search", "random_search" or None.')
 
         X2fit = self.X.copy()
         if num_features is not None:
