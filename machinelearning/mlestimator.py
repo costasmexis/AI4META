@@ -233,9 +233,9 @@ class MachineLearningEstimator(DataLoader):
 
     def bootstrap(
         self,
-        n_iter=5,
+        n_iter=10,
         test_size=0.2,
-        optimizer="grid_search",
+        optimizer="grid",
         random_iter=25,
         n_trials=100,
         cv=5,
@@ -268,20 +268,20 @@ class MachineLearningEstimator(DataLoader):
 
         eval_metrics = []
         for i in range(n_iter):
-            X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=test_size, random_state=i            )
+            X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=test_size, random_state=i)
 
             if (self.param_grid is None or self.param_grid == {}) or (optimizer=='evaluation'):
                 self.best_estimator.fit(X_train, y_train)
             else:
                 if optimizer == "grid":
-                    self.grid_search(X_train, y_train, scoring=scoring, cv=cv, verbose=False)
+                    self.grid_search(X_train, y_train, scoring=scoring, cv=cv, verbose=verbose)
                 elif optimizer == "random":
                     self.random_search(X_train, y_train, scoring=scoring, cv=cv, n_iter=random_iter, verbose=verbose)
                 elif optimizer == "bayesian":
                     self.bayesian_search(X_train, y_train, scoring=scoring, direction="maximize", cv=cv, n_trials=n_trials, verbose=verbose)
                     self.best_estimator.fit(X_train, y_train)
                 else:
-                    raise ValueError(f"Invalid optimizer: {optimizer}. Select one of the following: grid_search, bayesian_search")
+                    raise ValueError(f"Invalid optimizer: {optimizer}. Select one of the following: grid, random, bayesian")
 
             y_pred = self.best_estimator.predict(X_test)
             eval_metrics.append(get_scorer(scoring)._score_func(y_test, y_pred))
