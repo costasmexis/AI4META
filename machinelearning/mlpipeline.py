@@ -53,67 +53,13 @@ class MLPipelines(MachineLearningEstimator):
         optuna.logging.set_verbosity(level)  
         logging.getLogger("optuna").setLevel(level) 
 
-    def cross_validation(self, scoring='matthews_corrcoef', cv=5) -> list:
-        ''' Function to perform a simple cross validation
-            - scoring (str): scoring metric
-            - cv (int): number of folds for cross-validation
-        returns:
-            - scores (list): list of scores for each fold
-        '''
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
-        
-        scores = cross_val_score(self.estimator, self.X, self.y, cv=cv, scoring=scoring)
-        print(f'Average {scoring}: {np.mean(scores)}')
-        print(f'Standard deviation {scoring}: {np.std(scores)}')
-        return scores
     
-    def bootsrap(self, n_iter=100, test_size=0.2, optimizer='grid_search', random_iter=25, n_trials=100, cv=5, scoring='matthews_corrcoef'):
-        ''' Performs boostrap validation on a given estimator.
-            - n_iter: number of iterations to perform boostrap validation
-            - test_size: test size for each iteration
-            - optimizer: 'grid_search' for GridSearchCV
-                         'reandom_search' for RandomizedSearchCV
-                         'bayesian_search' for optuna
-            - random_iter: number of iterations for RandomizedSearchCV
-            - n_trials: number of trials for optuna
-            - cv: number of folds for cross-validation
-            - scoring: scoring metric
-    
-        returns:
-            - eval_metrics (list): list of evaluation metrics for each iteration
-        '''                
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
-
-        eval_metrics = []
-
-        for i in range(n_iter):
-            X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=test_size, random_state=i)
-            if self.param_grid is None or self.param_grid == {}:
-                self.estimator.fit(X_train, y_train)
-            else:
-                if optimizer == 'grid_search':
-                    self.grid_search(X_train, y_train, scoring=scoring, cv=cv, verbose=False)
-                elif optimizer == 'random_search':
-                    self.random_search(X_train, y_train, scoring=scoring, cv=cv, n_iter=random_iter, verbose=False)
-                elif optimizer == 'bayesian_search':
-                    self.bayesian_search(X_train, y_train, scoring=scoring, direction='maximize', cv=cv, n_trials=n_trials, verbose=False)
-                    self.best_estimator.fit(X_train, y_train)
-                else:
-                    raise ValueError(f'Invalid optimizer: {optimizer}. Select one of the following: grid_search, bayesian_search')
-            
-            y_pred = self.best_estimator.predict(X_test)
-            eval_metrics.append(get_scorer(scoring)._score_func(y_test, y_pred))
-
-        print(f'Average {scoring}: {np.mean(eval_metrics)}')
-        print(f'Standard deviation {scoring}: {np.std(eval_metrics)}')
-        return eval_metrics
     @jit(parallel=True)
     def inner_loop(self, optimizer, inner_scoring, inner_cv, n_jobs, verbose,
-                    n_iter, n_trials,X_train, y_train, X_test, y_test,
+                    n_iter, n_trials_ncv,X_train, y_train, X_test, y_test,
                     best_params_list, nested_scores, outer_scorer):
+        nested_scores = []
+        best_params_list = []
         if optimizer == 'grid_search':
             clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
                               param_grid=self.param_grid, cv=inner_cv, n_jobs=n_jobs, verbose=verbose)
@@ -125,7 +71,7 @@ class MLPipelines(MachineLearningEstimator):
             clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
                                                     param_distributions=optuna_grid['NestedCV'][self.name],
                                                     cv=inner_cv, n_jobs=n_jobs, 
-                                                    verbose=verbose, n_trials=n_trials)
+                                                    verbose=verbose, n_trials=n_trials_ncv)
         else:
             raise Exception("Unsupported optimizer.")   
         
@@ -135,13 +81,61 @@ class MLPipelines(MachineLearningEstimator):
         nested_score = outer_scorer(clf, X_test, y_test)
         nested_scores.append(nested_score)
         return nested_scores, best_params_list
+    @jit(parallel=True)
+    def clf_app(self, X_train_selected, X_test_selected, y_train, y_test, clfs=None, feat_num=None, feature_selection_type='mrmr',percentile=None,
+                                feature_selection_method='chi2', optimizer='grid_search', inner_scoring='matthews_corrcoef', inner_cv=5, n_jobs=-1, 
+                                verbose=0, n_iter=25, n_trials_ncv=25, outer_scorer='matthews_corrcoef'):
+        nested_scores = []
+        best_params_list = []
+        classifiers_list = []
+        number_of_features = []
+        way_of_selection = []
+        estimator_list = []
+        percentile_list = []
+        lists = [nested_scores, best_params_list, classifiers_list, number_of_features, way_of_selection, estimator_list, percentile_list]
+        list_names = ['Scores', 'Best_Params', 'Classifiers', 'Number_of_Features', 'Way_of_Selection', 'Estimator', 'Percentile']
+
+        if clfs == None :
+            print(f'Performing nested cross-validation for {self.estimator.__class__.__name__}...')
+            nested_scores_tr, best_params_list_tr = self.inner_loop(optimizer, inner_scoring, inner_cv, n_jobs, verbose,
+                                                                                   n_iter, n_trials_ncv,X_train_selected, y_train, X_test_selected, y_test,
+                                                                                   best_params_list, nested_scores, outer_scorer)
+        else:
+            for estimator in clfs:
+                self.estimator = self.available_clfs[estimator]
+                self.name = self.estimator.__class__.__name__
+                print(f'Performing nested cross-validation for {self.estimator.__class__.__name__}...')
+                nested_scores_tr, best_params_list_tr = self.inner_loop(optimizer, inner_scoring, inner_cv, n_jobs, verbose,
+                                                                                   n_iter, n_trials_ncv,X_train_selected, y_train, X_test_selected, y_test,
+                                                                                   best_params_list, nested_scores, outer_scorer)
+                estimator_list.append(self.name)
+                best_params_list.append(best_params_list_tr[0])
+                nested_scores.append(nested_scores_tr[0])
+
+                if feat_num == None and percentile == None:
+                    number_of_features.append(X_test_selected.shape[1])
+                    way_of_selection.append('full')
+                    classifiers_list.append(str(self.name))
+                else:
+                    way_of_selection.append(feature_selection_type)
+                    if feat_num == None:
+                        percentile_list.append(percentile)
+                        classifiers_list.append(str(self.name)+'_'+feature_selection_type+'_'+str(percentile))
+                    else:
+                        number_of_features.append(feat_num)
+                        classifiers_list.append(str(self.name)+'_'+feature_selection_type+'_'+str(feat_num))
+        df_data = pd.DataFrame()
+        for list_data, name in zip(lists, list_names):
+            if len(list_data) != 0:  
+                df_data[name] = list_data
+        return df_data
 
 
     def nested_cross_validation(self, inner_scoring='matthews_corrcoef', outer_scoring='matthews_corrcoef',
                                 inner_splits=3, outer_splits=5, optimizer='grid_search', 
-                                n_trials=100, n_iter=25, num_trials=2, n_jobs=-1, verbose=0,
-                                num_features=None, feature_selection_type='mrmr',percentile=10,
-                                feature_selection_method='chi2'):
+                                n_trials_ncv=25, n_iter=25, num_trials=2, n_jobs=-1, verbose=0,
+                                num_features=None, feature_selection_type='mrmr',percentile=None,
+                                feature_selection_method='chi2', clfs=None):
         """ Function to perform nested cross-validation for a given model and dataset in order to perform model selection
 
         Args:
@@ -153,7 +147,7 @@ class MLPipelines(MachineLearningEstimator):
                                        'random_search' (RandomizedSearchCV))
                                        'bayesian_search' (Optuna) 
                                     Defaults to 'grid_search'.
-            n_trials (int, optional): No. of trials for optuna. Defaults to 100.
+            n_trials_ncv (int, optional): No. of trials for optuna. Defaults to 100.
             n_iter (int, optional): No. of iterations for RandomizedSearchCV. Defaults to 25.
             num_trials (int, optional): No. of trials for the nested cross-validation. Defaults to 10.
             n_jobs (int, optional): No. of jobs to run in parallel. Defaults to -1.
@@ -168,121 +162,107 @@ class MLPipelines(MachineLearningEstimator):
             raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
         if outer_scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
-
-        print(f'Performing nested cross-validation for {self.estimator.__class__.__name__}...')
-                
-        nested_scores = []
-        best_params_list = []
-        classifiers_list = []
-        number_of_features = []
-        way_of_selection = []
-
-        for i in range(num_trials):
+        list_dfs = []
+        fini = 0
+        for i in tqdm(range(num_trials)):
             print(f'Trial {i+1} out of {num_trials}')
             inner_cv = StratifiedKFold(n_splits=inner_splits, shuffle=True, random_state=i)
             outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=i)
             outer_scorer = get_scorer(outer_scoring)
             j=1
             for train_index, test_index in outer_cv.split(self.X, self.y):
+                print(f'Finished {fini/(num_trials*outer_splits)*100}%')
+                fini+=1
                 print(f'Outer fold {j} out of {outer_splits}')
                 X_train, X_test = self.X.iloc[train_index], self.X.iloc[test_index]
                 y_train, y_test = self.y[train_index], self.y[test_index]
-
-                if num_features is not None:
+                if num_features is not None and percentile is None:
                     if type(num_features) is int:
                         if num_features < X_train.shape[1]:
-                            self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, n_features=num_features, inner_method=feature_selection_method, percentile=percentile)
-                            # self.selected_features = mrmr_classif(X_train, y_train, K=num_features)
+                            self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, n_features=num_features, inner_method=feature_selection_method)
                             X_train_selected = X_train[self.selected_features]
                             X_test_selected = X_test[self.selected_features]
-                            nested_scores_tr, best_params_list_tr = self.inner_loop(optimizer, inner_scoring, inner_cv, n_jobs, verbose,
-                                                                           n_iter, n_trials,X_train_selected, y_train, X_test_selected, y_test,
-                                                                           best_params_list, nested_scores, outer_scorer)
-                            classifiers_list.append(str(self.name)+'_'+str(num_features)+'_'+str(feature_selection_type))
-                            number_of_features.append(num_features)
-                            way_of_selection.append(feature_selection_type)
                         elif type(num_features) is int and num_features == X_train.shape[1]:
-                            nested_scores_tr, best_params_list_tr = self.inner_loop(optimizer, inner_scoring, inner_cv, n_jobs, verbose,
-                                                                           n_iter, n_trials,X_train, y_train, X_test, y_test,
-                                                                           best_params_list, nested_scores, outer_scorer)
-                            classifiers_list.append(str(self.name)+'_full')
-                            number_of_features.append(num_features)
-                            way_of_selection.append('none')
+                            X_train_selected = X_train
+                            X_test_selected = X_test
                         else: 
                             raise ValueError('num_features must be an integer less than the number of features in the dataset')
-                    elif type(num_features) is list :
+                        df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test, clfs=clfs,feat_num=num_features,
+                                        feature_selection_type=feature_selection_type, feature_selection_method=feature_selection_method, percentile=percentile,
+                                        inner_scoring=inner_scoring, inner_cv=inner_cv, verbose=verbose, optimizer=optimizer,n_iter=n_iter, n_trials_ncv=n_trials_ncv,
+                                          n_jobs=n_jobs,outer_scorer=outer_scorer)
+                        list_dfs.append(df)
+                    elif type(num_features) is list and percentile is None:
                         for num_feature in num_features:
+                            print(f'For {num_feature} features:')
                             if num_feature > X_train.shape[1]:
                                 raise ValueError('num_features must be less than the number of features in the dataset')
                             elif num_feature == X_train.shape[1]:
-                                nested_scores_tr, best_params_list_tr = self.inner_loop(optimizer, inner_scoring, inner_cv, n_jobs, verbose,
-                                                                               n_iter, n_trials,X_train, y_train, X_test, y_test,
-                                                                               best_params_list, nested_scores, outer_scorer)
-                                classifiers_list.append(str(self.name)+'_full')
-                                number_of_features.append(num_feature)
-                                way_of_selection.append('none')
-                            else:
-                                self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, n_features=num_feature, inner_method=feature_selection_method, percentile=percentile)
+                                X_train_selected = X_train
+                                X_test_selected = X_test
+                            else: 
+                                self.selected_features=self.feature_selection(X=X_train, y=y_train, method=feature_selection_type, n_features=num_feature, inner_method=feature_selection_method)
                                 X_train_selected = X_train[self.selected_features]
                                 X_test_selected = X_test[self.selected_features]
-                                nested_scores_tr, best_params_list_tr = self.inner_loop(optimizer, inner_scoring, inner_cv, n_jobs, verbose,
-                                                                               n_iter, n_trials,X_train_selected, y_train, X_test_selected, y_test,
-                                                                               best_params_list, nested_scores, outer_scorer)
-                                classifiers_list.append(str(self.name)+'_'+str(num_feature)+'_'+str(feature_selection_type))
-                                number_of_features.append(num_feature)
-                                way_of_selection.append('none')
-                    else: 
-                        raise ValueError('num_features must be an integer or a list')
-
-                else: 
-                    nested_scores_tr, best_params_list_tr = self.inner_loop(optimizer, inner_scoring, inner_cv, n_jobs, verbose,
-                                                                           n_iter, n_trials,X_train, y_train, X_test, y_test,
-                                                                           best_params_list, nested_scores, outer_scorer)
-                    classifiers_list.append(str(self.name)+'_full')
-                    number_of_features.append(X_train.shape[1])
-                    way_of_selection.append('full')
+                            df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test, clfs=clfs,feat_num=num_feature,
+                                        feature_selection_type=feature_selection_type, feature_selection_method=feature_selection_method, percentile=percentile,
+                                        inner_scoring=inner_scoring, inner_cv=inner_cv, verbose=verbose, optimizer=optimizer,n_iter=n_iter, n_trials_ncv=n_trials_ncv,
+                                          n_jobs=n_jobs,outer_scorer=outer_scorer)
+                            list_dfs.append(df)
+                elif percentile is not None and num_features is None:
+                    if type(num_features) is int:
+                        if percentile ==100:
+                            X_train_selected = X_train
+                            X_test_selected = X_test
+                        elif percentile < 100 and percentile > 0:
+                            self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, inner_method=feature_selection_method, percentile=percentile)
+                            X_train_selected = X_train[self.selected_features]
+                            X_test_selected = X_test[self.selected_features]
+                        else: 
+                            raise ValueError('num_features must be an integer less or equal than 100 and hugher thatn 0')
+                        df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test, clfs=clfs,feat_num=num_features,
+                                        feature_selection_type=feature_selection_type, feature_selection_method=feature_selection_method, percentile=percentile,
+                                        inner_scoring=inner_scoring, inner_cv=inner_cv, verbose=verbose, optimizer=optimizer,n_iter=n_iter, n_trials_ncv=n_trials_ncv,
+                                          n_jobs=n_jobs,outer_scorer=outer_scorer)
+                        list_dfs.append(df)
+                elif type(percentile) is list and num_features is None:
+                    for perc in percentile:
+                        print(f'For percentile {perc}:')
+                        if perc == 100: 
+                            X_train_selected = X_train
+                            X_test_selected = X_test
+                        else:
+                            self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, inner_method=feature_selection_method, percentile=percentile)
+                            X_train_selected = X_train[self.selected_features]
+                            X_test_selected = X_test[self.selected_features]
+                        df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test, clfs=clfs,feat_num=num_features,
+                                        feature_selection_type=feature_selection_type, feature_selection_method=feature_selection_method, percentile=percentile,
+                                        inner_scoring=inner_scoring, inner_cv=inner_cv, verbose=verbose, optimizer=optimizer,n_iter=n_iter, n_trials_ncv=n_trials_ncv,
+                                          n_jobs=n_jobs,outer_scorer=outer_scorer)
+                        list_dfs.append(df)
+                elif percentile is None and num_features is None:
+                    raise ValueError('Choose between num_of_features and percentile, one of them must be None')                    
+                else:         
+                    raise ValueError('num_features must be an integer or a list or None')
                 j+=1
-                
-                # if optimizer == 'grid_search':
-                #     clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
-                #                 param_grid=self.param_grid, cv=inner_cv, n_jobs=n_jobs, verbose=verbose)
-                # elif optimizer == 'random_search':
-                #     clf = RandomizedSearchCV(estimator=self.estimator, scoring=inner_scoring,
-                #                              param_distributions=self.param_grid, cv=inner_cv, n_jobs=n_jobs, 
-                #                              verbose=verbose, n_iter=n_iter)
-                # elif optimizer == 'bayesian_search':
-                #     clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
-                #                                         param_distributions=optuna_grid['NestedCV'][self.name], cv=inner_cv, n_jobs=n_jobs, 
-                #                                         verbose=verbose, n_trials=n_trials)
-                # else:
-                #     raise Exception("Unsupported optimizer.")        
-# 
-                # clf.fit(X_train, y_train)
-                # best_params_list.append(clf.best_params_)
-                # y_pred = clf.predict(X_test)
-                # nested_score = outer_scorer(clf, X_test, y_test)
-                # nested_scores.append(nested_score)
-
-        df = pd.DataFrame({
-            'Scores': nested_scores,
-            'Best_Params': best_params_list,
-            'Classifiers': classifiers_list,
-            'Number_of_Features': number_of_features,
-            'Way_of_Selection': way_of_selection})
-        return df
-        # return np.array(nested_scores) , np.array(best_params_list)
+        df_final = pd.DataFrame()
+        for dataframe in list_dfs:
+            df_final = pd.concat([df_final, dataframe], axis=0)
+        
+        return df_final
     
-    def model_selection(self,optimizer = 'grid_search', n_trials=100, n_iter=25, 
+    def model_selection(self,optimizer = 'grid_search', n_trials_ncv=25, n_trials=100, n_iter=25, 
                         num_trials=10, score = 'matthews_corrcoef', exclude=None,
-                        search_on=None, scores_df=False, alpha=1,num_features=None,
-                        feature_selection_type='mrmr', plot='box' , train_best=None,
-                        return_model=False,choose_model=False,percentile=95):
+                        search_on=None, return_scores_df=False, alpha=0.2,num_features=None,
+                        feature_selection_type='mrmr',feature_selection_method='chi2', plot='box',percentile=None,
+                        return_best_model=True,choose_model=False):
         """
         Perform model selection using Nested Cross Validation.
 
         Parameters:
             optimizer (str, optional): The optimization method to use. Defaults to 'grid_search'.
                 Options: 'grid_search', 'random_search', 'bayesian_search'.
+            n_trials_ncv (int, optional): The number of nested cross-validation splits. Defaults to 25.
             n_trials (int, optional): The number of trials for Bayesian optimization. Defaults to 100.
             n_iter (int, optional): The number of iterations for Random search. Defaults to 25.
             num_trials (int, optional): The number of cross-validation splits. Defaults to 10.
@@ -292,9 +272,8 @@ class MLPipelines(MachineLearningEstimator):
             scores_df (bool, optional): Whether to return a DataFrame of scores. Defaults to False.
             alpha (float, optional): The weight of standard deviation in the evaluation score. Defaults to 1.
             plot (str, optional): Type of plot for visualization ('box', 'violin', or None). Defaults to 'box'.
-            train_best (str, optional): The method to retrain the best estimator on the whole dataset.
                 Options: 'bayesian_search', 'grid_search', 'random_search', None. Defaults to None.
-            return_model (bool, optional): Whether to return the best fitted estimator. Defaults to False.
+            return_model (bool, optional): Whether to return the best fitted estimator. Defaults to True.
 
         Returns:
             Fitted best estimator if return_model is True. Optionally returns a DataFrame of scores if scores_df is True.
@@ -318,34 +297,31 @@ class MLPipelines(MachineLearningEstimator):
 
         clfs = [clf for clf in self.available_clfs.keys() if self.available_clfs[clf].__class__ not in exclude_classes]      
               
-        for estimator in tqdm(clfs):
-            print(f'Starting {estimator}...')
-            self.name = estimator
-            self.estimator = self.available_clfs[estimator]
-            # df = Parallel(n_jobs=-1)([delayed(self.nested_cross_validation)(optimizer=optimizer, n_trials=n_trials, n_iter=n_iter,
-            #                               num_trials=num_trials, inner_scoring=score, outer_scoring=score,
-            #                               feature_selection_type=feature_selection_type, num_features=num_features)])
-            df = self.nested_cross_validation(optimizer=optimizer, n_trials=n_trials, n_iter=n_iter,
+        # for estimator in tqdm(clfs):
+        #     print(f'Starting {estimator}...')
+        #     self.name = estimator
+        #     self.estimator = self.available_clfs[estimator]
+        df = self.nested_cross_validation(optimizer=optimizer, n_trials_ncv=n_trials_ncv, n_iter=n_iter,
                                           num_trials=num_trials, inner_scoring=score, outer_scoring=score,
-                                          feature_selection_type=feature_selection_type, num_features=num_features)
-            print(f'Finished {estimator}.')
+                                          feature_selection_type=feature_selection_type,feature_selection_method=feature_selection_method,
+                                          num_features=num_features, clfs=clfs, percentile=percentile)
+            # print(f'Finished {estimator}.')
+        for classif in np.unique(df['Classifiers']):
+            print(f'Resulting {classif}...')
+            indices = df[df['Classifiers'] == classif]
+            filtered_scores = indices['Scores'].values
+            filtered_best_params = indices['Best_Params'].values
     
-            for classif in np.unique(df['Classifiers']):
-                print(f'Resulting {classif}...')
-                indices = np.where(df['Classifiers'] == classif)[0]
-                filtered_scores = df['Scores'][indices]
-                filtered_best_params = df['Best_Params'][indices]
-    
-                mean_score = np.mean(filtered_scores)
-                max_score = np.max(filtered_scores)
-                std_score = np.std(filtered_scores)
-                median_score = np.median(filtered_scores)
-                evaluated_score = mean_score - alpha * std_score  
-                Numbers_of_Features = np.unique(df['Number_of_Features'][indices])[0]
-                Way_of_Selection = np.unique(df['Way_of_Selection'][indices])[0]
+            mean_score = np.mean(filtered_scores)
+            max_score = np.max(filtered_scores)
+            std_score = np.std(filtered_scores)
+            median_score = np.median(filtered_scores)
+            evaluated_score = mean_score - alpha * std_score  
+            Numbers_of_Features = indices['Number_of_Features'].unique()[0]
+            Way_of_Selection = indices['Way_of_Selection'].unique()[0]
 
-                results.append({
-                    'Estimator': estimator,
+            results.append({
+                    'Estimator': df[df['Classifiers'] == classif]['Estimator'].unique()[0],
                     'Classifier': classif,
                     'Scores': filtered_scores.tolist(),  
                     'Max': max_score,
@@ -357,22 +333,26 @@ class MLPipelines(MachineLearningEstimator):
                     'Way_of_Selection': Way_of_Selection 
                 })
         
-        scores_dataframe = pd.DataFrame(results) if scores_df else None
-        # return scores_dataframe
+        scores_dataframe = pd.DataFrame(results) if return_scores_df else None
 
+        labels = scores_dataframe['Classifier'].unique() 
+        x_coords = range(1, len(labels) + 1)
+        evaluated_means = [scores_dataframe[scores_dataframe['Classifier'] == label]['Evaluated'] for label in labels]
         if plot == 'box':
-            labels = scores_dataframe['Classifier'].unique() 
             plt.boxplot(scores_dataframe['Scores'], labels=labels)
+            x_coords = range(1, len(labels) + 1)
+            plt.scatter( x_coords, evaluated_means, marker='*', color='red')
             plt.title("Model Selection Results")
             plt.ylabel("Score")
             plt.xticks(rotation=90)  
             plt.grid(True)
             plt.show()
-        elif plot == 'violin':
-            plt.violinplot(all_scores)
+        elif plot == 'violin':            
+            plt.violinplot(scores_dataframe['Scores'].values)
+            plt.scatter(x_coords,evaluated_means, marker='*', color='red')
             plt.title("Model Selection Results")
             plt.ylabel("Score")
-            plt.xticks(range(1, len(clfs) + 1), scores_dataframe['Classifier'].unique(), rotation=90)
+            plt.xticks(x_coords, labels, rotation=90)
             plt.grid(True)
             plt.show()
         elif plot == None: pass
@@ -397,59 +377,34 @@ class MLPipelines(MachineLearningEstimator):
             for idx, features in enumerate(features_options, start=1):
                 print(f"{idx}: {features}")
 
-            features_selection = int(input("Enter the number for your preferred number of features: ")) - 1
-            selected_features = features_options[features_selection]
+            feat_sel = int(input("Enter the number for your preferred number of features: ")) - 1
+            selected_features = features_options[feat_sel]
             print(f"Selected classifier: {selected_classifier}, with {selected_features} features.")
             final_features = selected_features
-            # if selected_features == 'all':
-            #     print(f"Selected classifier: {selected_classifier}, with all features.")
-            # else:
-            #     print(f"Selected classifier: {selected_classifier}, with {selected_features} features.")
         else:
             self.name = max(results, key=lambda x: x['Evaluated'])['Estimator']
             final_features = max(results, key=lambda x: x['Evaluated'])['Numbers_of_Features']
             self.estimator = self.available_clfs[self.name] 
 
-
-        # # best_estimator_name = max(results, key=lambda x: x['Mean Score'])['Estimator']
-        # # self.name = max(results, key=lambda x: x['Evaluated'])['Estimator']
-        # # final_features = max(results, key=lambda x: x['Evaluated'])['Numbers_of_Features']
-        # # self.estimator = self.available_clfs[self.name]
-        # # self.best_estimator = self.available_clfs[best_estimator_name]
-        # # self.estimator = self.available_clfs[best_estimator_name]
-        # # print(self.estimator)
-        # if train_best == 'bayesian_search':
-        #     self.best_estimator = self.bayesian_search(cv=5, n_trials=n_trials, verbose=True,return_model=return_model)
-        # elif train_best == 'grid_search':
-        #     self.best_estimator = self.grid_search(cv=5, verbose=True,return_model=return_model)
-        # elif train_best == 'random_search':
-        #     self.best_estimator = self.random_search(cv=5, n_iter=25, verbose=True,return_model=return_model)
-        # elif train_best is None:
-        #     print(f'Best estimator: {self.name}')
-        # else:   
-        #     raise ValueError(f'Invalid type of best estimator train. Choose between "bayesian_search", "grid_search", "random_search" or None.')
-
         X2fit = self.X.copy()
-        if num_features is not None:
-            if feature_selection_type == 'mrmr' and final_features != X2fit.shape[1]:
-                self.selected_features = mrmr_classif(X2fit, self.y, K=final_features)
-                X2fit = X2fit[self.selected_features]
-            elif feature_selection_type == 'kbest' and final_features != X2fit.shape[1]:
-                X2fit = SelectKBest(chi2, k=final_features).fit_transform(X2fit, self.y)
-            elif feature_selection_type == 'percentile'and percentile != 100:
-                X2fit = SelectPercentile(chi2, percentile=percentile).fit_transform(X2fit, self.y)
-            else:
-                raise Exception("Unsupported feature selection method. Select one of 'mrmr', 'kbest', 'percentile'")                
-        elif num_features is None or final_features == X2fit.shape[1]:
+        if final_features != X2fit.shape[1]:
+            selected_X = self.feature_selection(X=X2fit,y=self.y, method = feature_selection_type, n_features = final_features, inner_method=feature_selection_method, percentile=percentile)
+            X2fit = X2fit[selected_X]             
+        else:
             pass
-
-        if return_model and scores_df:
+        
+        if return_best_model:
+            if optimizer == 'bayesian_search':
+                self.best_estimator = self.bayesian_search(X=X2fit, y=self.y, cv=5, n_trials=n_trials, verbose=True,return_model=return_best_model)
+            elif optimizer == 'grid_search':
+                self.best_estimator = self.grid_search(X=X2fit, y=self.y, cv=5, verbose=True,return_model=return_best_model)
+            elif optimizer == 'random_search':
+                self.best_estimator = self.random_search(X=X2fit, y=self.y, cv=5, n_iter=n_iter, verbose=True,return_model=return_best_model)
             self.best_estimator = self.estimator.fit(X2fit, self.y)
-            return self.best_estimator, scores_dataframe
-        elif return_model:
-            self.best_estimator = self.estimator.fit(X2fit, self.y)
-            return self.best_estimator
-        elif scores_df:
+            if return_scores_df:
+                return self.best_estimator, scores_dataframe
+            else: return self.best_estimator
+        elif return_scores_df:
             return scores_dataframe
-
-            
+        else:
+            print(f'Best estimator: {self.best_estimator}')

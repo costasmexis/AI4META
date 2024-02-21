@@ -22,6 +22,7 @@ optuna_grid = {
             "min_samples_leaf": optuna.distributions.IntDistribution(1, 10),
             "min_samples_split": optuna.distributions.IntDistribution(2, 10),
             "bootstrap": optuna.distributions.CategoricalDistribution([True, False]),
+            "n_jobs":optuna.distributions.CategoricalDistribution([-1])
         },
         "KNeighborsClassifier": {
             "n_neighbors": optuna.distributions.IntDistribution(2, 15),
@@ -33,6 +34,7 @@ optuna_grid = {
             ),
             "p": optuna.distributions.IntDistribution(1, 2),
             "leaf_size": optuna.distributions.IntDistribution(5, 50),
+            "n_jobs":optuna.distributions.CategoricalDistribution([-1])
         },
         "DecisionTreeClassifier": {
             "criterion": optuna.distributions.CategoricalDistribution(

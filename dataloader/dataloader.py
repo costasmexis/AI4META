@@ -74,7 +74,7 @@ class DataLoader:
         else:
             raise Exception("Unsupported normalization method.")
     
-    @jit(parallel=True)
+    # @jit(parallel=True)
     def feature_selection(self, X=None, y=None, method='mrmr', n_features=10, inner_method='chi2', percentile=10):        
         """ Function to perform Feature Selection.
         Args:
@@ -87,7 +87,7 @@ class DataLoader:
             raise Exception("Unsupported feature selection method. Select one of 'mrmr', 'kbest', 'percentile'")
         if inner_method not in ['chi2', 'f_classif', 'mutual_info_classif']:
             raise Exception("Unsupported inner method. Select one of 'chi2', 'f_classif', 'mutual_info_classif'")
-        if percentile > 100 or percentile < 0:
+        if percentile is not None and (percentile >= 100 or percentile <= 0):
             raise Exception("Percentile must be between 0 and 100.")
         datasetXy=False
         if X is None and y is None:
