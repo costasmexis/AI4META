@@ -22,7 +22,7 @@ optuna_grid = {
             "min_samples_leaf": optuna.distributions.IntDistribution(1, 10),
             "min_samples_split": optuna.distributions.IntDistribution(2, 10),
             "bootstrap": optuna.distributions.CategoricalDistribution([True, False]),
-            "n_jobs":optuna.distributions.CategoricalDistribution([-1])
+            "n_jobs":optuna.distributions.CategoricalDistribution([1])
         },
         "KNeighborsClassifier": {
             "n_neighbors": optuna.distributions.IntDistribution(2, 15),
@@ -34,7 +34,7 @@ optuna_grid = {
             ),
             "p": optuna.distributions.IntDistribution(1, 2),
             "leaf_size": optuna.distributions.IntDistribution(5, 50),
-            "n_jobs":optuna.distributions.CategoricalDistribution([-1])
+            "n_jobs":optuna.distributions.CategoricalDistribution([1])
         },
         "DecisionTreeClassifier": {
             "criterion": optuna.distributions.CategoricalDistribution(
@@ -80,7 +80,7 @@ optuna_grid = {
             "gamma": optuna.distributions.FloatDistribution(0, 10),
             "subsample": optuna.distributions.FloatDistribution(0.001, 1.0),
             "colsample_bytree": optuna.distributions.FloatDistribution(0.1, 1.0),
-            "n_jobs": optuna.distributions.CategoricalDistribution([-1]),
+            "n_jobs": optuna.distributions.CategoricalDistribution([1]),
             "booster": optuna.distributions.CategoricalDistribution(
                 ["gbtree", "dart"]
             ),  #'gblinear',
@@ -126,14 +126,14 @@ optuna_grid = {
             'subsample_for_bin': optuna.distributions.IntDistribution(100000, 400000),
             'objective': optuna.distributions.CategoricalDistribution(['binary']),
             'min_split_gain': optuna.distributions.FloatDistribution(0.0, 1.0),
-            'n_jobs': optuna.distributions.CategoricalDistribution([-1]),
-            'verbose': optuna.distributions.CategoricalDistribution([-1]),
+            'n_jobs': optuna.distributions.CategoricalDistribution([1])
+            # 'verbose': optuna.distributions.CategoricalDistribution([-1]),
         },
         'GaussianProcessClassifier':{
             'optimizer': optuna.distributions.CategoricalDistribution(['fmin_l_bfgs_b', None]),
             'max_iter_predict': optuna.distributions.IntDistribution(50, 200),
             'warm_start': optuna.distributions.CategoricalDistribution([True, False]),
-            'n_jobs': optuna.distributions.CategoricalDistribution([-1])
+            'n_jobs': optuna.distributions.CategoricalDistribution([1])
         },
         'CatBoostClassifier': {
             'iterations': optuna.distributions.IntDistribution(50, 700),
