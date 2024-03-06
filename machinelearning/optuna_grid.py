@@ -45,7 +45,8 @@ optuna_grid = {
             ),
             "max_depth": optuna.distributions.IntDistribution(1, 100),
             "min_samples_split": optuna.distributions.IntDistribution(2, 10),
-            "min_weight_fraction_leaf": optuna.distributions.IntDistribution(0.0, 0.5),
+            "min_weight_fraction_leaf": optuna.distributions.IntDistribution(0.0, 0.5)
+            # 'n_jobs' : optuna.distributions.CategoricalDistribution([1])
         },
         "SVC": {
             "C": optuna.distributions.IntDistribution(1, 10),
@@ -80,7 +81,8 @@ optuna_grid = {
             "gamma": optuna.distributions.FloatDistribution(0, 10),
             "subsample": optuna.distributions.FloatDistribution(0.001, 1.0),
             "colsample_bytree": optuna.distributions.FloatDistribution(0.1, 1.0),
-            "n_jobs": optuna.distributions.CategoricalDistribution([1]),
+            # "nthreads": optuna.distributions.CategoricalDistribution([1]),
+            'n_jobs': optuna.distributions.CategoricalDistribution([1]),
             "booster": optuna.distributions.CategoricalDistribution(
                 ["gbtree", "dart"]
             ),  #'gblinear',
@@ -111,6 +113,7 @@ optuna_grid = {
                 ["newton-cg", "lbfgs", "sag", "saga", "newton-cholesky", "liblinear"]
             ),
             "max_iter": optuna.distributions.IntDistribution(100, 1000),
+            'n_jobs' : optuna.distributions.CategoricalDistribution([None])
         },
         "GaussianNB": {
             "var_smoothing": optuna.distributions.FloatDistribution(1e-9, 1e-5)
@@ -147,6 +150,7 @@ optuna_grid = {
             'verbose': optuna.distributions.CategoricalDistribution([0]),
             'model_size_reg': optuna.distributions.FloatDistribution(1e-4, 2),
             'rsm': optuna.distributions.FloatDistribution(0.01, 1.0),
+            'thread_count': optuna.distributions.CategoricalDistribution([1]),
             'loss_function': optuna.distributions.CategoricalDistribution(['Logloss', 'CrossEntropy']),
         }
     },

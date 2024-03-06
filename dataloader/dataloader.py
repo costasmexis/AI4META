@@ -106,7 +106,7 @@ class DataLoader:
         if method == 'mrmr':
             # self.selected_features = mrmr_classif(self.X, self.y, K=n_features)
             # self.X = self.X[self.selected_features]
-            self.selected_features = mrmr_classif(X, y, K=n_features)
+            self.selected_features = mrmr_classif(X, y, K=n_features,show_progress=False)
             X = X[self.selected_features]
 
         else:

@@ -100,21 +100,22 @@ class MLPipelines(MachineLearningEstimator):
         way_of_selection = []
         estimator_list = []
         percentile_list = []
-        lists = [nested_scores, classifiers_list, number_of_features, way_of_selection, estimator_list, percentile_list]
-        list_names = ['Scores', 'Classifiers', 'Number_of_Features', 'Way_of_Selection', 'Estimator', 'Percentile']
+        selected_features = []
+        lists = [nested_scores, classifiers_list, selected_features, number_of_features, way_of_selection, estimator_list, percentile_list]
+        list_names = ['Scores', 'Classifiers','Selected_Features', 'Number_of_Features', 'Way_of_Selection', 'Estimator', 'Percentile']
         
         percentile = self.params['percentile']
         clfs = self.params['clfs']
         feature_selection_type = self.params['feature_selection_type']
         
         if clfs == None :
-            print(f'Performing nested cross-validation for {self.estimator.__class__.__name__}...')
+            # print(f'Performing nested cross-validation for {self.estimator.__class__.__name__}...')
             nested_scores_tr = self.inner_loop(X_train=X_train_selected, X_test=X_test_selected, y_train=y_train, y_test=y_test)
         else:
             for estimator in clfs:
                 self.estimator = self.available_clfs[estimator]
                 self.name = self.estimator.__class__.__name__
-                print(f'Performing nested cross-validation for {self.estimator.__class__.__name__}...')
+                # print(f'Performing nested cross-validation for {self.estimator.__class__.__name__} with {num_feature} features...')
                 nested_scores_tr = self.inner_loop(X_train=X_train_selected, X_test=X_test_selected, y_train=y_train, y_test=y_test)
                 estimator_list.append(self.name)
                 nested_scores.append(nested_scores_tr[0])
@@ -126,10 +127,13 @@ class MLPipelines(MachineLearningEstimator):
                 else:
                     way_of_selection.append(feature_selection_type)
                     if num_feature == None:
+                        selected_features.append(X_train_selected.columns)
                         percentile_list.append(percentile)
                         classifiers_list.append(str(self.name)+'_'+feature_selection_type+'_'+str(percentile))
                     else:
                         number_of_features.append(num_feature)
+                        selected_features.append(X_train_selected.columns)
+
                         classifiers_list.append(str(self.name)+'_'+feature_selection_type+'_'+str(num_feature))
         df_data = pd.DataFrame()
         for list_data, name in zip(lists, list_names):
@@ -150,11 +154,11 @@ class MLPipelines(MachineLearningEstimator):
         self.params['inner_cv'] = inner_cv
         self.params['outer_cv'] = outer_cv
             # outer_scorer = get_scorer(outer_scoring)
-        j=1
-        for train_index, test_index in outer_cv.split(self.X, self.y):
+        # j=1
+        for train_index, test_index in tqdm(outer_cv.split(self.X, self.y), desc='Processing outer fold', total=outer_splits):
             # print(f'Finished {fini/(num_trials*outer_splits)*100}%')
             # fini+=1
-            print(f'Outer fold {j} out of {outer_splits}')
+            # print(f'Outer fold {j} out of {outer_splits}')
             X_train, X_test = self.X.iloc[train_index], self.X.iloc[test_index]
             y_train, y_test = self.y[train_index], self.y[test_index]
             if num_features is not None and percentile is None:
@@ -174,7 +178,7 @@ class MLPipelines(MachineLearningEstimator):
                     list_dfs.append(df)
                 elif type(num_features) is list and percentile is None:
                     for num_feature in num_features:
-                        print(f'For {num_feature} features:')
+                        # print(f'For {num_feature} features:')
                         if num_feature > X_train.shape[1]:
                             raise ValueError('num_features must be less than the number of features in the dataset')                            
                         elif num_feature == X_train.shape[1]:
@@ -205,7 +209,7 @@ class MLPipelines(MachineLearningEstimator):
                     list_dfs.append(df)
             elif type(percentile) is list and num_features is None:
                 for perc in percentile:
-                    print(f'For percentile {perc}:')
+                    # print(f'For percentile {perc}:')
                     if perc == 100: 
                         X_train_selected = X_train
                         X_test_selected = X_test
@@ -227,7 +231,8 @@ class MLPipelines(MachineLearningEstimator):
                 raise ValueError('Choose between num_of_features and percentile, one of them must be None')                    
             else:         
                 raise ValueError('num_features must be an integer or a list or None')
-            j+=1
+            # j+=1
+        print(f'Finished with {i+1} round.')
         return list_dfs
 
 
@@ -242,8 +247,9 @@ class MLPipelines(MachineLearningEstimator):
         trial_indices = range(num_trials)  
 
         with Pool(processes=num_trials) as pool:
-            list_dfs = list(tqdm(pool.imap(self._parallel_nested_cv_trial, trial_indices), total=num_trials))
-        
+            list_dfs = list(tqdm(pool.imap(self._parallel_nested_cv_trial, trial_indices), total=num_trials, desc='Processing trials'))
+            # list_dfs = list(pool.imap(self._parallel_nested_cv_trial, trial_indices))
+
         list_dfs_flat = list(chain.from_iterable(list_dfs))
 
     # Now you can concatenate them into a single DataFrame
@@ -260,7 +266,7 @@ class MLPipelines(MachineLearningEstimator):
                         feature_selection_type='mrmr',feature_selection_method='chi2', plot='box',percentile=None,
                         return_best_model=True,choose_model=False,inner_scoring='matthews_corrcoef',
                         outer_scoring='matthews_corrcoef',inner_splits=3, outer_splits=5, 
-                        n_jobs=-1, verbose=0):
+                        n_jobs=1, verbose=0):
         """
         Perform model selection using Nested Cross Validation.
 
@@ -305,13 +311,16 @@ class MLPipelines(MachineLearningEstimator):
         clfs = [clf for clf in self.available_clfs.keys() if self.available_clfs[clf].__class__ not in exclude_classes]      
         self.params['clfs'] = clfs
 
+        if self.X.isnull().values.any():
+            print('Your Dataset contains NaN values. Some estimators does not work with NaN values.')
+
         df = self.nested_cross_validation(self.params)
         for classif in np.unique(df['Classifiers']):
             print(f'Resulting {classif}...')
             indices = df[df['Classifiers'] == classif]
             filtered_scores = indices['Scores'].values
             # filtered_best_params = indices['Best_Params'].values
-    
+            filtered_features = indices['Selected_Features'].values
             mean_score = np.mean(filtered_scores)
             max_score = np.max(filtered_scores)
             std_score = np.std(filtered_scores)
@@ -328,7 +337,7 @@ class MLPipelines(MachineLearningEstimator):
                     'Std': std_score,
                     'Median': median_score,
                     'Evaluated': evaluated_score,
-                    # 'Best_Params': filtered_best_params.tolist(),
+                    'Selected_Features': filtered_features,
                     'Numbers_of_Features': Numbers_of_Features,
                     'Way_of_Selection': Way_of_Selection 
                 })
