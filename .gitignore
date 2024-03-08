@@ -53,7 +53,7 @@ cover/
 .jpeg
 
 # Catboost
-catboost/
+catboost_info/
 
 # Translations
 *.mo
