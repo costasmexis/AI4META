@@ -75,20 +75,19 @@ class DataLoader:
             raise Exception("Unsupported normalization method.")
     
     # @jit(parallel=True)
-    def feature_selection(self, X=None, y=None, method='mrmr', n_features=10, inner_method='chi2', percentile=10):        
+    def feature_selection(self, X=None, y=None, method='mrmr', num_features=10, inner_method='chi2'):        
         """ Function to perform Feature Selection.
         Args:
             method (str, optional): Method to use for feature selection. Defaults to 'mrmr'.
             n_features (int, optional): Number of features to be selected. Defaults to 10.
             inner_method (str, optional) ['chi2', 'f_classif', 'mutual_info_classif']: Inner method for SelectKBest. Defaults to 'chi2'.
-            percentile (int, optional): Percentile for SelectPercentile. Defaults to 10.
         """
         if method not in ['mrmr', 'kbest', 'percentile']:
             raise Exception("Unsupported feature selection method. Select one of 'mrmr', 'kbest', 'percentile'")
         if inner_method not in ['chi2', 'f_classif', 'mutual_info_classif']:
             raise Exception("Unsupported inner method. Select one of 'chi2', 'f_classif', 'mutual_info_classif'")
-        if percentile is not None and (percentile >= 100 or percentile <= 0):
-            raise Exception("Percentile must be between 0 and 100.")
+        if method is 'percentile' and num_features is not None and (num_features >= 100 or num_features <= 0):
+            raise Exception("num_features for percentile option must be between 0 and 100.")
         datasetXy=False
         if X is None and y is None:
             X = self.X
@@ -106,19 +105,20 @@ class DataLoader:
         if method == 'mrmr':
             # self.selected_features = mrmr_classif(self.X, self.y, K=n_features)
             # self.X = self.X[self.selected_features]
-            self.selected_features = mrmr_classif(X, y, K=n_features,show_progress=False)
+            self.selected_features = mrmr_classif(X, y, K=num_features,show_progress=False)
             X = X[self.selected_features]
 
         else:
             if not isinstance(self.scaler, MinMaxScaler):
                 raise Exception("Feature selection method requires MinMaxScaler.")
             if method == 'kbest':
-                X = SelectKBest(scoring_function, k=n_features).fit_transform(X, y)
+                X = SelectKBest(scoring_function, k=num_features).fit_transform(X, y)
                 # self.X = SelectKBest(scoring_function, k=n_features).fit_transform(self.X, self.y)
 
             elif method == 'percentile':
                 # self.X = SelectPercentile(scoring_function, percentile=percentile).fit_transform(self.X, self.y)
-                X = SelectPercentile(scoring_function, percentile=percentile).fit_transform(X, y)
+                X = SelectPercentile(scoring_function, percentile=num_features).fit_transform(X, y)
+            else: raise Exception("Unsupported feature selection method.")
         
         if datasetXy:
             self.X = X

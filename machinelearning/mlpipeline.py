@@ -80,8 +80,7 @@ class MLPipelines(MachineLearningEstimator):
         elif optimizer == 'bayesian_search':
             clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
                                                     param_distributions=optuna_grid['NestedCV'][self.name],
-                                                    cv=inner_cv, n_jobs=n_jobs, 
-                                                    verbose=verbose, n_trials=n_trials_ncv)
+                                                    cv=inner_cv, n_jobs=n_jobs, verbose=verbose, n_trials=n_trials_ncv)
         else:
             raise Exception("Unsupported optimizer.")   
         
@@ -93,48 +92,38 @@ class MLPipelines(MachineLearningEstimator):
     
     
     # @jit(parallel=True)
-    def clf_app(self, X_train_selected, X_test_selected, y_train, y_test,num_feature):
+    def clf_app(self, X_train_selected, X_test_selected, y_train, y_test, num_feature):
         nested_scores = []
         classifiers_list = []
         number_of_features = []
         way_of_selection = []
         estimator_list = []
-        percentile_list = []
         selected_features = []
-        lists = [nested_scores, classifiers_list, selected_features, number_of_features, way_of_selection, estimator_list, percentile_list]
-        list_names = ['Scores', 'Classifiers','Selected_Features', 'Number_of_Features', 'Way_of_Selection', 'Estimator', 'Percentile']
+        lists = [nested_scores, classifiers_list, selected_features, number_of_features, way_of_selection, estimator_list]
+        list_names = ['Scores', 'Classifiers','Selected_Features', 'Number_of_Features', 'Way_of_Selection', 'Estimator']
         
-        percentile = self.params['percentile']
         clfs = self.params['clfs']
         feature_selection_type = self.params['feature_selection_type']
         
         if clfs == None :
-            # print(f'Performing nested cross-validation for {self.estimator.__class__.__name__}...')
             nested_scores_tr = self.inner_loop(X_train=X_train_selected, X_test=X_test_selected, y_train=y_train, y_test=y_test)
         else:
             for estimator in clfs:
                 self.estimator = self.available_clfs[estimator]
                 self.name = self.estimator.__class__.__name__
-                # print(f'Performing nested cross-validation for {self.estimator.__class__.__name__} with {num_feature} features...')
                 nested_scores_tr = self.inner_loop(X_train=X_train_selected, X_test=X_test_selected, y_train=y_train, y_test=y_test)
                 estimator_list.append(self.name)
                 nested_scores.append(nested_scores_tr[0])
 
-                if num_feature == 'full' or percentile == 100:
+                if num_feature == 'full' or None:
                     number_of_features.append(X_test_selected.shape[1])
                     way_of_selection.append('full')
                     classifiers_list.append(str(self.name))
                 else:
                     way_of_selection.append(feature_selection_type)
-                    if num_feature == None:
-                        selected_features.append(X_train_selected.columns)
-                        percentile_list.append(percentile)
-                        classifiers_list.append(str(self.name)+'_'+feature_selection_type+'_'+str(percentile))
-                    else:
-                        number_of_features.append(num_feature)
-                        selected_features.append(X_train_selected.columns)
-
-                        classifiers_list.append(str(self.name)+'_'+feature_selection_type+'_'+str(num_feature))
+                    selected_features.append(X_train_selected.columns)
+                    number_of_features.append(num_feature)
+                    classifiers_list.append(str(self.name)+'_'+feature_selection_type+'_'+str(num_feature))
         df_data = pd.DataFrame()
         for list_data, name in zip(lists, list_names):
             if len(list_data) != 0:  
@@ -145,7 +134,7 @@ class MLPipelines(MachineLearningEstimator):
         inner_splits = self.params['inner_splits']
         outer_splits = self.params['outer_splits']
         num_features = self.params['num_features']
-        percentile = self.params['percentile']
+        # percentile = self.params['percentile']
         feature_selection_type = self.params['feature_selection_type']
         feature_selection_method = self.params['feature_selection_method']
         list_dfs=[]
@@ -153,15 +142,12 @@ class MLPipelines(MachineLearningEstimator):
         outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=i)
         self.params['inner_cv'] = inner_cv
         self.params['outer_cv'] = outer_cv
-            # outer_scorer = get_scorer(outer_scoring)
-        # j=1
+
         for train_index, test_index in tqdm(outer_cv.split(self.X, self.y), desc='Processing outer fold', total=outer_splits):
-            # print(f'Finished {fini/(num_trials*outer_splits)*100}%')
-            # fini+=1
-            # print(f'Outer fold {j} out of {outer_splits}')
+
             X_train, X_test = self.X.iloc[train_index], self.X.iloc[test_index]
             y_train, y_test = self.y[train_index], self.y[test_index]
-            if num_features is not None and percentile is None:
+            if num_features is not None and feature_selection_type != 'percentile':
                 if type(num_features) is int:
                     if num_features < X_train.shape[1]:
                         self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, n_features=num_features, inner_method=feature_selection_method)                            
@@ -176,7 +162,7 @@ class MLPipelines(MachineLearningEstimator):
                         raise ValueError('num_features must be an integer less than the number of features in the dataset')
                     df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)                        
                     list_dfs.append(df)
-                elif type(num_features) is list and percentile is None:
+                elif type(num_features) is list :
                     for num_feature in num_features:
                         # print(f'For {num_feature} features:')
                         if num_feature > X_train.shape[1]:
@@ -192,46 +178,42 @@ class MLPipelines(MachineLearningEstimator):
                             num_feature=num_feature
                         df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
                         list_dfs.append(df)
-            elif percentile is not None and num_features is None:
+            elif feature_selection_type == 'percentile' and num_features is not None:
                 if type(num_features) is int:
-                    if percentile ==100:
+                    if num_features == 100:
                         X_train_selected = X_train
                         X_test_selected = X_test
                         num_feature='full'
-                    elif percentile < 100 and percentile > 0:
-                        self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, inner_method=feature_selection_method, percentile=percentile)
+                    elif num_features < 100 and num_features > 0:
+                        self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, inner_method=feature_selection_method, num_features=num_features)
                         X_train_selected = X_train[self.selected_features]
                         X_test_selected = X_test[self.selected_features]
-                        num_feature=percentile
+                        num_feature=num_features
                     else: 
                         raise ValueError('num_features must be an integer less or equal than 100 and hugher thatn 0')
                     df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
                     list_dfs.append(df)
-            elif type(percentile) is list and num_features is None:
-                for perc in percentile:
-                    # print(f'For percentile {perc}:')
-                    if perc == 100: 
-                        X_train_selected = X_train
-                        X_test_selected = X_test
-                        num_feature='full'
-                    else:
-                        self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, inner_method=feature_selection_method, percentile=percentile)
-                        X_train_selected = X_train[self.selected_features]
-                        X_test_selected = X_test[self.selected_features]
-                        num_feature=num_feature
-                    df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
-                    list_dfs.append(df)
-            elif percentile is None and num_features is None:
+                elif type(num_features) is list:
+                    for num_feature in num_features:
+                        if num_feature == 100: 
+                            X_train_selected = X_train
+                            X_test_selected = X_test
+                            num_feature='full'
+                        else:
+                            self.selected_features=self.feature_selection(X=X_train, y=y_train, method=feature_selection_type, inner_method=feature_selection_method, num_features=num_feature)
+                            X_train_selected = X_train[self.selected_features]
+                            X_test_selected = X_test[self.selected_features]
+                            num_feature=num_feature
+                        df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
+                        list_dfs.append(df)
+            elif num_features is None:
                 X_train_selected = X_train
                 X_test_selected = X_test
                 num_feature='full'
                 df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
                 list_dfs.append(df)
-            elif percentile is not None and num_features is not None:
-                raise ValueError('Choose between num_of_features and percentile, one of them must be None')                    
             else:         
                 raise ValueError('num_features must be an integer or a list or None')
-            # j+=1
         print(f'Finished with {i+1} round.')
         return list_dfs
 
@@ -248,11 +230,8 @@ class MLPipelines(MachineLearningEstimator):
 
         with Pool(processes=num_trials) as pool:
             list_dfs = list(tqdm(pool.imap(self._parallel_nested_cv_trial, trial_indices), total=num_trials, desc='Processing trials'))
-            # list_dfs = list(pool.imap(self._parallel_nested_cv_trial, trial_indices))
 
         list_dfs_flat = list(chain.from_iterable(list_dfs))
-
-    # Now you can concatenate them into a single DataFrame
         df_final = pd.DataFrame()
         for dataframe in list_dfs_flat:
             df_final = pd.concat([df_final, dataframe], axis=0)
@@ -263,7 +242,7 @@ class MLPipelines(MachineLearningEstimator):
     def model_selection(self,optimizer = 'grid_search', n_trials_ncv=25, n_trials=100, n_iter=25, 
                         num_trials=10, score = 'matthews_corrcoef', exclude=None,
                         search_on=None, return_scores_df=False, alpha=0.2,num_features=None,
-                        feature_selection_type='mrmr',feature_selection_method='chi2', plot='box',percentile=None,
+                        feature_selection_type='mrmr',feature_selection_method='chi2', plot='box',
                         return_best_model=True,choose_model=False,inner_scoring='matthews_corrcoef',
                         outer_scoring='matthews_corrcoef',inner_splits=3, outer_splits=5, 
                         n_jobs=1, verbose=0):
@@ -316,10 +295,8 @@ class MLPipelines(MachineLearningEstimator):
 
         df = self.nested_cross_validation(self.params)
         for classif in np.unique(df['Classifiers']):
-            print(f'Resulting {classif}...')
             indices = df[df['Classifiers'] == classif]
             filtered_scores = indices['Scores'].values
-            # filtered_best_params = indices['Best_Params'].values
             filtered_features = indices['Selected_Features'].values
             mean_score = np.mean(filtered_scores)
             max_score = np.max(filtered_scores)
@@ -341,7 +318,8 @@ class MLPipelines(MachineLearningEstimator):
                     'Numbers_of_Features': Numbers_of_Features,
                     'Way_of_Selection': Way_of_Selection 
                 })
-        
+            
+        print(f'Finished with {len(results)} estimators')
         scores_dataframe = pd.DataFrame(results) if return_scores_df else None
 
         labels = scores_dataframe['Classifier'].unique() 
@@ -397,7 +375,7 @@ class MLPipelines(MachineLearningEstimator):
 
         X2fit = self.X.copy()
         if final_features != X2fit.shape[1]:
-            selected_X = self.feature_selection(X=X2fit,y=self.y, method = feature_selection_type, n_features = final_features, inner_method=feature_selection_method, percentile=percentile)
+            selected_X = self.feature_selection(X=X2fit,y=self.y, method = feature_selection_type, num_features = final_features, inner_method=feature_selection_method)
             X2fit = X2fit[selected_X]             
         else:
             pass
