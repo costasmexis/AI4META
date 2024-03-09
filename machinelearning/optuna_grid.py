@@ -245,7 +245,7 @@ optuna_grid = {
             tol=trial.suggest_categorical("tol", [1e-3, 1e-4, 1e-5]),
         ),
         "LogisticRegression": lambda trial: LogisticRegression(
-            penalty=trial.suggest_categorical("penalty", ["l1", "l2", "none"]),
+            penalty=trial.suggest_categorical("penalty", ["l1", "l2", None]),
             C=trial.suggest_float("C", 0.1, 10.0),
             solver=(
                 trial.suggest_categorical("solver_1", ["liblinear", "saga"])
@@ -296,7 +296,8 @@ optuna_grid = {
         bagging_temperature=trial.suggest_float("bagging_temperature", 0.0, 10.0),
         random_strength=trial.suggest_float("random_strength", 0.0, 10.0),
         leaf_estimation_method=trial.suggest_categorical("leaf_estimation_method", ["Newton", "Gradient",None]),
-        verbose=0,
+        verbose=False,
+        silent=True,
         model_size_reg=trial.suggest_float("model_size_reg", 0.01, 10.0, log=True),
         rsm=trial.suggest_float("rsm", 0.01, 1.0),
         loss_function=trial.suggest_categorical("loss_function", ["Logloss", "CrossEntropy",None]))
