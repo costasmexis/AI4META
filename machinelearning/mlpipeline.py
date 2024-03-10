@@ -39,6 +39,7 @@ from multiprocessing import Pool
 from itertools import chain
 import time
 from threadpoolctl import threadpool_limits
+from joblib import Parallel, delayed, parallel_config
 
 from collections import Counter
 from itertools import chain
@@ -53,7 +54,7 @@ class MLPipelines(MachineLearningEstimator):
             - csv_dir (str): path to the csv file
         '''
         super().__init__(label, csv_dir, estimator, param_grid)
-        self.set_optuna_verbosity(logging.ERROR)
+        # self.set_optuna_verbosity(logging.ERROR)
 
     def set_optuna_verbosity(self, level):
         """Adjust Optuna's verbosity level."""
@@ -64,7 +65,7 @@ class MLPipelines(MachineLearningEstimator):
     # @jit(parallel=True)
     def inner_loop(self, X_train=None, X_test=None, y_train=None, y_test=None):
         nested_scores = []
-        
+        self.set_optuna_verbosity(logging.ERROR)
         optimizer = self.params['optimizer']
         inner_scoring = self.params['inner_scoring']
         inner_cv = self.params['inner_cv']
@@ -135,7 +136,7 @@ class MLPipelines(MachineLearningEstimator):
                 df_data[name] = list_data
         return df_data
 
-    def _parallel_nested_cv_trial(self,i):
+    def _thread_per_round_nested_cv_trial(self,i):
         with threadpool_limits(limits=1, user_api='blas'):
             start = time.time()
             inner_splits = self.params['inner_splits']
@@ -150,7 +151,7 @@ class MLPipelines(MachineLearningEstimator):
             self.params['outer_cv'] = outer_cv
             
 
-            for train_index, test_index in tqdm(outer_cv.split(self.X, self.y), desc='Processing outer fold', total=outer_splits):
+            for train_index, test_index in tqdm(outer_cv.split(self.X, self.y), desc='Processing outer fold', total=outer_splits,disable=True):
                 X_train, X_test = self.X.iloc[train_index], self.X.iloc[test_index]
                 y_train, y_test = self.y[train_index], self.y[test_index]
                 if num_features is not None and feature_selection_type != 'percentile':
@@ -229,14 +230,22 @@ class MLPipelines(MachineLearningEstimator):
         inner_scoring=params['inner_scoring']
         outer_scoring=params['outer_scoring']
         rounds=params['rounds']
+        parallel=params['parallel']
         if inner_scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
         if outer_scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
         trial_indices = range(rounds)  
         
-        with Pool(processes=rounds) as pool:
-            list_dfs = list(tqdm(pool.imap(self._parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
+        if parallel == 'thread_per_round':
+            # with Pool(processes=rounds) as pool:
+            #     list_dfs = list(tqdm(pool.imap(self._thread_per_round_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
+            list_dfs = Parallel(n_jobs=rounds,verbose=-1)(delayed(self._thread_per_round_nested_cv_trial)(i) for i in tqdm(range(rounds), desc='Processing rounds', disable=True))
+        elif parallel == 'thread_per_fold':
+            pass
+        elif parallel == 'full_parallel':
+            pass
+        else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round, thread_per_fold, full_parallel')
 
         list_dfs_flat = list(chain.from_iterable(list_dfs))
         df_final = pd.DataFrame()
@@ -251,7 +260,7 @@ class MLPipelines(MachineLearningEstimator):
                         most_imp_feat=10,search_on=None, return_scores_df=False, alpha=0.2,num_features=None,
                         feature_selection_type='mrmr',feature_selection_method='chi2', plot='box',
                         return_best_model=True,choose_model=False,inner_scoring='matthews_corrcoef',
-                        outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5, verbose=True):
+                        outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5, verbose=True, parallel='thread_per_round'):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
 
