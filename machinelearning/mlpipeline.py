@@ -23,6 +23,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
+# from IPython.display import display
+
 from xgboost import XGBClassifier
 # from joblib import Parallel, delayed
 from dataloader import DataLoader
@@ -35,14 +37,14 @@ from mrmr import mrmr_classif
 import logging
 # from numba import jit, prange
 # from .Features_explanation import Features_explanation
-from multiprocessing import Pool
+# from multiprocessing import Pool
 from itertools import chain
 import time
 from threadpoolctl import threadpool_limits
 from joblib import Parallel, delayed, parallel_config
-
+# from progress.bar import Bar
+import multiprocessing 
 from collections import Counter
-from itertools import chain
 
 class MLPipelines(MachineLearningEstimator):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
@@ -60,8 +62,9 @@ class MLPipelines(MachineLearningEstimator):
         """Adjust Optuna's verbosity level."""
         optuna.logging.set_verbosity(level)  
         logging.getLogger("optuna").setLevel(level) 
+    # def no_display(*args, **kwargs):
+    #     pass
 
-    
     # @jit(parallel=True)
     def inner_loop(self, X_train=None, X_test=None, y_train=None, y_test=None):
         nested_scores = []
@@ -75,6 +78,15 @@ class MLPipelines(MachineLearningEstimator):
         n_trials_ncv = self.params['n_trials_ncv']
         outer_scoring = self.params['outer_scoring']
         outer_scorer = get_scorer(outer_scoring)
+        parallel = self.params['parallel']
+        if parallel == 'thread_per_round':
+            opt_grid = 'NestedCV_single'
+            jobs=1
+        elif parallel == 'full_parallel':
+            opt_grid = 'NestedCV_multi'
+            jobs=1
+        # opt_grid = 'NestedCV_single'
+        # jobs=1
 
         if optimizer == 'grid_search':
             clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
@@ -84,9 +96,10 @@ class MLPipelines(MachineLearningEstimator):
                                              param_distributions=self.param_grid, cv=inner_cv, n_jobs=1, 
                                              verbose=0, n_iter=n_iter)
         elif optimizer == 'bayesian_search':
+
             clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
-                                                    param_distributions=optuna_grid['NestedCV'][self.name],
-                                                    cv=inner_cv, n_jobs=1, verbose=0, n_trials=n_trials_ncv)
+                                                    param_distributions=optuna_grid[opt_grid][self.name],
+                                                    cv=inner_cv, n_jobs=jobs, verbose=0, n_trials=n_trials_ncv)
         else:
             raise Exception("Unsupported optimizer.")   
         
@@ -135,9 +148,20 @@ class MLPipelines(MachineLearningEstimator):
             if len(list_data) != 0:  
                 df_data[name] = list_data
         return df_data
+    
+    def _full_parallel_nested_cv_trial(self,i):
+        # num_cores = multiprocessing.cpu_count()
+        # avail_thr = num_cores//optuna_grid["NestedCV_multi"].__len__()
+        with threadpool_limits(limits='sequential_blas_under_openmp'):
+            list_dfs = self.outer_cv_loop(i)
+        return list_dfs
 
     def _thread_per_round_nested_cv_trial(self,i):
-        with threadpool_limits(limits=1, user_api='blas'):
+        with threadpool_limits(limits=1):
+            list_dfs = self.outer_cv_loop(i)
+        return list_dfs
+
+    def outer_cv_loop(self,i):
             start = time.time()
             inner_splits = self.params['inner_splits']
             outer_splits = self.params['outer_splits']
@@ -148,10 +172,9 @@ class MLPipelines(MachineLearningEstimator):
             inner_cv = StratifiedKFold(n_splits=inner_splits, shuffle=True, random_state=i)
             outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=i)
             self.params['inner_cv'] = inner_cv
-            self.params['outer_cv'] = outer_cv
+            self.params['outer_cv'] = outer_cv 
             
-
-            for train_index, test_index in tqdm(outer_cv.split(self.X, self.y), desc='Processing outer fold', total=outer_splits,disable=True):
+            for train_index, test_index in tqdm(outer_cv.split(self.X, self.y), desc='Processing outer fold', total=outer_splits):
                 X_train, X_test = self.X.iloc[train_index], self.X.iloc[test_index]
                 y_train, y_test = self.y[train_index], self.y[test_index]
                 if num_features is not None and feature_selection_type != 'percentile':
@@ -171,7 +194,6 @@ class MLPipelines(MachineLearningEstimator):
                         list_dfs.append(df)
                     elif type(num_features) is list :
                         for num_feature in num_features:
-                            # print(f'For {num_feature} features:')
                             if num_feature > X_train.shape[1]:
                                 raise ValueError('num_features must be less than the number of features in the dataset')                            
                             elif num_feature == X_train.shape[1]:
@@ -222,8 +244,8 @@ class MLPipelines(MachineLearningEstimator):
                 else:         
                     raise ValueError('num_features must be an integer or a list or None')
             end = time.time()
-        print(f'Finished with {i+1} round after {(end-start)/3600:.2f} hours.')
-        return list_dfs
+            print(f'Finished with {i+1} round after {(end-start)/3600:.2f} hours.')
+            return list_dfs
 
 
     def nested_cross_validation(self, params):
@@ -236,17 +258,17 @@ class MLPipelines(MachineLearningEstimator):
         if outer_scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
         trial_indices = range(rounds)  
-        
+
         if parallel == 'thread_per_round':
-            # with Pool(processes=rounds) as pool:
-            #     list_dfs = list(tqdm(pool.imap(self._thread_per_round_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
-            list_dfs = Parallel(n_jobs=rounds,verbose=-1)(delayed(self._thread_per_round_nested_cv_trial)(i) for i in tqdm(range(rounds), desc='Processing rounds', disable=True))
+            with multiprocessing.Pool(processes=rounds) as pool:
+                list_dfs = list(tqdm(pool.imap(self._thread_per_round_nested_cv_trial, trial_indices), total=rounds, desc='Processing rounds'))
+
         elif parallel == 'thread_per_fold':
             pass
         elif parallel == 'full_parallel':
-            pass
+            with multiprocessing.Pool() as pool:
+                list_dfs = list(tqdm(pool.imap(self._thread_per_round_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
         else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round, thread_per_fold, full_parallel')
-
         list_dfs_flat = list(chain.from_iterable(list_dfs))
         df_final = pd.DataFrame()
         for dataframe in list_dfs_flat:
@@ -361,6 +383,7 @@ class MLPipelines(MachineLearningEstimator):
                 N = len(sorted_features_counts)  # Adjust N as needed to limit the number of features displayed
             else:
                 N=N
+            
             features, counts = zip(*sorted_features_counts[:N])
 
             plt.figure(figsize=(max(10, N // 2), 10))
