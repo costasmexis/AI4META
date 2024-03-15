@@ -45,6 +45,8 @@ from joblib import Parallel, delayed, parallel_config
 # from progress.bar import Bar
 import multiprocessing 
 from collections import Counter
+from logging_levels import add_log_level
+
 
 class MLPipelines(MachineLearningEstimator):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
@@ -58,10 +60,10 @@ class MLPipelines(MachineLearningEstimator):
         super().__init__(label, csv_dir, estimator, param_grid)
         # self.set_optuna_verbosity(logging.ERROR)
 
-    def set_optuna_verbosity(self, level):
-        """Adjust Optuna's verbosity level."""
-        optuna.logging.set_verbosity(level)  
-        logging.getLogger("optuna").setLevel(level) 
+    # def set_optuna_verbosity(self, level):
+    #     """Adjust Optuna's verbosity level."""
+    #     optuna.logging.set_verbosity(level)  
+    #     logging.getLogger("optuna").setLevel(level) 
     # def no_display(*args, **kwargs):
     #     pass
 
@@ -79,14 +81,17 @@ class MLPipelines(MachineLearningEstimator):
         outer_scoring = self.params['outer_scoring']
         outer_scorer = get_scorer(outer_scoring)
         parallel = self.params['parallel']
-        if parallel == 'thread_per_round':
+        if parallel == 'thread_per_round' or parallel == 'freely_parallel':
             opt_grid = 'NestedCV_single'
-            jobs=1
+            if parallel == 'thread_per_round':
+                n_jobs = 1
+            elif parallel == 'freely_parallel':
+                n_jobs = multiprocessing.cpu_count()//self.params['rounds']
         elif parallel == 'full_parallel':
             opt_grid = 'NestedCV_multi'
-            jobs=1
-        # opt_grid = 'NestedCV_single'
-        # jobs=1
+            n_jobs = multiprocessing.cpu_count()//self.params['rounds']
+            
+
 
         if optimizer == 'grid_search':
             clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
@@ -99,7 +104,7 @@ class MLPipelines(MachineLearningEstimator):
 
             clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
                                                     param_distributions=optuna_grid[opt_grid][self.name],
-                                                    cv=inner_cv, n_jobs=jobs, verbose=0, n_trials=n_trials_ncv)
+                                                    cv=inner_cv, n_jobs=n_jobs, verbose=0, n_trials=n_trials_ncv)
         else:
             raise Exception("Unsupported optimizer.")   
         
@@ -149,10 +154,21 @@ class MLPipelines(MachineLearningEstimator):
                 df_data[name] = list_data
         return df_data
     
-    def _full_parallel_nested_cv_trial(self,i):
-        # num_cores = multiprocessing.cpu_count()
-        # avail_thr = num_cores//optuna_grid["NestedCV_multi"].__len__()
-        with threadpool_limits(limits='sequential_blas_under_openmp'):
+    def _fully_parallel_nested_cv_trial(self,i):
+        # len_clf = len(self.params['clfs'])
+        rounds = self.params['rounds']
+        num_cores = multiprocessing.cpu_count()
+        avail_thr = num_cores//rounds
+        with threadpool_limits(limits=avail_thr):
+            list_dfs = self.outer_cv_loop(i)
+        return list_dfs
+    
+    def _freely_parallel_nested_cv_trial(self,i):
+        # len_clf = len(self.params['clfs'])
+        rounds = self.params['rounds']
+        num_cores = multiprocessing.cpu_count()
+        avail_thr = num_cores//rounds
+        with threadpool_limits(limits=avail_thr):
             list_dfs = self.outer_cv_loop(i)
         return list_dfs
 
@@ -262,12 +278,12 @@ class MLPipelines(MachineLearningEstimator):
         if parallel == 'thread_per_round':
             with multiprocessing.Pool(processes=rounds) as pool:
                 list_dfs = list(tqdm(pool.imap(self._thread_per_round_nested_cv_trial, trial_indices), total=rounds, desc='Processing rounds'))
-
-        elif parallel == 'thread_per_fold':
-            pass
+        elif parallel == 'freely_parallel':
+            with multiprocessing.Pool() as pool:
+                list_dfs = list(tqdm(pool.imap(self._freely_parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
         elif parallel == 'full_parallel':
             with multiprocessing.Pool() as pool:
-                list_dfs = list(tqdm(pool.imap(self._thread_per_round_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
+                list_dfs = list(tqdm(pool.imap(self._fully_parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
         else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round, thread_per_fold, full_parallel')
         list_dfs_flat = list(chain.from_iterable(list_dfs))
         df_final = pd.DataFrame()
@@ -278,7 +294,7 @@ class MLPipelines(MachineLearningEstimator):
     
     
     def model_selection(self,optimizer = 'grid_search', n_trials_ncv=25, n_trials=100, n_iter=25, 
-                        rounds=10, score = 'matthews_corrcoef', exclude=None,hist_fit=True,N=None,
+                        rounds=10, score = 'matthews_corrcoef', exclude=None,hist_fit=True,N=100,
                         most_imp_feat=10,search_on=None, return_scores_df=False, alpha=0.2,num_features=None,
                         feature_selection_type='mrmr',feature_selection_method='chi2', plot='box',
                         return_best_model=True,choose_model=False,inner_scoring='matthews_corrcoef',
@@ -312,6 +328,7 @@ class MLPipelines(MachineLearningEstimator):
             inner_splits (int, optional): Number of splits for inner CV. Defaults to 5.
             outer_splits (int, optional): Number of splits for outer CV. Defaults to 5.
             verbose (bool, optional): Enables detailed logging. Defaults to True.
+            parallel (str, optional): Parallelization method ('thread_per_round', 'thread_per_fold', 'full_parallel', 'freely_parallel'). Defaults to 'thread_per_round'.
 
         Returns:
             The best fitted estimator if return_best_model is True. Optionally returns a DataFrame of scores if return_scores_df is True. The exact return type depends on the flags `return_best_model` and `return_scores_df`:
@@ -379,7 +396,7 @@ class MLPipelines(MachineLearningEstimator):
                     feature_counts.update(features)
             
             sorted_features_counts = feature_counts.most_common()
-            if N is None:
+            if N is None or N > len(sorted_features_counts):
                 N = len(sorted_features_counts)  # Adjust N as needed to limit the number of features displayed
             else:
                 N=N

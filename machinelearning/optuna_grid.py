@@ -81,7 +81,7 @@ optuna_grid = {
             "gamma": optuna.distributions.FloatDistribution(0, 10),
             "subsample": optuna.distributions.FloatDistribution(0.001, 1.0),
             "colsample_bytree": optuna.distributions.FloatDistribution(0.1, 1.0),
-            "nthreads": optuna.distributions.CategoricalDistribution([1]),
+            # "nthreads": optuna.distributions.CategoricalDistribution([1]),
             'n_jobs': optuna.distributions.CategoricalDistribution([1]),
             "booster": optuna.distributions.CategoricalDistribution(
                 ["gbtree", "dart"]
@@ -438,8 +438,9 @@ optuna_grid = {
         bagging_temperature=trial.suggest_float("bagging_temperature", 0.0, 10.0),
         random_strength=trial.suggest_float("random_strength", 0.0, 10.0),
         leaf_estimation_method=trial.suggest_categorical("leaf_estimation_method", ["Newton", "Gradient",None]),
-        verbose=False,
-        silent=True,
+        # verbose=False,
+        # silent=True,
+        logging_level='Silent',
         model_size_reg=trial.suggest_float("model_size_reg", 0.01, 10.0, log=True),
         rsm=trial.suggest_float("rsm", 0.01, 1.0),
         loss_function=trial.suggest_categorical("loss_function", ["Logloss", "CrossEntropy",None]))

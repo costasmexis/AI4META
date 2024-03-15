@@ -28,6 +28,8 @@ from catboost import CatBoostClassifier
 from dataloader import DataLoader
 from .optuna_grid import optuna_grid
 from optuna.samplers import TPESampler,RandomSampler
+import logging
+from logging_levels import add_log_level
 
 class MachineLearningEstimator(DataLoader):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
@@ -66,6 +68,11 @@ class MachineLearningEstimator(DataLoader):
             if self.name not in self.available_clfs.keys():
                 raise ValueError(f'Invalid estimator: {self.name}. Select one of the following: {list(self.available_clfs.keys())}')
         else: print(f'There is no selected classifier.')
+        
+    def set_optuna_verbosity(self, level):
+        """Adjust Optuna's verbosity level."""
+        optuna.logging.set_verbosity(level)  
+        logging.getLogger("optuna").setLevel(level)
 
     def grid_search(self, X=None, y=None, scoring='matthews_corrcoef', cv=5, verbose=True, return_model=False):
         """ Function to perform a grid search
@@ -144,7 +151,8 @@ class MachineLearningEstimator(DataLoader):
         Returns:
             _type_: _description_
         """
-        
+        self.set_optuna_verbosity(logging.ERROR)
+
         grid = optuna_grid['ManualSearch']
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
@@ -168,7 +176,7 @@ class MachineLearningEstimator(DataLoader):
         # elif set_sampler == None:
         #     study = optuna.create_study(direction=direction)
         # else: raise ValueError('Invalid sampler, Choose between TPESampler, RandomSampler or None')
-        study.optimize(objective, n_trials=n_trials)
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
         self.best_params = study.best_params
         self.best_score = study.best_value
         self.best_estimator = grid[self.name](study.best_trial)
