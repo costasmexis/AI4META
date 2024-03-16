@@ -45,7 +45,7 @@ from joblib import Parallel, delayed, parallel_config
 # from progress.bar import Bar
 import multiprocessing 
 from collections import Counter
-from logging_levels import add_log_level
+# from logging_levels import add_log_level
 
 
 class MLPipelines(MachineLearningEstimator):
@@ -81,17 +81,13 @@ class MLPipelines(MachineLearningEstimator):
         outer_scoring = self.params['outer_scoring']
         outer_scorer = get_scorer(outer_scoring)
         parallel = self.params['parallel']
-        if parallel == 'thread_per_round' or parallel == 'freely_parallel':
-            opt_grid = 'NestedCV_single'
-            if parallel == 'thread_per_round':
-                n_jobs = 1
-            elif parallel == 'freely_parallel':
-                n_jobs = multiprocessing.cpu_count()//self.params['rounds']
-        elif parallel == 'full_parallel':
-            opt_grid = 'NestedCV_multi'
+        opt_grid = 'NestedCV_single'
+        if parallel == 'thread_per_round':
+            n_jobs = 1
+        elif parallel == 'freely_parallel':
             n_jobs = multiprocessing.cpu_count()//self.params['rounds']
-            
-
+            if n_jobs == 0:
+                n_jobs = 1
 
         if optimizer == 'grid_search':
             clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
@@ -154,20 +150,22 @@ class MLPipelines(MachineLearningEstimator):
                 df_data[name] = list_data
         return df_data
     
-    def _fully_parallel_nested_cv_trial(self,i):
-        # len_clf = len(self.params['clfs'])
-        rounds = self.params['rounds']
-        num_cores = multiprocessing.cpu_count()
-        avail_thr = num_cores//rounds
-        with threadpool_limits(limits=avail_thr):
-            list_dfs = self.outer_cv_loop(i)
-        return list_dfs
+    # def _fully_parallel_nested_cv_trial(self,i):
+    #     # len_clf = len(self.params['clfs'])
+    #     rounds = self.params['rounds']
+    #     num_cores = multiprocessing.cpu_count()
+    #     avail_thr = num_cores//rounds
+    #     with threadpool_limits(limits=avail_thr):
+    #         list_dfs = self.outer_cv_loop(i)
+    #     return list_dfs
     
     def _freely_parallel_nested_cv_trial(self,i):
         # len_clf = len(self.params['clfs'])
         rounds = self.params['rounds']
         num_cores = multiprocessing.cpu_count()
         avail_thr = num_cores//rounds
+        if avail_thr == 0:
+            avail_thr = 1
         with threadpool_limits(limits=avail_thr):
             list_dfs = self.outer_cv_loop(i)
         return list_dfs
@@ -281,15 +279,14 @@ class MLPipelines(MachineLearningEstimator):
         elif parallel == 'freely_parallel':
             with multiprocessing.Pool() as pool:
                 list_dfs = list(tqdm(pool.imap(self._freely_parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
-        elif parallel == 'full_parallel':
-            with multiprocessing.Pool() as pool:
-                list_dfs = list(tqdm(pool.imap(self._fully_parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
-        else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round, thread_per_fold, full_parallel')
+        # elif parallel == 'full_parallel':
+        #     with multiprocessing.Pool() as pool:
+        #         list_dfs = list(tqdm(pool.imap(self._fully_parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
+        else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round or freely_parallel')
         list_dfs_flat = list(chain.from_iterable(list_dfs))
         df_final = pd.DataFrame()
         for dataframe in list_dfs_flat:
             df_final = pd.concat([df_final, dataframe], axis=0)
-    
         return df_final
     
     
@@ -328,7 +325,7 @@ class MLPipelines(MachineLearningEstimator):
             inner_splits (int, optional): Number of splits for inner CV. Defaults to 5.
             outer_splits (int, optional): Number of splits for outer CV. Defaults to 5.
             verbose (bool, optional): Enables detailed logging. Defaults to True.
-            parallel (str, optional): Parallelization method ('thread_per_round', 'thread_per_fold', 'full_parallel', 'freely_parallel'). Defaults to 'thread_per_round'.
+            parallel (str, optional): Parallelization method ('thread_per_round', 'thread_per_fold', 'freely_parallel'). Defaults to 'thread_per_round'.
 
         Returns:
             The best fitted estimator if return_best_model is True. Optionally returns a DataFrame of scores if return_scores_df is True. The exact return type depends on the flags `return_best_model` and `return_scores_df`:
@@ -400,36 +397,37 @@ class MLPipelines(MachineLearningEstimator):
                 N = len(sorted_features_counts)  # Adjust N as needed to limit the number of features displayed
             else:
                 N=N
-            
-            features, counts = zip(*sorted_features_counts[:N])
+            if len(sorted_features_counts) == 0:
+                print('No features were selected.')
+            else:
+                features, counts = zip(*sorted_features_counts[:N])
+                plt.figure(figsize=(max(10, N // 2), 10))
+                bars = plt.bar(range(N), counts, color='skyblue', tick_label=features)
+                if most_imp_feat > N:
+                    most_imp_feat = N
+                elif most_imp_feat > 0 and most_imp_feat <= N and most_imp_feat != None:
+                    for bar in bars[:most_imp_feat]:
+                        bar.set_color('red')
 
-            plt.figure(figsize=(max(10, N // 2), 10))
-            bars = plt.bar(range(N), counts, color='skyblue', tick_label=features)
-            if most_imp_feat > N:
-                most_imp_feat = N
-            elif most_imp_feat > 0 and most_imp_feat <= N and most_imp_feat != None:
-                for bar in bars[:most_imp_feat]:
-                    bar.set_color('red')
+                plt.xlabel('Features')
+                plt.ylabel('Counts')
+                plt.title('Histogram of Selected Features')
+                plt.xticks(rotation=90)  
 
-            plt.xlabel('Features')
-            plt.ylabel('Counts')
-            plt.title('Histogram of Selected Features')
-            plt.xticks(rotation=90)  
+                plt.gca().margins(x=0.05)
+                plt.gcf().canvas.draw()
+                tl = plt.gca().get_xticklabels()
+                maxsize = max([t.get_window_extent().width for t in tl])
+                m = 0.5
+                s = maxsize/plt.gcf().dpi*N+2*m
+                margin = m/plt.gcf().get_size_inches()[0]
 
-            plt.gca().margins(x=0.05)
-            plt.gcf().canvas.draw()
-            tl = plt.gca().get_xticklabels()
-            maxsize = max([t.get_window_extent().width for t in tl])
-            m = 0.5
-            s = maxsize/plt.gcf().dpi*N+2*m
-            margin = m/plt.gcf().get_size_inches()[0]
+                plt.gcf().subplots_adjust(left=margin, right=1.-margin)
+                plt.gca().set_xticks(plt.gca().get_xticks()[::1]) 
+                plt.gca().set_xlim([-1, N])
 
-            plt.gcf().subplots_adjust(left=margin, right=1.-margin)
-            plt.gca().set_xticks(plt.gca().get_xticks()[::1]) 
-            plt.gca().set_xlim([-1, N])
-
-            plt.tight_layout()
-            plt.show()
+                plt.tight_layout()
+                plt.show()
 
         labels = scores_dataframe['Classifier'].unique() 
         x_coords = range(1, len(labels) + 1)

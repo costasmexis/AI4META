@@ -110,7 +110,7 @@ optuna_grid = {
             ),
             "C": optuna.distributions.FloatDistribution(0.1, 10.0),
             "solver": optuna.distributions.CategoricalDistribution(
-                ["newton-cg", "lbfgs", "sag", "saga", "newton-cholesky", "liblinear"]
+                ["newton-cg", "lbfgs", "sag", "saga", "liblinear"]
             ),
             "max_iter": optuna.distributions.IntDistribution(100, 1000),
             'n_jobs' : optuna.distributions.CategoricalDistribution([None])
@@ -154,148 +154,148 @@ optuna_grid = {
             'loss_function': optuna.distributions.CategoricalDistribution(['Logloss', 'CrossEntropy']),
         }
     },
-    "NestedCV_multi": {
-        "RandomForestClassifier": {
-            "n_estimators": optuna.distributions.IntDistribution(2, 200),
-            "criterion": optuna.distributions.CategoricalDistribution(
-                ["gini", "entropy"]
-            ),
-            "max_depth": optuna.distributions.IntDistribution(1, 50),
-            "min_samples_leaf": optuna.distributions.IntDistribution(1, 10),
-            "min_samples_split": optuna.distributions.IntDistribution(2, 10),
-            "bootstrap": optuna.distributions.CategoricalDistribution([True, False]),
-            "n_jobs":optuna.distributions.CategoricalDistribution([-1])
-        },
-        "KNeighborsClassifier": {
-            "n_neighbors": optuna.distributions.IntDistribution(2, 15),
-            "weights": optuna.distributions.CategoricalDistribution(
-                ["uniform", "distance"]
-            ),
-            "algorithm": optuna.distributions.CategoricalDistribution(
-                ["auto", "ball_tree", "kd_tree", "brute"]
-            ),
-            "p": optuna.distributions.IntDistribution(1, 2),
-            "leaf_size": optuna.distributions.IntDistribution(5, 50),
-            "n_jobs":optuna.distributions.CategoricalDistribution([-1])
-        },
-        "DecisionTreeClassifier": {
-            "criterion": optuna.distributions.CategoricalDistribution(
-                ["gini", "entropy"]
-            ),
-            "splitter": optuna.distributions.CategoricalDistribution(
-                ["best", "random"]
-            ),
-            "max_depth": optuna.distributions.IntDistribution(1, 100),
-            "min_samples_split": optuna.distributions.IntDistribution(2, 10),
-            "min_weight_fraction_leaf": optuna.distributions.IntDistribution(0.0, 0.5)
-            # 'n_jobs' : optuna.distributions.CategoricalDistribution([1])
-        },
-        "SVC": {
-            "C": optuna.distributions.IntDistribution(1, 10),
-            "kernel": optuna.distributions.CategoricalDistribution(
-                ["linear", "rbf", "sigmoid", "poly"]
-            ),
-            "degree": optuna.distributions.IntDistribution(1, 10),
-            "probability": optuna.distributions.CategoricalDistribution([True, False]),
-            "shrinking": optuna.distributions.CategoricalDistribution([True, False]),
-            "decision_function_shape": optuna.distributions.CategoricalDistribution(
-                ["ovo", "ovr"]
-            ),
-        },
-        "GradientBoostingClassifier": {
-            "loss": optuna.distributions.CategoricalDistribution(
-                ["log_loss", "exponential"]
-            ),
-            "learning_rate": optuna.distributions.FloatDistribution(0.01, 0.5),
-            "n_estimators": optuna.distributions.IntDistribution(2, 200),
-            "criterion": optuna.distributions.CategoricalDistribution(
-                ["friedman_mse", "squared_error"]
-            ),
-            "max_depth": optuna.distributions.IntDistribution(1, 50),
-            "min_samples_split": optuna.distributions.IntDistribution(2, 10),
-            "min_samples_leaf": optuna.distributions.IntDistribution(1, 10),
-        },
-        "XGBClassifier": {
-            "learning_rate": optuna.distributions.FloatDistribution(0.01, 1),
-            "n_estimators": optuna.distributions.IntDistribution(2, 500),
-            "max_depth": optuna.distributions.IntDistribution(1, 50),
-            "min_child_weight": optuna.distributions.IntDistribution(1, 10),
-            "gamma": optuna.distributions.FloatDistribution(0, 10),
-            "subsample": optuna.distributions.FloatDistribution(0.001, 1.0),
-            "colsample_bytree": optuna.distributions.FloatDistribution(0.1, 1.0),
-            # "nthreads": optuna.distributions.CategoricalDistribution([1]),
-            'n_jobs': optuna.distributions.CategoricalDistribution([-1]),
-            "booster": optuna.distributions.CategoricalDistribution(
-                ["gbtree", "dart"]
-            ),  #'gblinear',
-            "tree_method": optuna.distributions.CategoricalDistribution(
-                ["auto", "exact", "approx", "hist"]
-            ),
-            "reg_alpha": optuna.distributions.FloatDistribution(0, 5),
-            "reg_lambda": optuna.distributions.FloatDistribution(0, 5),
-            "scale_pos_weight": optuna.distributions.FloatDistribution(0, 5),
-            "objective": optuna.distributions.CategoricalDistribution(
-                ["binary:logistic"]
-            ),
-        },
-        "LinearDiscriminantAnalysis": {
-            "solver": optuna.distributions.CategoricalDistribution(["lsqr", "eigen"]),
-            "shrinkage": optuna.distributions.FloatDistribution(0.0, 1.0),
-            "tol": optuna.distributions.CategoricalDistribution([1e-3, 1e-4, 1e-5]),
-            "store_covariance": optuna.distributions.CategoricalDistribution(
-                [True, False]
-            ),
-        },
-        "LogisticRegression": {
-            "penalty": optuna.distributions.CategoricalDistribution(
-                ["l1", "l2", None]#, "elasticnet"]
-            ),
-            "C": optuna.distributions.FloatDistribution(0.1, 10.0),
-            "solver": optuna.distributions.CategoricalDistribution(
-                ["newton-cg", "lbfgs", "sag", "saga", "newton-cholesky", "liblinear"]
-            ),
-            "max_iter": optuna.distributions.IntDistribution(100, 1000),
-            'n_jobs' : optuna.distributions.CategoricalDistribution([-1])
-        },
-        "GaussianNB": {
-            "var_smoothing": optuna.distributions.FloatDistribution(1e-9, 1e-5)
-        },
-        'LGBMClassifier': {
-            'boosting_type': optuna.distributions.CategoricalDistribution(['gbdt', 'dart', 'goss']),
-            'num_leaves': optuna.distributions.IntDistribution(2, 256),
-            'learning_rate': optuna.distributions.FloatDistribution(0.01, 0.5),
-            'n_estimators': optuna.distributions.IntDistribution(2, 200),
-            # 'min_child_samples': optuna.distributions.IntDistribution(5, 100),
-            # 'reg_alpha': optuna.distributions.FloatDistribution(0.0, 1.0),
-            # 'reg_lambda': optuna.distributions.FloatDistribution(0.0, 1.0),
-            'subsample_for_bin': optuna.distributions.IntDistribution(100000, 400000),
-            'objective': optuna.distributions.CategoricalDistribution(['binary']),
-            'min_split_gain': optuna.distributions.FloatDistribution(0.0, 1.0),
-            'n_jobs': optuna.distributions.CategoricalDistribution([-1])
-            # 'verbose': optuna.distributions.CategoricalDistribution([-1]),
-        },
-        'GaussianProcessClassifier':{
-            'optimizer': optuna.distributions.CategoricalDistribution(['fmin_l_bfgs_b', None]),
-            'max_iter_predict': optuna.distributions.IntDistribution(50, 200),
-            'warm_start': optuna.distributions.CategoricalDistribution([True, False]),
-            'n_jobs': optuna.distributions.CategoricalDistribution([-1])
-        },
-        'CatBoostClassifier': {
-            'iterations': optuna.distributions.IntDistribution(50, 700),
-            'learning_rate': optuna.distributions.FloatDistribution(0.01, 0.5),
-            'depth': optuna.distributions.IntDistribution(1, 15),
-            'l2_leaf_reg': optuna.distributions.FloatDistribution(1e-8, 2),
-            'border_count': optuna.distributions.IntDistribution(1, 255),
-            'bagging_temperature': optuna.distributions.FloatDistribution(0.0, 10.0),
-            'random_strength': optuna.distributions.FloatDistribution(0.0, 10.0),
-            'leaf_estimation_method': optuna.distributions.CategoricalDistribution(["Newton", "Gradient"]),
-            'verbose': optuna.distributions.CategoricalDistribution([0]),
-            'model_size_reg': optuna.distributions.FloatDistribution(1e-4, 2),
-            'rsm': optuna.distributions.FloatDistribution(0.01, 1.0),
-            'thread_count': optuna.distributions.CategoricalDistribution([-1]),
-            'loss_function': optuna.distributions.CategoricalDistribution(['Logloss', 'CrossEntropy']),
-        }
-    },
+    # "NestedCV_multi": {
+    #     "RandomForestClassifier": {
+    #         "n_estimators": optuna.distributions.IntDistribution(2, 200),
+    #         "criterion": optuna.distributions.CategoricalDistribution(
+    #             ["gini", "entropy"]
+    #         ),
+    #         "max_depth": optuna.distributions.IntDistribution(1, 50),
+    #         "min_samples_leaf": optuna.distributions.IntDistribution(1, 10),
+    #         "min_samples_split": optuna.distributions.IntDistribution(2, 10),
+    #         "bootstrap": optuna.distributions.CategoricalDistribution([True, False]),
+    #         "n_jobs":optuna.distributions.CategoricalDistribution([-1])
+    #     },
+    #     "KNeighborsClassifier": {
+    #         "n_neighbors": optuna.distributions.IntDistribution(2, 15),
+    #         "weights": optuna.distributions.CategoricalDistribution(
+    #             ["uniform", "distance"]
+    #         ),
+    #         "algorithm": optuna.distributions.CategoricalDistribution(
+    #             ["auto", "ball_tree", "kd_tree", "brute"]
+    #         ),
+    #         "p": optuna.distributions.IntDistribution(1, 2),
+    #         "leaf_size": optuna.distributions.IntDistribution(5, 50),
+    #         "n_jobs":optuna.distributions.CategoricalDistribution([-1])
+    #     },
+    #     "DecisionTreeClassifier": {
+    #         "criterion": optuna.distributions.CategoricalDistribution(
+    #             ["gini", "entropy"]
+    #         ),
+    #         "splitter": optuna.distributions.CategoricalDistribution(
+    #             ["best", "random"]
+    #         ),
+    #         "max_depth": optuna.distributions.IntDistribution(1, 100),
+    #         "min_samples_split": optuna.distributions.IntDistribution(2, 10),
+    #         "min_weight_fraction_leaf": optuna.distributions.IntDistribution(0.0, 0.5)
+    #         # 'n_jobs' : optuna.distributions.CategoricalDistribution([1])
+    #     },
+    #     "SVC": {
+    #         "C": optuna.distributions.IntDistribution(1, 10),
+    #         "kernel": optuna.distributions.CategoricalDistribution(
+    #             ["linear", "rbf", "sigmoid", "poly"]
+    #         ),
+    #         "degree": optuna.distributions.IntDistribution(1, 10),
+    #         "probability": optuna.distributions.CategoricalDistribution([True, False]),
+    #         "shrinking": optuna.distributions.CategoricalDistribution([True, False]),
+    #         "decision_function_shape": optuna.distributions.CategoricalDistribution(
+    #             ["ovo", "ovr"]
+    #         ),
+    #     },
+    #     "GradientBoostingClassifier": {
+    #         "loss": optuna.distributions.CategoricalDistribution(
+    #             ["log_loss", "exponential"]
+    #         ),
+    #         "learning_rate": optuna.distributions.FloatDistribution(0.01, 0.5),
+    #         "n_estimators": optuna.distributions.IntDistribution(2, 200),
+    #         "criterion": optuna.distributions.CategoricalDistribution(
+    #             ["friedman_mse", "squared_error"]
+    #         ),
+    #         "max_depth": optuna.distributions.IntDistribution(1, 50),
+    #         "min_samples_split": optuna.distributions.IntDistribution(2, 10),
+    #         "min_samples_leaf": optuna.distributions.IntDistribution(1, 10),
+    #     },
+    #     "XGBClassifier": {
+    #         "learning_rate": optuna.distributions.FloatDistribution(0.01, 1),
+    #         "n_estimators": optuna.distributions.IntDistribution(2, 500),
+    #         "max_depth": optuna.distributions.IntDistribution(1, 50),
+    #         "min_child_weight": optuna.distributions.IntDistribution(1, 10),
+    #         "gamma": optuna.distributions.FloatDistribution(0, 10),
+    #         "subsample": optuna.distributions.FloatDistribution(0.001, 1.0),
+    #         "colsample_bytree": optuna.distributions.FloatDistribution(0.1, 1.0),
+    #         # "nthreads": optuna.distributions.CategoricalDistribution([1]),
+    #         'n_jobs': optuna.distributions.CategoricalDistribution([-1]),
+    #         "booster": optuna.distributions.CategoricalDistribution(
+    #             ["gbtree", "dart"]
+    #         ),  #'gblinear',
+    #         "tree_method": optuna.distributions.CategoricalDistribution(
+    #             ["auto", "exact", "approx", "hist"]
+    #         ),
+    #         "reg_alpha": optuna.distributions.FloatDistribution(0, 5),
+    #         "reg_lambda": optuna.distributions.FloatDistribution(0, 5),
+    #         "scale_pos_weight": optuna.distributions.FloatDistribution(0, 5),
+    #         "objective": optuna.distributions.CategoricalDistribution(
+    #             ["binary:logistic"]
+    #         ),
+    #     },
+    #     "LinearDiscriminantAnalysis": {
+    #         "solver": optuna.distributions.CategoricalDistribution(["lsqr", "eigen"]),
+    #         "shrinkage": optuna.distributions.FloatDistribution(0.0, 1.0),
+    #         "tol": optuna.distributions.CategoricalDistribution([1e-3, 1e-4, 1e-5]),
+    #         "store_covariance": optuna.distributions.CategoricalDistribution(
+    #             [True, False]
+    #         ),
+    #     },
+    #     "LogisticRegression": {
+    #         "penalty": optuna.distributions.CategoricalDistribution(
+    #             ["l1", "l2", None]#, "elasticnet"]
+    #         ),
+    #         "C": optuna.distributions.FloatDistribution(0.1, 10.0),
+    #         "solver": optuna.distributions.CategoricalDistribution(
+    #             ["newton-cg", "lbfgs", "sag", "saga", "newton-cholesky", "liblinear"]
+    #         ),
+    #         "max_iter": optuna.distributions.IntDistribution(100, 1000),
+    #         'n_jobs' : optuna.distributions.CategoricalDistribution([-1])
+    #     },
+    #     "GaussianNB": {
+    #         "var_smoothing": optuna.distributions.FloatDistribution(1e-9, 1e-5)
+    #     },
+    #     'LGBMClassifier': {
+    #         'boosting_type': optuna.distributions.CategoricalDistribution(['gbdt', 'dart', 'goss']),
+    #         'num_leaves': optuna.distributions.IntDistribution(2, 256),
+    #         'learning_rate': optuna.distributions.FloatDistribution(0.01, 0.5),
+    #         'n_estimators': optuna.distributions.IntDistribution(2, 200),
+    #         # 'min_child_samples': optuna.distributions.IntDistribution(5, 100),
+    #         # 'reg_alpha': optuna.distributions.FloatDistribution(0.0, 1.0),
+    #         # 'reg_lambda': optuna.distributions.FloatDistribution(0.0, 1.0),
+    #         'subsample_for_bin': optuna.distributions.IntDistribution(100000, 400000),
+    #         'objective': optuna.distributions.CategoricalDistribution(['binary']),
+    #         'min_split_gain': optuna.distributions.FloatDistribution(0.0, 1.0),
+    #         'n_jobs': optuna.distributions.CategoricalDistribution([-1])
+    #         # 'verbose': optuna.distributions.CategoricalDistribution([-1]),
+    #     },
+    #     'GaussianProcessClassifier':{
+    #         'optimizer': optuna.distributions.CategoricalDistribution(['fmin_l_bfgs_b', None]),
+    #         'max_iter_predict': optuna.distributions.IntDistribution(50, 200),
+    #         'warm_start': optuna.distributions.CategoricalDistribution([True, False]),
+    #         'n_jobs': optuna.distributions.CategoricalDistribution([-1])
+    #     },
+    #     'CatBoostClassifier': {
+    #         'iterations': optuna.distributions.IntDistribution(50, 700),
+    #         'learning_rate': optuna.distributions.FloatDistribution(0.01, 0.5),
+    #         'depth': optuna.distributions.IntDistribution(1, 15),
+    #         'l2_leaf_reg': optuna.distributions.FloatDistribution(1e-8, 2),
+    #         'border_count': optuna.distributions.IntDistribution(1, 255),
+    #         'bagging_temperature': optuna.distributions.FloatDistribution(0.0, 10.0),
+    #         'random_strength': optuna.distributions.FloatDistribution(0.0, 10.0),
+    #         'leaf_estimation_method': optuna.distributions.CategoricalDistribution(["Newton", "Gradient"]),
+    #         'verbose': optuna.distributions.CategoricalDistribution([0]),
+    #         'model_size_reg': optuna.distributions.FloatDistribution(1e-4, 2),
+    #         'rsm': optuna.distributions.FloatDistribution(0.01, 1.0),
+    #         'thread_count': optuna.distributions.CategoricalDistribution([-1]),
+    #         'loss_function': optuna.distributions.CategoricalDistribution(['Logloss', 'CrossEntropy']),
+    #     }
+    # },
     "ManualSearch": {
         "RandomForestClassifier": lambda trial: RandomForestClassifier(
             n_estimators=trial.suggest_int("n_estimators", 2, 200),
