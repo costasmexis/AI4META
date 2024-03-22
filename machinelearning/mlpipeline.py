@@ -41,11 +41,12 @@ import logging
 from itertools import chain
 import time
 from threadpoolctl import threadpool_limits
-from joblib import Parallel, delayed, parallel_config
+from joblib import Parallel, delayed, parallel_config, parallel_backend
 # from progress.bar import Bar
 import multiprocessing 
 from collections import Counter
 # from logging_levels import add_log_level
+from IPython.utils.io import capture_output
 
 
 class MLPipelines(MachineLearningEstimator):
@@ -84,7 +85,7 @@ class MLPipelines(MachineLearningEstimator):
         opt_grid = 'NestedCV_single'
         if parallel == 'thread_per_round':
             n_jobs = 1
-        elif parallel == 'freely_parallel':
+        elif parallel == 'freely_parallel' or parallel == 'fully_parallel':
             n_jobs = multiprocessing.cpu_count()//self.params['rounds']
             if n_jobs == 0:
                 n_jobs = 1
@@ -159,8 +160,20 @@ class MLPipelines(MachineLearningEstimator):
     #         list_dfs = self.outer_cv_loop(i)
     #     return list_dfs
     
+
+    # def _fully_parallel_nested_cv_trial(self,i):
+    #     # len_clf = len(self.params['clfs'])
+    #     rounds = self.params['rounds']
+    #     num_cores = multiprocessing.cpu_count()
+    #     avail_thr = num_cores//rounds
+    #     if avail_thr == 0:
+    #         avail_thr = 1
+    #     list_dfs = self.outer_cv_loop(i)
+    #     # with threadpool_limits(limits=avail_thr):
+    #     #     list_dfs = self.outer_cv_loop(i)
+    #     return list_dfs
+
     def _freely_parallel_nested_cv_trial(self,i):
-        # len_clf = len(self.params['clfs'])
         rounds = self.params['rounds']
         num_cores = multiprocessing.cpu_count()
         avail_thr = num_cores//rounds
@@ -271,17 +284,27 @@ class MLPipelines(MachineLearningEstimator):
             raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
         if outer_scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
-        trial_indices = range(rounds)  
+        trial_indices = tqdm(range(rounds))
+
+        rounds = self.params['rounds']
+        num_cores = multiprocessing.cpu_count()
+        if num_cores < rounds:
+            use_cores = num_cores
+        else:
+            use_cores = rounds
 
         if parallel == 'thread_per_round':
-            with multiprocessing.Pool(processes=rounds) as pool:
-                list_dfs = list(tqdm(pool.imap(self._thread_per_round_nested_cv_trial, trial_indices), total=rounds, desc='Processing rounds'))
+            list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self._thread_per_round_nested_cv_trial)(i) for i in trial_indices)
+            # with multiprocessing.Pool(processes=use_cores) as pool:
+                # list_dfs = list(tqdm(pool.imap(self._thread_per_round_nested_cv_trial, trial_indices), total=rounds, desc='Processing rounds'))
         elif parallel == 'freely_parallel':
-            with multiprocessing.Pool() as pool:
-                list_dfs = list(tqdm(pool.imap(self._freely_parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
-        # elif parallel == 'full_parallel':
-        #     with multiprocessing.Pool() as pool:
-        #         list_dfs = list(tqdm(pool.imap(self._fully_parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
+            list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self._freely_parallel_nested_cv_trial)(i) for i in trial_indices)
+            # with multiprocessing.Pool() as pool:
+            #     list_dfs = list(tqdm(pool.imap(self._freely_parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
+        # elif parallel == 'fully_parallel':
+        #     list_dfs = Parallel(n_jobs=-1,verbose=0)(delayed(self._fully_parallel_nested_cv_trial)(i) for i in trial_indices)
+            # with multiprocessing.Pool() as pool:
+            #     list_dfs = list(tqdm(pool.imap(self._fully_parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
         else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round or freely_parallel')
         list_dfs_flat = list(chain.from_iterable(list_dfs))
         df_final = pd.DataFrame()
