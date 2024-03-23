@@ -48,6 +48,8 @@ from collections import Counter
 # from logging_levels import add_log_level
 import progressbar
 from progress.bar import Bar
+from dask.distributed import Client, as_completed
+import dask
 
 class MLPipelines(MachineLearningEstimator):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
@@ -306,6 +308,14 @@ class MLPipelines(MachineLearningEstimator):
             # with multiprocessing.Pool(processes=use_cores) as pool:
                 # list_dfs = list(tqdm(pool.imap(self._thread_per_round_nested_cv_trial, trial_indices), total=rounds, desc='Processing rounds'))
         elif parallel == 'freely_parallel':
+            client = Client()
+            list_dfs=[]
+            futures = [client.submit(self._freely_parallel_nested_cv_trial, i,) for i in trial_indices]
+            for future in as_completed(futures):
+                result = future.result()  # Collect results from each round
+                list_dfs.append(result)
+            client.close()
+        elif parallel == 'fully_parallel':
             list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self._freely_parallel_nested_cv_trial)(i) for i in trial_indices)
             # with multiprocessing.Pool() as pool:
             #     list_dfs = list(tqdm(pool.imap(self._freely_parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
