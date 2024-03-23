@@ -22,9 +22,9 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
-from tqdm import tqdm
+# from tqdm import tqdm
 # from IPython.display import display
-
+from tqdm import tqdm_notebook as tqdm
 from xgboost import XGBClassifier
 # from joblib import Parallel, delayed
 from dataloader import DataLoader
@@ -46,8 +46,8 @@ from joblib import Parallel, delayed, parallel_config, parallel_backend
 import multiprocessing 
 from collections import Counter
 # from logging_levels import add_log_level
-from IPython.utils.io import capture_output
-
+import progressbar
+from progress.bar import Bar
 
 class MLPipelines(MachineLearningEstimator):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
@@ -200,76 +200,84 @@ class MLPipelines(MachineLearningEstimator):
             outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=i)
             self.params['inner_cv'] = inner_cv
             self.params['outer_cv'] = outer_cv 
-            
-            for train_index, test_index in tqdm(outer_cv.split(self.X, self.y), desc='Processing outer fold', total=outer_splits):
-                X_train, X_test = self.X.iloc[train_index], self.X.iloc[test_index]
-                y_train, y_test = self.y[train_index], self.y[test_index]
-                if num_features is not None and feature_selection_type != 'percentile':
-                    if type(num_features) is int:
-                        if num_features < X_train.shape[1]:
-                            self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, num_features=num_features, inner_method=feature_selection_method)                            
-                            X_train_selected = X_train[self.selected_features]
-                            X_test_selected = X_test[self.selected_features]
-                            num_feature=num_features
-                        elif type(num_features) is int and num_features == X_train.shape[1]:
-                            X_train_selected = X_train
-                            X_test_selected = X_test
-                            num_feature='full'
-                        else: 
-                            raise ValueError('num_features must be an integer less than the number of features in the dataset')
-                        df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)                        
-                        list_dfs.append(df)
-                    elif type(num_features) is list :
-                        for num_feature in num_features:
-                            if num_feature > X_train.shape[1]:
-                                raise ValueError('num_features must be less than the number of features in the dataset')                            
-                            elif num_feature == X_train.shape[1]:
+            widgets = [progressbar.Percentage()," ", progressbar.GranularBar(), " " ,
+                       progressbar.Timer(), " ", progressbar.ETA()]
+            with progressbar.ProgressBar(prefix = f'Outer fold of {i} round:', max_value=outer_splits,widgets=widgets) as bar:
+            # with Bar('Processing...') as bar:
+                split_index = 0
+                # for train_index, test_index in tqdm(outer_cv.split(self.X, self.y), desc='Processing outer fold', total=outer_splits):
+                for train_index, test_index in outer_cv.split(self.X, self.y):
+                    X_train, X_test = self.X.iloc[train_index], self.X.iloc[test_index]
+                    y_train, y_test = self.y[train_index], self.y[test_index]
+                    if num_features is not None and feature_selection_type != 'percentile':
+                        if type(num_features) is int:
+                            if num_features < X_train.shape[1]:
+                                self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, num_features=num_features, inner_method=feature_selection_method)                            
+                                X_train_selected = X_train[self.selected_features]
+                                X_test_selected = X_test[self.selected_features]
+                                num_feature=num_features
+                            elif type(num_features) is int and num_features == X_train.shape[1]:
                                 X_train_selected = X_train
                                 X_test_selected = X_test
                                 num_feature='full'
                             else: 
-                                self.selected_features=self.feature_selection(X=X_train, y=y_train, method=feature_selection_type, num_features=num_feature, inner_method=feature_selection_method)
-                                X_train_selected = X_train[self.selected_features]
-                                X_test_selected = X_test[self.selected_features]
-                                num_feature=num_feature
-                            df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
+                                raise ValueError('num_features must be an integer less than the number of features in the dataset')
+                            df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)                        
                             list_dfs.append(df)
-                elif feature_selection_type == 'percentile' and num_features is not None:
-                    if type(num_features) is int:
-                        if num_features == 100:
-                            X_train_selected = X_train
-                            X_test_selected = X_test
-                            num_feature='full'
-                        elif num_features < 100 and num_features > 0:
-                            self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, inner_method=feature_selection_method, num_features=num_features)
-                            X_train_selected = X_train[self.selected_features]
-                            X_test_selected = X_test[self.selected_features]
-                            num_feature=num_features
-                        else: 
-                            raise ValueError('num_features must be an integer less or equal than 100 and hugher thatn 0')
-                        df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
-                        list_dfs.append(df)
-                    elif type(num_features) is list:
-                        for num_feature in num_features:
-                            if num_feature == 100: 
+                        elif type(num_features) is list :
+                            for num_feature in num_features:
+                                if num_feature > X_train.shape[1]:
+                                    raise ValueError('num_features must be less than the number of features in the dataset')                            
+                                elif num_feature == X_train.shape[1]:
+                                    X_train_selected = X_train
+                                    X_test_selected = X_test
+                                    num_feature='full'
+                                else: 
+                                    self.selected_features=self.feature_selection(X=X_train, y=y_train, method=feature_selection_type, num_features=num_feature, inner_method=feature_selection_method)
+                                    X_train_selected = X_train[self.selected_features]
+                                    X_test_selected = X_test[self.selected_features]
+                                    num_feature=num_feature
+                                df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
+                                list_dfs.append(df)
+                    elif feature_selection_type == 'percentile' and num_features is not None:
+                        if type(num_features) is int:
+                            if num_features == 100:
                                 X_train_selected = X_train
                                 X_test_selected = X_test
                                 num_feature='full'
-                            else:
-                                self.selected_features=self.feature_selection(X=X_train, y=y_train, method=feature_selection_type, inner_method=feature_selection_method, num_features=num_feature)
+                            elif num_features < 100 and num_features > 0:
+                                self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, inner_method=feature_selection_method, num_features=num_features)
                                 X_train_selected = X_train[self.selected_features]
                                 X_test_selected = X_test[self.selected_features]
-                                num_feature=num_feature
+                                num_feature=num_features
+                            else: 
+                                raise ValueError('num_features must be an integer less or equal than 100 and hugher thatn 0')
                             df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
                             list_dfs.append(df)
-                elif num_features is None:
-                    X_train_selected = X_train
-                    X_test_selected = X_test
-                    num_feature='full'
-                    df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
-                    list_dfs.append(df)
-                else:         
-                    raise ValueError('num_features must be an integer or a list or None')
+                        elif type(num_features) is list:
+                            for num_feature in num_features:
+                                if num_feature == 100: 
+                                    X_train_selected = X_train
+                                    X_test_selected = X_test
+                                    num_feature='full'
+                                else:
+                                    self.selected_features=self.feature_selection(X=X_train, y=y_train, method=feature_selection_type, inner_method=feature_selection_method, num_features=num_feature)
+                                    X_train_selected = X_train[self.selected_features]
+                                    X_test_selected = X_test[self.selected_features]
+                                    num_feature=num_feature
+                                df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
+                                list_dfs.append(df)
+                    elif num_features is None:
+                        X_train_selected = X_train
+                        X_test_selected = X_test
+                        num_feature='full'
+                        df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
+                        list_dfs.append(df)
+                    else:         
+                        raise ValueError('num_features must be an integer or a list or None')
+                    bar.update(split_index)
+                    split_index += 1
+                    time.sleep(0.1)
             end = time.time()
             print(f'Finished with {i+1} round after {(end-start)/3600:.2f} hours.')
             return list_dfs
@@ -284,7 +292,7 @@ class MLPipelines(MachineLearningEstimator):
             raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
         if outer_scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
-        trial_indices = tqdm(range(rounds))
+        trial_indices = range(rounds)
 
         rounds = self.params['rounds']
         num_cores = multiprocessing.cpu_count()
