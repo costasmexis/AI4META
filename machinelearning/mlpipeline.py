@@ -87,7 +87,7 @@ class MLPipelines(MachineLearningEstimator):
         opt_grid = 'NestedCV_single'
         if parallel == 'thread_per_round':
             n_jobs = 1
-        elif parallel == 'freely_parallel' or parallel == 'fully_parallel':
+        elif parallel == 'freely_parallel' or parallel == 'dynamic_parallel':
             n_jobs = multiprocessing.cpu_count()//self.params['rounds']
             if n_jobs == 0:
                 n_jobs = 1
@@ -152,28 +152,6 @@ class MLPipelines(MachineLearningEstimator):
             if len(list_data) != 0:  
                 df_data[name] = list_data
         return df_data
-    
-    # def _fully_parallel_nested_cv_trial(self,i):
-    #     # len_clf = len(self.params['clfs'])
-    #     rounds = self.params['rounds']
-    #     num_cores = multiprocessing.cpu_count()
-    #     avail_thr = num_cores//rounds
-    #     with threadpool_limits(limits=avail_thr):
-    #         list_dfs = self.outer_cv_loop(i)
-    #     return list_dfs
-    
-
-    # def _fully_parallel_nested_cv_trial(self,i):
-    #     # len_clf = len(self.params['clfs'])
-    #     rounds = self.params['rounds']
-    #     num_cores = multiprocessing.cpu_count()
-    #     avail_thr = num_cores//rounds
-    #     if avail_thr == 0:
-    #         avail_thr = 1
-    #     list_dfs = self.outer_cv_loop(i)
-    #     # with threadpool_limits(limits=avail_thr):
-    #     #     list_dfs = self.outer_cv_loop(i)
-    #     return list_dfs
 
     def _freely_parallel_nested_cv_trial(self,i):
         rounds = self.params['rounds']
@@ -181,7 +159,7 @@ class MLPipelines(MachineLearningEstimator):
         avail_thr = num_cores//rounds
         if avail_thr == 0:
             avail_thr = 1
-        with threadpool_limits(limits=avail_thr):
+        with threadpool_limits(limits=avail_thr+1):
             list_dfs = self.outer_cv_loop(i)
         return list_dfs
 
@@ -204,7 +182,7 @@ class MLPipelines(MachineLearningEstimator):
             self.params['outer_cv'] = outer_cv 
             widgets = [progressbar.Percentage()," ", progressbar.GranularBar(), " " ,
                        progressbar.Timer(), " ", progressbar.ETA()]
-            with progressbar.ProgressBar(prefix = f'Outer fold of {i} round:', max_value=outer_splits,widgets=widgets) as bar:
+            with progressbar.ProgressBar(prefix = f'Outer fold of {i+1} round:', max_value=outer_splits,widgets=widgets) as bar:
             # with Bar('Processing...') as bar:
                 split_index = 0
                 # for train_index, test_index in tqdm(outer_cv.split(self.X, self.y), desc='Processing outer fold', total=outer_splits):
@@ -305,24 +283,16 @@ class MLPipelines(MachineLearningEstimator):
 
         if parallel == 'thread_per_round':
             list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self._thread_per_round_nested_cv_trial)(i) for i in trial_indices)
-            # with multiprocessing.Pool(processes=use_cores) as pool:
-                # list_dfs = list(tqdm(pool.imap(self._thread_per_round_nested_cv_trial, trial_indices), total=rounds, desc='Processing rounds'))
-        elif parallel == 'freely_parallel':
+        elif parallel == 'dynamic_parallel':
             client = Client()
             list_dfs=[]
             futures = [client.submit(self._freely_parallel_nested_cv_trial, i,) for i in trial_indices]
             for future in as_completed(futures):
-                result = future.result()  # Collect results from each round
+                result = future.result() 
                 list_dfs.append(result)
             client.close()
-        elif parallel == 'fully_parallel':
+        elif parallel == 'freely_parallel':
             list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self._freely_parallel_nested_cv_trial)(i) for i in trial_indices)
-            # with multiprocessing.Pool() as pool:
-            #     list_dfs = list(tqdm(pool.imap(self._freely_parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
-        # elif parallel == 'fully_parallel':
-        #     list_dfs = Parallel(n_jobs=-1,verbose=0)(delayed(self._fully_parallel_nested_cv_trial)(i) for i in trial_indices)
-            # with multiprocessing.Pool() as pool:
-            #     list_dfs = list(tqdm(pool.imap(self._fully_parallel_nested_cv_trial, trial_indices), total=rounds, desc='Processing trials'))
         else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round or freely_parallel')
         list_dfs_flat = list(chain.from_iterable(list_dfs))
         df_final = pd.DataFrame()

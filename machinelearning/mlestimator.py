@@ -135,7 +135,7 @@ class MachineLearningEstimator(DataLoader):
            return self.best_estimator
 
     def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', 
-                        cv=5, direction='maximize', n_trials=100, #set_sampler=None,
+                        cv=5, direction='maximize', n_trials=100, estimator_name=None,
                         verbose=True, return_model=False):#, box=False):
         """ Function to perform a bayesian search
 
@@ -161,9 +161,12 @@ class MachineLearningEstimator(DataLoader):
         if X is None and y is None:
             X = self.X
             y = self.y
+        if estimator_name == None:
+            estimator_name = self.name 
+        else: estimator_name = estimator_name
                               
         def objective(trial):
-            clf = grid[self.name](trial)
+            clf = grid[estimator_name](trial)
             final_score = cross_val_score(clf, X, y, scoring=scoring, cv=cv).mean()
             return final_score
 
@@ -179,7 +182,7 @@ class MachineLearningEstimator(DataLoader):
         study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
         self.best_params = study.best_params
         self.best_score = study.best_value
-        self.best_estimator = grid[self.name](study.best_trial)
+        self.best_estimator = grid[estimator_name](study.best_trial)
         self.name = self.best_estimator.__class__.__name__
         
         self.best_estimator.fit(X, y) #fit in all X,y data

@@ -24,9 +24,17 @@ class FeaturesExplanation(MachineLearningEstimator):
             explainer_type: 'general', 'tree', 'linear' 
         '''
         if explainer_type == 'general':
-            self.explainer = shap.Explainer(self.best_estimator, self.X)
+            try :
+                self.explainer = shap.Explainer(self.best_estimator, self.X)
+            except TypeError as e:
+                if "The passed model is not callable and cannot be analyzed directly with the given masker!" in str(e):
+                    print("Switching to predict_proba due to compatibility issue with the model.")
+                    self.explainer = shap.Explainer(lambda X: self.best_estimator.predict_proba(X), self.X)
+                else:
+                    raise TypeError(e)
+
         elif explainer_type == 'tree':
-            if self.name not in ['DecisionTreeClassifier', 'RandomForestClassifier', 'XGBClassifier','CatBoostClassifier']:
+            if self.name not in ['DecisionTreeClassifier', 'RandomForestClassifier', 'XGBClassifier','CatBoostClassifier','LightGBMClassifier']:
                 raise ValueError("Only DecisionTreeClassifier, RandomForestClassifier, XGBClassifier are supported for tree explainer")
             elif self.name == 'XGBClassifier' and self.best_estimator.booster != 'gbtree':
                 raise ValueError("XGBClassifier requires 'booster' to be 'gbtree'")
@@ -37,11 +45,7 @@ class FeaturesExplanation(MachineLearningEstimator):
                 raise ValueError("Only LogisticRegression and LinearDiscriminantAnalysis are supported for linear explainer")
             else:
                 self.explainer = shap.LinearExplainer(self.best_estimator, self.X)
-        # elif explainer_type == 'kernel':
-            # if self.name not in ['SVC','GaussianNB']:
-            #     raise ValueError("Only SVC is supported for kernel explainer")
-            # else:
-                # self.explainer = shap.SamplingExplainer(self.best_estimator, self.X)
+
         else:
             raise ValueError("Unsupported explainer. Select one of 'general', 'tree', 'linear'")
         
