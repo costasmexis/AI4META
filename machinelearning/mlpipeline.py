@@ -285,6 +285,7 @@ class MLPipelines(MachineLearningEstimator):
             list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self._thread_per_round_nested_cv_trial)(i) for i in trial_indices)
         elif parallel == 'dynamic_parallel':
             client = Client()
+            print(client.dashboard_link) 
             list_dfs=[]
             futures = [client.submit(self._freely_parallel_nested_cv_trial, i,) for i in trial_indices]
             for future in as_completed(futures):
