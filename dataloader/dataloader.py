@@ -3,8 +3,6 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif, SelectPercentile
 from mrmr import mrmr_classif
-from numba import jit, prange
-
 
 class DataLoader:
     def __init__(self, label, csv_dir):

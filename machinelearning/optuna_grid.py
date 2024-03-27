@@ -281,7 +281,7 @@ optuna_grid = {
         bagging_fraction=trial.suggest_float('bagging_fraction', 0.1, 0.9) if trial.params.get('boosting_type', 'gbdt') not in ['goss', 'rf'] else 1.0,
         bagging_freq=trial.suggest_int('bagging_freq', 1, 7) if trial.params.get('boosting_type', 'gbdt') == 'rf' else 0,
         feature_fraction=trial.suggest_float('feature_fraction', 0.1, 0.9) if trial.params.get('boosting_type', 'gbdt') != 'goss' else 1.0,
-        verbosity=-1),
+        verbose=-1),
         'GaussianProcessClassifier' : lambda trial: GaussianProcessClassifier(
         optimizer=trial.suggest_categorical("optimizer", ["fmin_l_bfgs_b",None]),
         max_iter_predict=trial.suggest_int("max_iter_predict", 50, 1000),
