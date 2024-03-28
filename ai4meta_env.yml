@@ -13,6 +13,7 @@ dependencies:
   - dash
   - dask[complete]
   - progressbar2
+  - ipykernel
   - pip  
   - pip:
       - streamlit
