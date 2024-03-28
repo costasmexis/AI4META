@@ -85,6 +85,7 @@ class MLPipelines(MachineLearningEstimator):
         outer_scorer = get_scorer(outer_scoring)
         parallel = self.params['parallel']
         opt_grid = 'NestedCV_single'
+        
         if parallel == 'thread_per_round':
             n_jobs = 1
         elif parallel == 'freely_parallel' or parallel == 'dynamic_parallel':
@@ -159,7 +160,7 @@ class MLPipelines(MachineLearningEstimator):
         avail_thr = num_cores//rounds
         if avail_thr == 0:
             avail_thr = 1
-        with threadpool_limits(limits=avail_thr+1):
+        with threadpool_limits(limits=avail_thr):
             list_dfs = self.outer_cv_loop(i)
         return list_dfs
 

@@ -11,7 +11,7 @@ dependencies:
   - scikit-learn
   - lightgbm
   - dash
-  - dask[complete]
+  - dask
   - progressbar2
   - ipykernel
   - pip  
