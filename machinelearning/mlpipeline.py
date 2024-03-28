@@ -41,7 +41,7 @@ import logging
 from itertools import chain
 import time
 from threadpoolctl import threadpool_limits
-from joblib import Parallel, delayed, parallel_config, parallel_backend
+from joblib import Parallel, delayed, parallel_backend
 # from progress.bar import Bar
 import multiprocessing 
 from collections import Counter
