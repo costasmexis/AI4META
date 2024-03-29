@@ -41,7 +41,7 @@ import logging
 from itertools import chain
 import time
 from threadpoolctl import threadpool_limits
-from joblib import Parallel, delayed, parallel_backend
+from joblib import Parallel, delayed,  parallel_backend
 # from progress.bar import Bar
 import multiprocessing 
 from collections import Counter
@@ -51,6 +51,7 @@ from progress.bar import Bar
 from dask.distributed import Client, as_completed
 import dask
 
+    
 class MLPipelines(MachineLearningEstimator):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
         ''' Class to perform machine learning pipelines 
@@ -71,7 +72,7 @@ class MLPipelines(MachineLearningEstimator):
     #     pass
 
     # @jit(parallel=True)
-    def inner_loop(self, X_train=None, X_test=None, y_train=None, y_test=None):
+    def inner_loop(self, avail_thr, X_train=None, X_test=None, y_train=None, y_test=None):
         nested_scores = []
         self.set_optuna_verbosity(logging.ERROR)
         optimizer = self.params['optimizer']
@@ -85,13 +86,15 @@ class MLPipelines(MachineLearningEstimator):
         outer_scorer = get_scorer(outer_scoring)
         parallel = self.params['parallel']
         opt_grid = 'NestedCV_single'
-        
         if parallel == 'thread_per_round':
             n_jobs = 1
+            # opt_grid = 'NestedCV_single'
         elif parallel == 'freely_parallel' or parallel == 'dynamic_parallel':
-            n_jobs = multiprocessing.cpu_count()//self.params['rounds']
-            if n_jobs == 0:
-                n_jobs = 1
+            n_jobs = avail_thr
+            # if parallel == 'dynamic_parallel':
+            #     opt_grid = 'NestedCV_multi'
+            # else:
+           
 
         if optimizer == 'grid_search':
             clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
@@ -101,7 +104,6 @@ class MLPipelines(MachineLearningEstimator):
                                              param_distributions=self.param_grid, cv=inner_cv, n_jobs=1, 
                                              verbose=0, n_iter=n_iter)
         elif optimizer == 'bayesian_search':
-
             clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
                                                     param_distributions=optuna_grid[opt_grid][self.name],
                                                     cv=inner_cv, n_jobs=n_jobs, verbose=0, n_trials=n_trials_ncv)
@@ -116,7 +118,7 @@ class MLPipelines(MachineLearningEstimator):
     
     
     # @jit(parallel=True)
-    def clf_app(self, X_train_selected, X_test_selected, y_train, y_test, num_feature):
+    def clf_app(self, X_train_selected, X_test_selected, y_train, y_test, num_feature, avail_thr):
         nested_scores = []
         classifiers_list = []
         number_of_features = []
@@ -130,12 +132,12 @@ class MLPipelines(MachineLearningEstimator):
         feature_selection_type = self.params['feature_selection_type']
         
         if clfs == None :
-            nested_scores_tr = self.inner_loop(X_train=X_train_selected, X_test=X_test_selected, y_train=y_train, y_test=y_test)
+            nested_scores_tr = self.inner_loop(avail_thr=avail_thr, X_train=X_train_selected, X_test=X_test_selected, y_train=y_train, y_test=y_test)
         else:
             for estimator in clfs:
                 self.estimator = self.available_clfs[estimator]
                 self.name = self.estimator.__class__.__name__
-                nested_scores_tr = self.inner_loop(X_train=X_train_selected, X_test=X_test_selected, y_train=y_train, y_test=y_test)
+                nested_scores_tr = self.inner_loop(avail_thr=avail_thr, X_train=X_train_selected, X_test=X_test_selected, y_train=y_train, y_test=y_test)
                 estimator_list.append(self.name)
                 nested_scores.append(nested_scores_tr[0])
 
@@ -153,23 +155,26 @@ class MLPipelines(MachineLearningEstimator):
             if len(list_data) != 0:  
                 df_data[name] = list_data
         return df_data
-
-    def _freely_parallel_nested_cv_trial(self,i):
-        rounds = self.params['rounds']
-        num_cores = multiprocessing.cpu_count()
-        avail_thr = num_cores//rounds
-        if avail_thr == 0:
-            avail_thr = 1
+    
+    
+    def _dynamic_parallel_nested_cv_trial(self,i,avail_thr):
+        # with threadpool_limits(limits=avail_thr):
+        #     list_dfs = self.outer_cv_loop(i,avail_thr)
+        list_dfs = self.outer_cv_loop(i,avail_thr)
+        return list_dfs
+    
+    def _freely_parallel_nested_cv_trial(self,i,avail_thr):
         with threadpool_limits(limits=avail_thr):
-            list_dfs = self.outer_cv_loop(i)
+            list_dfs = self.outer_cv_loop(i,avail_thr+1)
         return list_dfs
 
     def _thread_per_round_nested_cv_trial(self,i):
-        with threadpool_limits(limits=1):
-            list_dfs = self.outer_cv_loop(i)
+        avail_thr = 1
+        with threadpool_limits(limits=avail_thr):
+            list_dfs = self.outer_cv_loop(i,avail_thr)
         return list_dfs
 
-    def outer_cv_loop(self,i):
+    def outer_cv_loop(self,i,avail_thr):
             start = time.time()
             inner_splits = self.params['inner_splits']
             outer_splits = self.params['outer_splits']
@@ -203,7 +208,7 @@ class MLPipelines(MachineLearningEstimator):
                                 num_feature='full'
                             else: 
                                 raise ValueError('num_features must be an integer less than the number of features in the dataset')
-                            df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)                        
+                            df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature,avail_thr=avail_thr)                        
                             list_dfs.append(df)
                         elif type(num_features) is list :
                             for num_feature in num_features:
@@ -218,7 +223,7 @@ class MLPipelines(MachineLearningEstimator):
                                     X_train_selected = X_train[self.selected_features]
                                     X_test_selected = X_test[self.selected_features]
                                     num_feature=num_feature
-                                df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
+                                df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature,avail_thr=avail_thr)
                                 list_dfs.append(df)
                     elif feature_selection_type == 'percentile' and num_features is not None:
                         if type(num_features) is int:
@@ -233,7 +238,7 @@ class MLPipelines(MachineLearningEstimator):
                                 num_feature=num_features
                             else: 
                                 raise ValueError('num_features must be an integer less or equal than 100 and hugher thatn 0')
-                            df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
+                            df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature,avail_thr=avail_thr)
                             list_dfs.append(df)
                         elif type(num_features) is list:
                             for num_feature in num_features:
@@ -246,19 +251,19 @@ class MLPipelines(MachineLearningEstimator):
                                     X_train_selected = X_train[self.selected_features]
                                     X_test_selected = X_test[self.selected_features]
                                     num_feature=num_feature
-                                df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
+                                df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature,avail_thr=avail_thr)
                                 list_dfs.append(df)
                     elif num_features is None:
                         X_train_selected = X_train
                         X_test_selected = X_test
                         num_feature='full'
-                        df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature)
+                        df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature,avail_thr=avail_thr)
                         list_dfs.append(df)
                     else:         
                         raise ValueError('num_features must be an integer or a list or None')
                     bar.update(split_index)
                     split_index += 1
-                    time.sleep(0.1)
+                    time.sleep(1)
             end = time.time()
             print(f'Finished with {i+1} round after {(end-start)/3600:.2f} hours.')
             return list_dfs
@@ -281,20 +286,24 @@ class MLPipelines(MachineLearningEstimator):
             use_cores = num_cores
         else:
             use_cores = rounds
+            
+        avail_thr = num_cores//rounds
+        if avail_thr == 0:
+            avail_thr = 1
 
         if parallel == 'thread_per_round':
             list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self._thread_per_round_nested_cv_trial)(i) for i in trial_indices)
-        elif parallel == 'dynamic_parallel':
+        elif parallel == 'dynamic_parallel':                
             client = Client()
-            print(client.dashboard_link) 
+            print(f'You can observe the progress of the computation on the dashboard: \n{client.dashboard_link}') 
             list_dfs=[]
-            futures = [client.submit(self._freely_parallel_nested_cv_trial, i,) for i in trial_indices]
+            futures = [client.submit(self._dynamic_parallel_nested_cv_trial, i, avail_thr) for i in trial_indices]
             for future in as_completed(futures):
                 result = future.result() 
                 list_dfs.append(result)
             client.close()
         elif parallel == 'freely_parallel':
-            list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self._freely_parallel_nested_cv_trial)(i) for i in trial_indices)
+            list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self._dynamic_parallel_nested_cv_trial)(i,avail_thr) for i in trial_indices)
         else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round or freely_parallel')
         list_dfs_flat = list(chain.from_iterable(list_dfs))
         df_final = pd.DataFrame()
