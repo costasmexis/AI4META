@@ -47,7 +47,7 @@ import multiprocessing
 from collections import Counter
 # from logging_levels import add_log_level
 import progressbar
-from progress.bar import Bar
+# from progress.bar import Bar
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
     
@@ -68,8 +68,6 @@ class MLPipelines(MachineLearningEstimator):
         optimizer = self.params['optimizer']
         inner_scoring = self.params['inner_scoring']
         inner_cv = self.params['inner_cv']
-        # n_jobs = self.params['n_jobs']
-        # verbose = self.params['verbose']
         n_iter = self.params['n_iter']
         n_trials_ncv = self.params['n_trials_ncv']
         outer_scoring = self.params['outer_scoring']
@@ -109,14 +107,13 @@ class MLPipelines(MachineLearningEstimator):
     
     
     def clf_app(self, X_train_selected, X_test_selected, y_train, y_test, num_feature, avail_thr):
-        nested_scores = []
-        classifiers_list = []
-        number_of_features = []
-        way_of_selection = []
-        estimator_list = []
-        selected_features = []
-        lists = [nested_scores, classifiers_list, selected_features, number_of_features, way_of_selection, estimator_list]
-        list_names = ['Scores', 'Classifiers','Selected_Features', 'Number_of_Features', 'Way_of_Selection', 'Estimator']
+        results={
+        'Scores': [],
+        'Classifiers': [],
+        'Selected_Features': [],
+        'Number_of_Features': [],
+        'Way_of_Selection': [],
+        'Estimator': []}
         
         clfs = self.params['clfs']
         feature_selection_type = self.params['feature_selection_type']
@@ -128,23 +125,24 @@ class MLPipelines(MachineLearningEstimator):
                 self.estimator = self.available_clfs[estimator]
                 self.name = self.estimator.__class__.__name__
                 nested_scores_tr = self.inner_loop(avail_thr=avail_thr, X_train=X_train_selected, X_test=X_test_selected, y_train=y_train, y_test=y_test)
-                estimator_list.append(self.name)
-                nested_scores.append(nested_scores_tr[0])
-
-                if num_feature == 'full' or None:
-                    number_of_features.append(X_test_selected.shape[1])
-                    way_of_selection.append('full')
-                    classifiers_list.append(str(self.name))
+                if num_feature == 'full' or num_feature is None:
+                    results['Scores'].append(nested_scores_tr[0])
+                    results['Classifiers'].append(self.name)
+                    results['Selected_Features'].append(None)  
+                    results['Number_of_Features'].append(X_test_selected.shape[1])
+                    results['Way_of_Selection'].append('full')
+                    results['Estimator'].append(self.name)
                 else:
-                    way_of_selection.append(feature_selection_type)
-                    selected_features.append(X_train_selected.columns)
-                    number_of_features.append(num_feature)
-                    classifiers_list.append(str(self.name)+'_'+feature_selection_type+'_'+str(num_feature))
-        df_data = pd.DataFrame()
-        for list_data, name in zip(lists, list_names):
-            if len(list_data) != 0:  
-                df_data[name] = list_data
-        return df_data
+                    results['Scores'].append(nested_scores_tr[0])
+                    results['Classifiers'].append(f"{self.name}_{feature_selection_type}_{num_feature}")
+                    results['Selected_Features'].append(X_train_selected.columns.tolist())  
+                    results['Number_of_Features'].append(num_feature)
+                    results['Way_of_Selection'].append(feature_selection_type)
+                    results['Estimator'].append(self.name)
+        df_results = pd.DataFrame(results)
+        return df_results
+    
+    # def filter_features():
     
 
     def outer_cv_loop(self,i,avail_thr=1):
@@ -162,9 +160,7 @@ class MLPipelines(MachineLearningEstimator):
             widgets = [progressbar.Percentage()," ", progressbar.GranularBar(), " " ,
                        progressbar.Timer(), " ", progressbar.ETA()]
             with progressbar.ProgressBar(prefix = f'Outer fold of {i+1} round:', max_value=outer_splits,widgets=widgets) as bar:
-            # with Bar('Processing...') as bar:
                 split_index = 0
-                # for train_index, test_index in tqdm(outer_cv.split(self.X, self.y), desc='Processing outer fold', total=outer_splits):
                 for train_index, test_index in outer_cv.split(self.X, self.y):
                     X_train, X_test = self.X.iloc[train_index], self.X.iloc[test_index]
                     y_train, y_test = self.y[train_index], self.y[test_index]
@@ -174,7 +170,7 @@ class MLPipelines(MachineLearningEstimator):
                                 self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, num_features=num_features, inner_method=feature_selection_method)                            
                                 X_train_selected = X_train[self.selected_features]
                                 X_test_selected = X_test[self.selected_features]
-                                num_feature=num_features
+                                num_feature = num_features
                             elif type(num_features) is int and num_features == X_train.shape[1]:
                                 X_train_selected = X_train
                                 X_test_selected = X_test
@@ -269,26 +265,11 @@ class MLPipelines(MachineLearningEstimator):
                 list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i) for i in trial_indices)
         
         elif parallel == 'dynamic_parallel':   
-            # with ThreadPoolExecutor(max_workers=avail_thr) as executor:
-            #     futures = [executor.submit(self.outer_cv_loop, i, avail_thr) for i in trial_indices]
-                
-            #     results = []
-            #     for future in as_completed(futures):
-            #         results.append(future.result())
-            
-            # list_dfs_flat = list(chain.from_iterable(results))
-            # list_dfs = pd.concat(list_dfs_flat, axis=0, ignore_index=True)
-            
-            # # with threadpool_limits(limits=avail_thr+1):
                 pool = Pool(processes=num_cores)
                 list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
-                # results = pool.starmap_async(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
                 pool.close()
                 pool.join()
-                # list_dfs_flat = list(chain.from_iterable(results))
-                # list_dfs = pd.concat(list_dfs_flat, axis=0, ignore_index=True)
-
-        
+                
         elif parallel == 'freely_parallel':
             with threadpool_limits(limits=avail_thr):
                 list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
@@ -367,6 +348,7 @@ class MLPipelines(MachineLearningEstimator):
             print('Your Dataset contains NaN values. Some estimators does not work with NaN values.')
 
         df = self.nested_cross_validation(self.params)
+        print(df.tail(10))
         
         for classif in np.unique(df['Classifiers']):
             indices = df[df['Classifiers'] == classif]
