@@ -37,7 +37,7 @@ from mrmr import mrmr_classif
 import logging
 # from numba import jit, prange
 # from .Features_explanation import Features_explanation
-# from multiprocessing import Pool
+from multiprocessing import Pool
 from itertools import chain
 import time
 from threadpoolctl import threadpool_limits
@@ -48,8 +48,7 @@ from collections import Counter
 # from logging_levels import add_log_level
 import progressbar
 from progress.bar import Bar
-from dask.distributed import Client, as_completed
-import dask
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
     
 class MLPipelines(MachineLearningEstimator):
@@ -62,16 +61,7 @@ class MLPipelines(MachineLearningEstimator):
             - csv_dir (str): path to the csv file
         '''
         super().__init__(label, csv_dir, estimator, param_grid)
-        # self.set_optuna_verbosity(logging.ERROR)
 
-    # def set_optuna_verbosity(self, level):
-    #     """Adjust Optuna's verbosity level."""
-    #     optuna.logging.set_verbosity(level)  
-    #     logging.getLogger("optuna").setLevel(level) 
-    # def no_display(*args, **kwargs):
-    #     pass
-
-    # @jit(parallel=True)
     def inner_loop(self, avail_thr, X_train=None, X_test=None, y_train=None, y_test=None):
         nested_scores = []
         self.set_optuna_verbosity(logging.ERROR)
@@ -85,15 +75,16 @@ class MLPipelines(MachineLearningEstimator):
         outer_scoring = self.params['outer_scoring']
         outer_scorer = get_scorer(outer_scoring)
         parallel = self.params['parallel']
-        opt_grid = 'NestedCV_single'
+        
         if parallel == 'thread_per_round':
             n_jobs = 1
-            # opt_grid = 'NestedCV_single'
-        elif parallel == 'freely_parallel' or parallel == 'dynamic_parallel':
+            opt_grid = 'NestedCV_single'
+        elif parallel == 'freely_parallel' or parallel == 'dynamic_parallel' :#or 'dask_parallel':
             n_jobs = avail_thr
-            # if parallel == 'dynamic_parallel':
-            #     opt_grid = 'NestedCV_multi'
-            # else:
+            if parallel == 'dynamic_parallel':# or 'dask_parallel':
+                # opt_grid = 'NestedCV_multi'
+                opt_grid = 'NestedCV_single'
+            else:opt_grid = 'NestedCV_single'
            
 
         if optimizer == 'grid_search':
@@ -117,7 +108,6 @@ class MLPipelines(MachineLearningEstimator):
         return nested_scores 
     
     
-    # @jit(parallel=True)
     def clf_app(self, X_train_selected, X_test_selected, y_train, y_test, num_feature, avail_thr):
         nested_scores = []
         classifiers_list = []
@@ -156,25 +146,8 @@ class MLPipelines(MachineLearningEstimator):
                 df_data[name] = list_data
         return df_data
     
-    
-    def _dynamic_parallel_nested_cv_trial(self,i,avail_thr):
-        # with threadpool_limits(limits=avail_thr):
-        #     list_dfs = self.outer_cv_loop(i,avail_thr)
-        list_dfs = self.outer_cv_loop(i,avail_thr)
-        return list_dfs
-    
-    def _freely_parallel_nested_cv_trial(self,i,avail_thr):
-        with threadpool_limits(limits=avail_thr):
-            list_dfs = self.outer_cv_loop(i,avail_thr+1)
-        return list_dfs
 
-    def _thread_per_round_nested_cv_trial(self,i):
-        avail_thr = 1
-        with threadpool_limits(limits=avail_thr):
-            list_dfs = self.outer_cv_loop(i,avail_thr)
-        return list_dfs
-
-    def outer_cv_loop(self,i,avail_thr):
+    def outer_cv_loop(self,i,avail_thr=1):
             start = time.time()
             inner_splits = self.params['inner_splits']
             outer_splits = self.params['outer_splits']
@@ -292,19 +265,36 @@ class MLPipelines(MachineLearningEstimator):
             avail_thr = 1
 
         if parallel == 'thread_per_round':
-            list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self._thread_per_round_nested_cv_trial)(i) for i in trial_indices)
-        elif parallel == 'dynamic_parallel':                
-            client = Client()
-            print(f'You can observe the progress of the computation on the dashboard: \n{client.dashboard_link}') 
-            list_dfs=[]
-            futures = [client.submit(self._dynamic_parallel_nested_cv_trial, i, avail_thr) for i in trial_indices]
-            for future in as_completed(futures):
-                result = future.result() 
-                list_dfs.append(result)
-            client.close()
+            with threadpool_limits(limits=avail_thr):
+                list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i) for i in trial_indices)
+        
+        elif parallel == 'dynamic_parallel':   
+            # with ThreadPoolExecutor(max_workers=avail_thr) as executor:
+            #     futures = [executor.submit(self.outer_cv_loop, i, avail_thr) for i in trial_indices]
+                
+            #     results = []
+            #     for future in as_completed(futures):
+            #         results.append(future.result())
+            
+            # list_dfs_flat = list(chain.from_iterable(results))
+            # list_dfs = pd.concat(list_dfs_flat, axis=0, ignore_index=True)
+            
+            # # with threadpool_limits(limits=avail_thr+1):
+                pool = Pool(processes=num_cores)
+                list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
+                # results = pool.starmap_async(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
+                pool.close()
+                pool.join()
+                # list_dfs_flat = list(chain.from_iterable(results))
+                # list_dfs = pd.concat(list_dfs_flat, axis=0, ignore_index=True)
+
+        
         elif parallel == 'freely_parallel':
-            list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self._dynamic_parallel_nested_cv_trial)(i,avail_thr) for i in trial_indices)
+            with threadpool_limits(limits=avail_thr):
+                list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
+        
         else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round or freely_parallel')
+        
         list_dfs_flat = list(chain.from_iterable(list_dfs))
         df_final = pd.DataFrame()
         for dataframe in list_dfs_flat:
@@ -347,7 +337,7 @@ class MLPipelines(MachineLearningEstimator):
             inner_splits (int, optional): Number of splits for inner CV. Defaults to 5.
             outer_splits (int, optional): Number of splits for outer CV. Defaults to 5.
             verbose (bool, optional): Enables detailed logging. Defaults to True.
-            parallel (str, optional): Parallelization method ('thread_per_round', 'thread_per_fold', 'freely_parallel'). Defaults to 'thread_per_round'.
+            parallel (str, optional): Parallelization method ('thread_per_round', 'freely_parallel', 'dynamic_parallel','dask_parallel'). Defaults to 'thread_per_round'.
 
         Returns:
             The best fitted estimator if return_best_model is True. Optionally returns a DataFrame of scores if return_scores_df is True. The exact return type depends on the flags `return_best_model` and `return_scores_df`:
