@@ -22,9 +22,9 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
-# from tqdm import tqdm
+from tqdm import tqdm
 # from IPython.display import display
-from tqdm import tqdm_notebook as tqdm
+# from tqdm import tqdm_notebook as tqdm
 from xgboost import XGBClassifier
 # from joblib import Parallel, delayed
 from dataloader import DataLoader
@@ -47,6 +47,7 @@ import multiprocessing
 from collections import Counter
 # from logging_levels import add_log_level
 import progressbar
+from joblib_progress import joblib_progress
 # from progress.bar import Bar
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -148,6 +149,7 @@ class MLPipelines(MachineLearningEstimator):
                         results['Estimator'].append(self.name)
                     
         df_results = pd.DataFrame(results)
+        time.sleep(1)
         return [results]
     
     def filter_features(self, train_index, test_index, X, y, num_feature2_use):
@@ -202,39 +204,33 @@ class MLPipelines(MachineLearningEstimator):
             widgets = [progressbar.Percentage()," ", progressbar.GranularBar(), " " ,
                         progressbar.Timer(), " ", progressbar.ETA()]
             
-            if parallel == 'freely_parallel' or parallel == 'dynamic_parallel':
-                if parallel == 'dynamic_parallel':
-                    use_threads = -1
-                else: use_threads = avail_thr
-                
-                from math import ceil
-
-# Define chunks - this approach divides the work into a number of chunks equal to avail_thr
-                chunk_size = ceil(len(train_test_indices) / avail_thr)
-                chunks = [train_test_indices[i:i + chunk_size] for i in range(0, len(train_test_indices), chunk_size)]
-
-                with progressbar.ProgressBar(max_value=len(train_test_indices), widgets=widgets) as bar:
-                    completed = 0
-                    for chunk in chunks:
-                        results_chunk = Parallel(n_jobs=use_threads)(delayed(self.inner_loop)(
-                            train_index, test_index, self.X, self.y, avail_thr) for train_index, test_index in chunk)
-                        completed += len(chunk)
-                        bar.update(completed)
-                        # Flattening results after each chunk completes, to simulate a more real-time progress update
-                        list_dfs_chunk = [item for sublist in results_chunk for item in sublist]
-                    list_dfs.extend(list_dfs_chunk)
-                # with progressbar.ProgressBar(max_value=outer_splits, widgets=widgets) as bar:
-                #     results = Parallel(n_jobs=use_threads)(delayed(self.inner_loop)(
-                #         train_index, test_index, self.X, self.y, avail_thr) for train_index, test_index in train_test_indices)
-                #     list_dfs = [item for sublist in results for item in sublist]
-                #     for split_index in range(len(train_test_indices)):
-                #         bar.update(split_index)
-                #         time.sleep(1)  
-
+            if parallel == 'freely_parallel':
+                temp_list = []
+                with progressbar.ProgressBar(prefix = f'Outer fold of {i+1} round:',max_value=outer_splits, widgets=widgets) as bar:
+                    split_index = 0
+                    for train_index, test_index in train_test_indices:
+                        results = self.inner_loop(train_index, test_index, self.X, self.y, avail_thr)
+                        temp_list.append(results)
+                        bar.update(split_index)
+                        split_index += 1
+                        time.sleep(1)
+                    list_dfs = [item for sublist in temp_list for item in sublist]
+                    end = time.time()
+                    
+            elif parallel == 'dynamic_parallel':
+                temp_list = []
+                use_threads = -1
+                # use_threads = avail_thr
+                # with joblib_progress("Calculating square...", total=len(train_test_indices)):
+                results = Parallel(n_jobs=use_threads)(delayed(self.inner_loop)(
+                    train_index, test_index, self.X, self.y, avail_thr)
+                        for train_index, test_index in tqdm(train_test_indices,desc='Outer fold of %i round:'%(i+1),total=len(train_test_indices)))
+                temp_list = [item for sublist in results for item in sublist]
+                list_dfs.extend(temp_list) 
                 end = time.time()
             else:
                 temp_list = []
-                with progressbar.ProgressBar(max_value=outer_splits, widgets=widgets) as bar:
+                with progressbar.ProgressBar(prefix = f'Outer fold of {i+1} round:',max_value=outer_splits, widgets=widgets) as bar:
                     split_index = 0
                     for train_index, test_index in train_test_indices:
                         results = self.inner_loop(train_index, test_index, self.X, self.y, avail_thr)
