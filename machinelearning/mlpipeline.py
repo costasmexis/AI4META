@@ -61,10 +61,20 @@ class MLPipelines(MachineLearningEstimator):
             - csv_dir (str): path to the csv file
         '''
         super().__init__(label, csv_dir, estimator, param_grid)
-
-    def inner_loop(self, avail_thr, X_train=None, X_test=None, y_train=None, y_test=None):
-        nested_scores = []
-        self.set_optuna_verbosity(logging.ERROR)
+    
+    def inner_loop(self, train_index, test_index, X, y, avail_thr):
+        num_features = self.params['num_features']
+        if type(num_features) is int:
+            feature_loop = num_features.to_list()
+        elif type(num_features) is list:
+            feature_loop = num_features
+        elif num_features is None:
+            feature_loop = [X.shape[1]]
+        else: raise ValueError('num_features must be an integer or a list or None')
+        
+        clfs = self.params['clfs']
+        feature_selection_type = self.params['feature_selection_type']
+        
         optimizer = self.params['optimizer']
         inner_scoring = self.params['inner_scoring']
         inner_cv = self.params['inner_cv']
@@ -77,172 +87,173 @@ class MLPipelines(MachineLearningEstimator):
         if parallel == 'thread_per_round':
             n_jobs = 1
             opt_grid = 'NestedCV_single'
-        elif parallel == 'freely_parallel' or parallel == 'dynamic_parallel' :#or 'dask_parallel':
+        elif parallel == 'freely_parallel' or parallel == 'dynamic_parallel' :
             n_jobs = avail_thr
-            if parallel == 'dynamic_parallel':# or 'dask_parallel':
-                # opt_grid = 'NestedCV_multi'
+            if parallel == 'dynamic_parallel':
                 opt_grid = 'NestedCV_single'
             else:opt_grid = 'NestedCV_single'
-           
-
-        if optimizer == 'grid_search':
-            clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
-                              param_grid=self.param_grid, cv=inner_cv, n_jobs=1, verbose=0)
-        elif optimizer == 'random_search':
-                    clf = RandomizedSearchCV(estimator=self.estimator, scoring=inner_scoring,
-                                             param_distributions=self.param_grid, cv=inner_cv, n_jobs=1, 
-                                             verbose=0, n_iter=n_iter)
-        elif optimizer == 'bayesian_search':
-            clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
-                                                    param_distributions=optuna_grid[opt_grid][self.name],
-                                                    cv=inner_cv, n_jobs=n_jobs, verbose=0, n_trials=n_trials_ncv)
-        else:
-            raise Exception("Unsupported optimizer.")   
+            
+        results={'Scores': [],
+            'Classifiers': [],
+            'Selected_Features': [],
+            'Number_of_Features': [],
+            'Way_of_Selection': [],
+            'Estimator': []}
         
-        clf.fit(X_train, y_train)
-        y_pred = clf.predict(X_test)
-        nested_score = outer_scorer(clf, X_test, y_test)
-        nested_scores.append(nested_score)
-        return nested_scores 
-    
-    
-    def clf_app(self, X_train_selected, X_test_selected, y_train, y_test, num_feature, avail_thr):
-        results={
-        'Scores': [],
-        'Classifiers': [],
-        'Selected_Features': [],
-        'Number_of_Features': [],
-        'Way_of_Selection': [],
-        'Estimator': []}
-        
-        clfs = self.params['clfs']
-        feature_selection_type = self.params['feature_selection_type']
-        
-        if clfs == None :
-            nested_scores_tr = self.inner_loop(avail_thr=avail_thr, X_train=X_train_selected, X_test=X_test_selected, y_train=y_train, y_test=y_test)
-        else:
-            for estimator in clfs:
-                self.estimator = self.available_clfs[estimator]
-                self.name = self.estimator.__class__.__name__
-                nested_scores_tr = self.inner_loop(avail_thr=avail_thr, X_train=X_train_selected, X_test=X_test_selected, y_train=y_train, y_test=y_test)
-                if num_feature == 'full' or num_feature is None:
-                    results['Scores'].append(nested_scores_tr[0])
-                    results['Classifiers'].append(self.name)
-                    results['Selected_Features'].append(None)  
-                    results['Number_of_Features'].append(X_test_selected.shape[1])
-                    results['Way_of_Selection'].append('full')
-                    results['Estimator'].append(self.name)
-                else:
-                    results['Scores'].append(nested_scores_tr[0])
-                    results['Classifiers'].append(f"{self.name}_{feature_selection_type}_{num_feature}")
-                    results['Selected_Features'].append(X_train_selected.columns.tolist())  
-                    results['Number_of_Features'].append(num_feature)
-                    results['Way_of_Selection'].append(feature_selection_type)
-                    results['Estimator'].append(self.name)
+        for num_feature2_use in feature_loop:
+            X_train_selected, X_test_selected, num_feature = self.filter_features(train_index, test_index, X, y, num_feature2_use) 
+            y_train, y_test = y[train_index], y[test_index]
+            
+            if clfs == None :
+                raise ValueError("No classifier specified.")
+            else:
+                for estimator in clfs:
+                    self.estimator = self.available_clfs[estimator]
+                    self.name = self.estimator.__class__.__name__
+                    nested_scores = []
+                    
+                    if optimizer == 'grid_search':
+                        clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
+                                        param_grid=self.param_grid, cv=inner_cv, n_jobs=1, verbose=0)
+                    elif optimizer == 'random_search':
+                                clf = RandomizedSearchCV(estimator=self.estimator, scoring=inner_scoring,
+                                                        param_distributions=self.param_grid, cv=inner_cv, n_jobs=1, 
+                                                        verbose=0, n_iter=n_iter)
+                    elif optimizer == 'bayesian_search':
+                        self.set_optuna_verbosity(logging.ERROR)
+                        clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
+                                                                param_distributions=optuna_grid[opt_grid][self.name],
+                                                                cv=inner_cv, n_jobs=n_jobs, verbose=0, n_trials=n_trials_ncv)
+                    else:
+                        raise Exception("Unsupported optimizer.")   
+                    
+                    clf.fit(X_train_selected, y_train)
+                    y_pred = clf.predict(X_test_selected)
+                    nested_score = outer_scorer(clf, X_test_selected, y_test)
+                    nested_scores.append(nested_score)                
+                    
+                    if num_feature == 'full' or num_feature is None:
+                        results['Scores'].append(nested_scores[0])
+                        results['Classifiers'].append(self.name)
+                        results['Selected_Features'].append(None)  
+                        results['Number_of_Features'].append(X_test_selected.shape[1])
+                        results['Way_of_Selection'].append('full')
+                        results['Estimator'].append(self.name)
+                    else:
+                        results['Scores'].append(nested_scores[0])
+                        results['Classifiers'].append(f"{self.name}_{feature_selection_type}_{num_feature}")
+                        results['Selected_Features'].append(X_train_selected.columns.tolist())  
+                        results['Number_of_Features'].append(num_feature)
+                        results['Way_of_Selection'].append(feature_selection_type)
+                        results['Estimator'].append(self.name)
+                    
         df_results = pd.DataFrame(results)
-        return df_results
+        return [results]
     
-    # def filter_features():
+    def filter_features(self, train_index, test_index, X, y, num_feature2_use):
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        y_train, y_test = y[train_index], y[test_index]
+        feature_selection_type = self.params['feature_selection_type']
+        feature_selection_method = self.params['feature_selection_method']
+        
+        if num_feature2_use is not None and feature_selection_type != 'percentile':
+            if type(num_feature2_use) is int:
+                if num_feature2_use < X_train.shape[1]:
+                    self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, num_features=num_feature2_use, inner_method=feature_selection_method)                            
+                    X_train_selected = X_train[self.selected_features]
+                    X_test_selected = X_test[self.selected_features]
+                    num_feature = num_feature2_use
+                elif type(num_feature2_use) is int and num_feature2_use == X_train.shape[1]:
+                    X_train_selected = X_train
+                    X_test_selected = X_test
+                    num_feature='full'
+                else: 
+                    raise ValueError('num_features must be an integer less than the number of features in the dataset')
+        elif feature_selection_type == 'percentile' and num_feature2_use is not None:
+            if type(num_feature2_use) is int:
+                if num_feature2_use == 100:
+                    X_train_selected = X_train
+                    X_test_selected = X_test
+                    num_feature='full'
+                elif num_feature2_use < 100 and num_feature2_use > 0:
+                    self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, inner_method=feature_selection_method, num_features=num_feature2_use)
+                    X_train_selected = X_train[self.selected_features]
+                    X_test_selected = X_test[self.selected_features]
+                    num_feature=num_feature2_use
+                else: 
+                    raise ValueError('num_features must be an integer less or equal than 100 and hugher thatn 0')
+        else:         
+            raise ValueError('num_features must be an integer or a list or None')
+        
+        return X_train_selected, X_test_selected, num_feature
     
 
-    def outer_cv_loop(self,i,avail_thr=1):
+    def outer_cv_loop(self,i,avail_thr):
             start = time.time()
             inner_splits = self.params['inner_splits']
             outer_splits = self.params['outer_splits']
-            num_features = self.params['num_features']
-            feature_selection_type = self.params['feature_selection_type']
-            feature_selection_method = self.params['feature_selection_method']
-            list_dfs=[]
             inner_cv = StratifiedKFold(n_splits=inner_splits, shuffle=True, random_state=i)
             outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=i)
             self.params['inner_cv'] = inner_cv
             self.params['outer_cv'] = outer_cv 
+            parallel = self.params['parallel']
+            train_test_indices = list(outer_cv.split(self.X, self.y))
+            list_dfs=[]
             widgets = [progressbar.Percentage()," ", progressbar.GranularBar(), " " ,
-                       progressbar.Timer(), " ", progressbar.ETA()]
-            with progressbar.ProgressBar(prefix = f'Outer fold of {i+1} round:', max_value=outer_splits,widgets=widgets) as bar:
-                split_index = 0
-                for train_index, test_index in outer_cv.split(self.X, self.y):
-                    X_train, X_test = self.X.iloc[train_index], self.X.iloc[test_index]
-                    y_train, y_test = self.y[train_index], self.y[test_index]
-                    if num_features is not None and feature_selection_type != 'percentile':
-                        if type(num_features) is int:
-                            if num_features < X_train.shape[1]:
-                                self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, num_features=num_features, inner_method=feature_selection_method)                            
-                                X_train_selected = X_train[self.selected_features]
-                                X_test_selected = X_test[self.selected_features]
-                                num_feature = num_features
-                            elif type(num_features) is int and num_features == X_train.shape[1]:
-                                X_train_selected = X_train
-                                X_test_selected = X_test
-                                num_feature='full'
-                            else: 
-                                raise ValueError('num_features must be an integer less than the number of features in the dataset')
-                            df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature,avail_thr=avail_thr)                        
-                            list_dfs.append(df)
-                        elif type(num_features) is list :
-                            for num_feature in num_features:
-                                if num_feature > X_train.shape[1]:
-                                    raise ValueError('num_features must be less than the number of features in the dataset')                            
-                                elif num_feature == X_train.shape[1]:
-                                    X_train_selected = X_train
-                                    X_test_selected = X_test
-                                    num_feature='full'
-                                else: 
-                                    self.selected_features=self.feature_selection(X=X_train, y=y_train, method=feature_selection_type, num_features=num_feature, inner_method=feature_selection_method)
-                                    X_train_selected = X_train[self.selected_features]
-                                    X_test_selected = X_test[self.selected_features]
-                                    num_feature=num_feature
-                                df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature,avail_thr=avail_thr)
-                                list_dfs.append(df)
-                    elif feature_selection_type == 'percentile' and num_features is not None:
-                        if type(num_features) is int:
-                            if num_features == 100:
-                                X_train_selected = X_train
-                                X_test_selected = X_test
-                                num_feature='full'
-                            elif num_features < 100 and num_features > 0:
-                                self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, inner_method=feature_selection_method, num_features=num_features)
-                                X_train_selected = X_train[self.selected_features]
-                                X_test_selected = X_test[self.selected_features]
-                                num_feature=num_features
-                            else: 
-                                raise ValueError('num_features must be an integer less or equal than 100 and hugher thatn 0')
-                            df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature,avail_thr=avail_thr)
-                            list_dfs.append(df)
-                        elif type(num_features) is list:
-                            for num_feature in num_features:
-                                if num_feature == 100: 
-                                    X_train_selected = X_train
-                                    X_test_selected = X_test
-                                    num_feature='full'
-                                else:
-                                    self.selected_features=self.feature_selection(X=X_train, y=y_train, method=feature_selection_type, inner_method=feature_selection_method, num_features=num_feature)
-                                    X_train_selected = X_train[self.selected_features]
-                                    X_test_selected = X_test[self.selected_features]
-                                    num_feature=num_feature
-                                df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature,avail_thr=avail_thr)
-                                list_dfs.append(df)
-                    elif num_features is None:
-                        X_train_selected = X_train
-                        X_test_selected = X_test
-                        num_feature='full'
-                        df = self.clf_app(X_train_selected=X_train_selected, y_train=y_train, X_test_selected=X_test_selected, y_test=y_test,num_feature=num_feature,avail_thr=avail_thr)
-                        list_dfs.append(df)
-                    else:         
-                        raise ValueError('num_features must be an integer or a list or None')
-                    bar.update(split_index)
-                    split_index += 1
-                    time.sleep(1)
-            end = time.time()
+                        progressbar.Timer(), " ", progressbar.ETA()]
+            
+            if parallel == 'freely_parallel' or parallel == 'dynamic_parallel':
+                if parallel == 'dynamic_parallel':
+                    use_threads = -1
+                else: use_threads = avail_thr
+                
+                from math import ceil
+
+# Define chunks - this approach divides the work into a number of chunks equal to avail_thr
+                chunk_size = ceil(len(train_test_indices) / avail_thr)
+                chunks = [train_test_indices[i:i + chunk_size] for i in range(0, len(train_test_indices), chunk_size)]
+
+                with progressbar.ProgressBar(max_value=len(train_test_indices), widgets=widgets) as bar:
+                    completed = 0
+                    for chunk in chunks:
+                        results_chunk = Parallel(n_jobs=use_threads)(delayed(self.inner_loop)(
+                            train_index, test_index, self.X, self.y, avail_thr) for train_index, test_index in chunk)
+                        completed += len(chunk)
+                        bar.update(completed)
+                        # Flattening results after each chunk completes, to simulate a more real-time progress update
+                        list_dfs_chunk = [item for sublist in results_chunk for item in sublist]
+                    list_dfs.extend(list_dfs_chunk)
+                # with progressbar.ProgressBar(max_value=outer_splits, widgets=widgets) as bar:
+                #     results = Parallel(n_jobs=use_threads)(delayed(self.inner_loop)(
+                #         train_index, test_index, self.X, self.y, avail_thr) for train_index, test_index in train_test_indices)
+                #     list_dfs = [item for sublist in results for item in sublist]
+                #     for split_index in range(len(train_test_indices)):
+                #         bar.update(split_index)
+                #         time.sleep(1)  
+
+                end = time.time()
+            else:
+                temp_list = []
+                with progressbar.ProgressBar(max_value=outer_splits, widgets=widgets) as bar:
+                    split_index = 0
+                    for train_index, test_index in train_test_indices:
+                        results = self.inner_loop(train_index, test_index, self.X, self.y, avail_thr)
+                        temp_list.append(results)
+                        bar.update(split_index)
+                        split_index += 1
+                        time.sleep(1)
+                    list_dfs = [item for sublist in temp_list for item in sublist]
+                    end = time.time()
+                
             print(f'Finished with {i+1} round after {(end-start)/3600:.2f} hours.')
             return list_dfs
 
 
-    def nested_cross_validation(self, params):
-        inner_scoring=params['inner_scoring']
-        outer_scoring=params['outer_scoring']
-        rounds=params['rounds']
-        parallel=params['parallel']
+    def nested_cross_validation(self):
+        inner_scoring=self.params['inner_scoring']
+        outer_scoring=self.params['outer_scoring']
+        rounds=self.params['rounds']
+        parallel=self.params['parallel']
         if inner_scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
         if outer_scoring not in sklearn.metrics.get_scorer_names():
@@ -257,12 +268,14 @@ class MLPipelines(MachineLearningEstimator):
             use_cores = rounds
             
         avail_thr = num_cores//rounds
+        
         if avail_thr == 0:
             avail_thr = 1
 
         if parallel == 'thread_per_round':
+            avail_thr = 1
             with threadpool_limits(limits=avail_thr):
-                list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i) for i in trial_indices)
+                list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
         
         elif parallel == 'dynamic_parallel':   
                 pool = Pool(processes=num_cores)
@@ -275,12 +288,16 @@ class MLPipelines(MachineLearningEstimator):
                 list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
         
         else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round or freely_parallel')
-        
+
         list_dfs_flat = list(chain.from_iterable(list_dfs))
+            
         df_final = pd.DataFrame()
-        for dataframe in list_dfs_flat:
+        for item in list_dfs_flat:
+            dataframe = pd.DataFrame(item)
             df_final = pd.concat([df_final, dataframe], axis=0)
+            
         return df_final
+
     
     
     def model_selection(self,optimizer = 'grid_search', n_trials_ncv=25, n_trials=100, n_iter=25, 
@@ -347,8 +364,7 @@ class MLPipelines(MachineLearningEstimator):
         if self.X.isnull().values.any():
             print('Your Dataset contains NaN values. Some estimators does not work with NaN values.')
 
-        df = self.nested_cross_validation(self.params)
-        print(df.tail(10))
+        df = self.nested_cross_validation()
         
         for classif in np.unique(df['Classifiers']):
             indices = df[df['Classifiers'] == classif]
