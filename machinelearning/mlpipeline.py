@@ -3,7 +3,6 @@ import optuna
 import pandas as pd
 import matplotlib.pyplot as plt
 import sklearn
-# from sklearn.metrics import matthews_corrcoef
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -23,10 +22,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from tqdm import tqdm
-# from IPython.display import display
-# from tqdm import tqdm_notebook as tqdm
 from xgboost import XGBClassifier
-# from joblib import Parallel, delayed
 from dataloader import DataLoader
 
 from .mlestimator import MachineLearningEstimator
@@ -35,20 +31,15 @@ from .optuna_grid import optuna_grid
 from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif, SelectPercentile
 from mrmr import mrmr_classif
 import logging
-# from numba import jit, prange
 # from .Features_explanation import Features_explanation
 from multiprocessing import Pool
 from itertools import chain
 import time
 from threadpoolctl import threadpool_limits
 from joblib import Parallel, delayed,  parallel_backend
-# from progress.bar import Bar
 import multiprocessing 
 from collections import Counter
-# from logging_levels import add_log_level
 import progressbar
-from joblib_progress import joblib_progress
-# from progress.bar import Bar
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
     
@@ -91,8 +82,9 @@ class MLPipelines(MachineLearningEstimator):
         elif parallel == 'freely_parallel' or parallel == 'dynamic_parallel' :
             n_jobs = avail_thr
             if parallel == 'dynamic_parallel':
-                opt_grid = 'NestedCV_single'
-            else:opt_grid = 'NestedCV_single'
+                opt_grid = 'NestedCV_multi'
+                # n_jobs = -1
+            # opt_grid = 'NestedCV_single'
             
         results={'Scores': [],
             'Classifiers': [],
@@ -219,15 +211,15 @@ class MLPipelines(MachineLearningEstimator):
                     
             elif parallel == 'dynamic_parallel':
                 temp_list = []
-                use_threads = -1
-                # use_threads = avail_thr
-                # with joblib_progress("Calculating square...", total=len(train_test_indices)):
-                results = Parallel(n_jobs=use_threads)(delayed(self.inner_loop)(
+                num_cores = multiprocessing.cpu_count()
+                results = Parallel(n_jobs=num_cores)(delayed(self.inner_loop)(
                     train_index, test_index, self.X, self.y, avail_thr)
                         for train_index, test_index in tqdm(train_test_indices,desc='Outer fold of %i round:'%(i+1),total=len(train_test_indices)))
                 temp_list = [item for sublist in results for item in sublist]
                 list_dfs.extend(temp_list) 
                 end = time.time()
+                
+                
             else:
                 temp_list = []
                 with progressbar.ProgressBar(prefix = f'Outer fold of {i+1} round:',max_value=outer_splits, widgets=widgets) as bar:
@@ -274,10 +266,17 @@ class MLPipelines(MachineLearningEstimator):
                 list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
         
         elif parallel == 'dynamic_parallel':   
-                pool = Pool(processes=num_cores)
-                list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
-                pool.close()
-                pool.join()
+                # pool = Pool(processes=num_cores,maxtasksperchild=1)
+                # list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
+                # pool.close()
+                # pool.join()
+                avail_thr = num_cores//self.params['outer_splits']
+
+                list_dfs=[]
+                with threadpool_limits(limits=avail_thr):
+                    for i in range(rounds):
+                        list_dfs.append(self.outer_cv_loop(i,num_cores))
+                
                 
         elif parallel == 'freely_parallel':
             with threadpool_limits(limits=avail_thr):
