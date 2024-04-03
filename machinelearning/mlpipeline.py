@@ -31,6 +31,7 @@ from .optuna_grid import optuna_grid
 from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif, SelectPercentile
 from mrmr import mrmr_classif
 import logging
+from scipy.stats import sem
 # from .Features_explanation import Features_explanation
 from multiprocessing import Pool
 from itertools import chain
@@ -75,15 +76,15 @@ class MLPipelines(MachineLearningEstimator):
         outer_scoring = self.params['outer_scoring']
         outer_scorer = get_scorer(outer_scoring)
         parallel = self.params['parallel']
-        
+
+        opt_grid = 'NestedCV_single'
         if parallel == 'thread_per_round':
             n_jobs = 1
-            opt_grid = 'NestedCV_single'
         elif parallel == 'freely_parallel' or parallel == 'dynamic_parallel' :
             n_jobs = avail_thr
             if parallel == 'dynamic_parallel':
-                opt_grid = 'NestedCV_multi'
-                # n_jobs = -1
+                # opt_grid = 'NestedCV_multi'
+                n_jobs = 1
             # opt_grid = 'NestedCV_single'
             
         results={'Scores': [],
@@ -211,10 +212,9 @@ class MLPipelines(MachineLearningEstimator):
                     
             elif parallel == 'dynamic_parallel':
                 temp_list = []
-                num_cores = multiprocessing.cpu_count()
-                results = Parallel(n_jobs=num_cores)(delayed(self.inner_loop)(
+                results = Parallel(n_jobs=len(train_test_indices))(delayed(self.inner_loop)(
                     train_index, test_index, self.X, self.y, avail_thr)
-                        for train_index, test_index in tqdm(train_test_indices,desc='Outer fold of %i round:'%(i+1),total=len(train_test_indices)))
+                    for train_index, test_index in tqdm(train_test_indices,desc='Outer fold of %i round:'%(i+1),total=len(train_test_indices)))
                 temp_list = [item for sublist in results for item in sublist]
                 list_dfs.extend(temp_list) 
                 end = time.time()
@@ -265,19 +265,16 @@ class MLPipelines(MachineLearningEstimator):
             with threadpool_limits(limits=avail_thr):
                 list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
         
-        elif parallel == 'dynamic_parallel':   
-                # pool = Pool(processes=num_cores,maxtasksperchild=1)
-                # list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
-                # pool.close()
-                # pool.join()
-                avail_thr = num_cores//self.params['outer_splits']
-
-                list_dfs=[]
-                with threadpool_limits(limits=avail_thr):
-                    for i in range(rounds):
-                        list_dfs.append(self.outer_cv_loop(i,num_cores))
-                
-                
+        elif parallel == 'dynamic_parallel': 
+            avail_thr = 1
+            if rounds > num_cores:
+                pool = Pool(processes=num_cores)
+            else: 
+                pool = Pool(processes=rounds)
+            list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
+            pool.close()
+            pool.join()
+                 
         elif parallel == 'freely_parallel':
             with threadpool_limits(limits=avail_thr):
                 list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
@@ -330,7 +327,7 @@ class MLPipelines(MachineLearningEstimator):
             inner_splits (int, optional): Number of splits for inner CV. Defaults to 5.
             outer_splits (int, optional): Number of splits for outer CV. Defaults to 5.
             verbose (bool, optional): Enables detailed logging. Defaults to True.
-            parallel (str, optional): Parallelization method ('thread_per_round', 'freely_parallel', 'dynamic_parallel','dask_parallel'). Defaults to 'thread_per_round'.
+            parallel (str, optional): Parallelization method ('thread_per_round', 'freely_parallel' and  'dynamic_parallel'). Defaults to 'thread_per_round'.
 
         Returns:
             The best fitted estimator if return_best_model is True. Optionally returns a DataFrame of scores if return_scores_df is True. The exact return type depends on the flags `return_best_model` and `return_scores_df`:
@@ -369,8 +366,9 @@ class MLPipelines(MachineLearningEstimator):
             mean_score = np.mean(filtered_scores)
             max_score = np.max(filtered_scores)
             std_score = np.std(filtered_scores)
+            sem_score = sem(filtered_scores)
             median_score = np.median(filtered_scores)
-            evaluated_score = mean_score - alpha * std_score  
+            evaluated_score = mean_score - alpha * sem_score  
             Numbers_of_Features = indices['Number_of_Features'].unique()[0]
             Way_of_Selection = indices['Way_of_Selection'].unique()[0]
 
@@ -380,6 +378,7 @@ class MLPipelines(MachineLearningEstimator):
                     'Scores': filtered_scores.tolist(),  
                     'Max': max_score,
                     'Std': std_score,
+                    'SEM':sem_score,
                     'Median': median_score,
                     'Evaluated': evaluated_score,
                     'Selected_Features': filtered_features if num_features is not None else None,
