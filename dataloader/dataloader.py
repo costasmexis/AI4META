@@ -53,26 +53,52 @@ class DataLoader:
         print(f'Number of missing values: {total_missing}')
         if method == 'drop':
             self.data.dropna(inplace=True)
-        elif method in ['mean', 'median']:
+        elif method in ['mean', 'median','0']:
             fill_value = getattr(self.data, method)()
             self.data.fillna(fill_value, inplace=True)
         else:
             raise Exception("Unsupported missing values method.")
         
-    def normalize(self, method='minmax'):
-        """ Function to normalize the dataset.
-        Args:
-            method (str, optional): Method to use for normalization. Defaults to 'minmax'.
-                - minmax: MinMaxScaler
-                - standard: StandardScaler
+    def normalize(self, X=None, method='minmax'):
         """
+        Normalizes the dataset using specified method.
+
+        This method supports normalization using either MinMaxScaler or StandardScaler from the pandas library. 
+        If no dataset is explicitly passed to it, the method defaults to normalizing the instance's dataset.
+
+        Parameters:
+        - X (pandas.DataFrame, optional): The dataset to normalize. If not provided, the instance's dataset is used.
+        - method (str, optional): The normalization method to use. Defaults to 'minmax'. Options include:
+            - 'minmax': Uses MinMaxScaler for normalization.
+            - 'standard': Uses StandardScaler for normalization.
+
+        Returns:
+        - pandas.DataFrame: The normalized dataset. If `X` is not provided, the instance's dataset is updated in place and nothing is returned.
+
+        Raises:
+        - Exception: If an unsupported normalization method is specified.
+
+        Note:
+        - This method updates the instance's dataset if no `X` is provided. It also updates the instance's scaler attribute to the scaler used for normalization.
+        - A message indicating the completion of normalization is printed. If the instance's dataset is used, a message specifying the normalization method is also printed.
+        """
+        initial_data=False
+        
+        if X is None:
+            X = self.X
+            initial_data=True
+            print(f'Converting the raw data with {method} normalization method....')
+            
         if method in ['minmax', 'standard']:
             self.scaler = MinMaxScaler() if method == 'minmax' else StandardScaler()
-            self.X = pd.DataFrame(self.scaler.fit_transform(self.X), columns=self.X.columns)
+            X = pd.DataFrame(self.scaler.fit_transform(X), columns=X.columns)
         else:
             raise Exception("Unsupported normalization method.")
+        print('Normalization completed.')
+        if initial_data:
+            self.X = X
+        else: return X
     
-    # @jit(parallel=True)
     def feature_selection(self, X=None, y=None, method='mrmr', num_features=10, inner_method='chi2'):        
         """ Function to perform Feature Selection.
         Args:
@@ -101,8 +127,6 @@ class DataLoader:
         scoring_function = method_mapping[inner_method]    
         
         if method == 'mrmr':
-            # self.selected_features = mrmr_classif(self.X, self.y, K=n_features)
-            # self.X = self.X[self.selected_features]
             self.selected_features = mrmr_classif(X, y, K=num_features,show_progress=False)
             X = X[self.selected_features]
 
@@ -111,10 +135,8 @@ class DataLoader:
                 raise Exception("Feature selection method requires MinMaxScaler.")
             if method == 'kbest':
                 X = SelectKBest(scoring_function, k=num_features).fit_transform(X, y)
-                # self.X = SelectKBest(scoring_function, k=n_features).fit_transform(self.X, self.y)
 
             elif method == 'percentile':
-                # self.X = SelectPercentile(scoring_function, percentile=percentile).fit_transform(self.X, self.y)
                 X = SelectPercentile(scoring_function, percentile=num_features).fit_transform(X, y)
             else: raise Exception("Unsupported feature selection method.")
         
