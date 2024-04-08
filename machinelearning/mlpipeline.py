@@ -265,7 +265,7 @@ class MLPipelines(MachineLearningEstimator):
         
         elif parallel == 'dynamic_parallel': 
             # avail_thr = 1
-            with Pool(processes=use_cores) as pool:
+            with Pool() as pool:
                 list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
                  
         elif parallel == 'freely_parallel':
