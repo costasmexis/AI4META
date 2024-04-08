@@ -12,7 +12,7 @@ import shap
 from dataloader import DataLoader
 import seaborn as sns
 import matplotlib.pyplot as plt
-
+import scipy.stats as stats
 
 
 class ExploreExplain(DataLoader):
@@ -76,7 +76,125 @@ class ExploreExplain(DataLoader):
         
         return correl_table
         
+        
+    def pairplots_function(self, list_of_feature=None, num_of_best_features=10, way_of_selection='mrmr', normalization_method=None):
+        """
+        Generate pairplots to visualize relationships between features and labels.
+        
+        Parameters:
+            list_of_feature (list): List of features to include in the pairplots.
+            num_of_best_features (int): Number of best features to select for pairplots.
+            way_of_selection (str): Feature selection method to use.
+            normalization_method (str): Method for normalizing the data.
+            
+        Returns:
+            The pairplot.
+        """        
+        data = self.X
+        labels = self.y
+       
+        if normalization_method != None:
+            if normalization_method in ['minmax', 'standard']:
+                data = self.normalize(data, method=normalization_method)
+            else: 
+                raise Exception("Unsupported normalization method.")
+        
+        if list_of_feature is not None:
+            data_df = data_df[list_of_feature]
+            
+        if num_of_best_features is not None:
+            selected = self.feature_selection(data, labels, method = way_of_selection, num_features = num_of_best_features)
+            data = data[selected]
+        
+        data['labels'] = labels
+        sns.pairplot(data, hue='labels')
+        plt.show()
+        
+    def statistical_difference(self,p_value=0.05,list_of_feature=None, num_of_best_features=None, way_of_selection='mrmr', normalization_method=None):
+        """
+        Perform non-parametric statistical tests to identify significant features based on labels,
+        and visualize these features' distributions across groups using boxplots.
+        
+        This function allows optional data normalization and feature selection before conducting
+        the statistical tests. It supports identifying a specified number of best features using
+        the provided feature selection method and visualizes the results for features where
+        the distributions significantly differ across the groups as determined by the specified p-value.
+        
+        Parameters:
+        - p_value (float): Significance level for determining statistical significance in tests.
+                        Defaults to 0.05.
+        - list_of_feature (list, optional): List of features to consider for the statistical tests.
+                                            If None, all features in the dataset are used.
+                                            Defaults to None.
+        - num_of_best_features (int, optional): Number of top features to select based on the specified
+                                                feature selection method. If None, no feature selection is applied.
+                                                Defaults to None.
+        - way_of_selection (str): Feature selection method to use when num_of_best_features is specified.
+                                Supported values are 'mrmr' and others as implemented in the feature_selection method.
+                                Defaults to 'mrmr'.
+        - normalization_method (str, optional): Normalization method to apply to the data before performing
+                                                statistical tests. Supported method is 'minmax' .
+                                                If None, no normalization is applied. Defaults to None.
 
+        Returns:
+        - list: A list of feature names that show statistically significant differences across groups,
+                based on the specified p-value threshold. Returns an empty list if no significant features are found.
+                
+        Raises:
+        - Exception: If an unsupported normalization method is specified.
+        
+        Note:
+        No normalization is required for the statistical tests since the methods used are non-parametric.
+        """
+        data = self.X
+        labels = self.y
+       
+        if normalization_method != None:
+            if normalization_method in ['minmax']:
+                data = self.normalize(data, method=normalization_method)
+            else: 
+                raise Exception("Only minmax normalization is supported for non-parametric statistical difference test.")
+        
+        if list_of_feature is not None:
+            data_df = data_df[list_of_feature]
+            
+        if num_of_best_features is not None:
+            selected = self.feature_selection(data, labels, method = way_of_selection, num_features = num_of_best_features)
+            data = data[selected]
+        
+        data['labels'] = labels
+        
+        p_values = {}
+        
+        groups = data['labels'].unique()
+        
+        for feature in data.columns[:-1]:
+            group_data = [data[feature][labels == group] for group in groups]
+            # Perform the appropriate statistical test based on the number of groups
+            # Kruskal-Wallis H-test for more than two groups
+            # test_stat, p_value = stats.kruskal(*group_data)
+            
+            # Mann-Whitney U test for two groups
+            test_stat, p_value = stats.mannwhitneyu(*group_data, alternative='two-sided')
+            p_values[feature] = p_value
+        
+        significant_features = [feature for feature, p in p_values.items() if p < p_value]
+        
+        if significant_features:
+            data_all = data[significant_features].copy()
+            data_all['labels'] = labels
+            melted_data_all = pd.melt(data_all, id_vars='labels', var_name='variable', value_name='value')            
+            print(f'Number of significant features: {len(significant_features)} of {len(data.columns)-1} provided.')
+            
+            plt.figure(figsize=(max(12, len(significant_features)), 10))            
+            sns.boxplot(x='variable', y='value', hue='labels', data=melted_data_all) 
+            plt.xticks(rotation=90)
+            plt.title('Boxplot of Significant Features')
+            plt.tight_layout()
+            plt.show()
+            return significant_features
+        else:
+            print("No significant features found.")
         
             
 

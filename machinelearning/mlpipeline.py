@@ -82,9 +82,9 @@ class MLPipelines(MachineLearningEstimator):
             n_jobs = 1
         elif parallel == 'freely_parallel' or parallel == 'dynamic_parallel' :
             n_jobs = avail_thr
-            if parallel == 'dynamic_parallel':
+            # if parallel == 'dynamic_parallel':
                 # opt_grid = 'NestedCV_multi'
-                n_jobs = 1
+                # n_jobs = 1
             # opt_grid = 'NestedCV_single'
             
         results={'Scores': [],
@@ -250,15 +250,13 @@ class MLPipelines(MachineLearningEstimator):
 
         rounds = self.params['rounds']
         num_cores = multiprocessing.cpu_count()
+        
         if num_cores < rounds:
             use_cores = num_cores
         else:
             use_cores = rounds
             
-        avail_thr = num_cores//rounds
-        
-        if avail_thr == 0:
-            avail_thr = 1
+        avail_thr = max(1, num_cores//rounds)
 
         if parallel == 'thread_per_round':
             avail_thr = 1
@@ -266,14 +264,9 @@ class MLPipelines(MachineLearningEstimator):
                 list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
         
         elif parallel == 'dynamic_parallel': 
-            avail_thr = 1
-            if rounds > num_cores:
-                pool = Pool(processes=num_cores)
-            else: 
-                pool = Pool(processes=rounds)
-            list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
-            pool.close()
-            pool.join()
+            # avail_thr = 1
+            with Pool(processes=use_cores) as pool:
+                list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
                  
         elif parallel == 'freely_parallel':
             with threadpool_limits(limits=avail_thr):
