@@ -303,12 +303,15 @@ class ExploreExplain(DataLoader):
                 
                 fig.show()
                 
-        if components_resize != None and variance_threshold != None:
+        if variance_threshold != None:
             components_resize = components_found
+            pca_optimal = PCA(n_components=components_resize)
         elif components_resize == None and variance_threshold == None:
-            raise Exception("Please specify either variance or components_plot")
+            # raise Exception("Please specify either variance or components_plot")
+            pca_optimal = PCA()
+        elif components_resize != None and variance_threshold == None:
+            pca_optimal = PCA(n_components=components_resize)
         
-        pca_optimal = PCA(n_components=components_resize)
         X_pca_optimal = pca_optimal.fit_transform(data)
         
         total_var = pca_optimal.explained_variance_ratio_.sum() * 100
