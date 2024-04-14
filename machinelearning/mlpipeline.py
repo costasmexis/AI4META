@@ -146,7 +146,14 @@ class MLPipelines(MachineLearningEstimator):
         return [results]
     
     def filter_features(self, train_index, test_index, X, y, num_feature2_use):
-        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+        X_tr, X_te = X.iloc[train_index], X.iloc[test_index]
+        norm_method = self.params['norm_method']
+        missing_values_method = self.params['missing_values_method']
+        X_train, X_test = self.normalize(X=X_tr,train_test_set=True,X_test=X_te, method=norm_method)
+        
+        X_train = self.missing_values(data=X_train, method=missing_values_method)
+        X_test = self.missing_values(data=X_test, method=missing_values_method)
+        
         y_train, y_test = y[train_index], y[test_index]
         feature_selection_type = self.params['feature_selection_type']
         feature_selection_method = self.params['feature_selection_method']
@@ -290,7 +297,8 @@ class MLPipelines(MachineLearningEstimator):
                         most_imp_feat=10,search_on=None, return_scores_df=False, alpha=0.2,num_features=None,
                         feature_selection_type='mrmr',feature_selection_method='chi2', plot='box',
                         return_best_model=True,choose_model=False,inner_scoring='matthews_corrcoef',
-                        outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5, verbose=True, parallel='thread_per_round'):
+                        outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5, verbose=True,
+                        parallel='thread_per_round',norm_method='minmax', missing_values_method='median'):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
 
@@ -329,6 +337,10 @@ class MLPipelines(MachineLearningEstimator):
                 - If only return_scores_df is True, returns scores_dataframe.
                 - Otherwise, returns None.
         """
+        if missing_values_method == 'drop':
+            print(f'Values cannot be dropped at ncv because of inconsistent shapes. The "median" will be used to handle missing values.')
+            missing_values_method = 'median'
+            
         self.params = locals()
         self.params.pop('self', None)
 
@@ -483,7 +495,8 @@ class MLPipelines(MachineLearningEstimator):
             X2fit = X2fit[selected_X]             
         else:
             pass
-        
+        X2fit = self.normalize(X=X2fit,method=norm_method)
+        X2fit = self.missing_values(data=X2fit, method=missing_values_method)
         if return_best_model:
             if optimizer == 'bayesian_search':
                 self.best_estimator = self.bayesian_search(X=X2fit, y=self.y, cv=5, n_trials=n_trials, verbose=True,return_model=return_best_model)

@@ -47,19 +47,31 @@ class DataLoader:
         self.label_mapping = {index: class_label for index, class_label in enumerate(label_encoder.classes_)}
         print("Label mapping:", self.label_mapping)
         
-    def missing_values(self, method='drop'):
+    def missing_values(self, data=None, method='drop'):
         ''' Function to handle missing values in the dataset.'''
-        total_missing = self.data.isnull().sum().sum()
-        print(f'Number of missing values: {total_missing}')
+        initial_data=False
+        if data is None:
+            data = self.X
+            initial_data=True
+            total_missing = data.isnull().sum().sum()
+            print(f'Number of missing values: {total_missing}')
         if method == 'drop':
-            self.data.dropna(inplace=True)
-        elif method in ['mean', 'median','0']:
-            fill_value = getattr(self.data, method)()
-            self.data.fillna(fill_value, inplace=True)
+            data.dropna(inplace=True)
+        elif method in ['mean', 'median', '0']:
+            if method == '0':
+                fill_value = 0  
+            else:
+                fill_value = getattr(data, method)()  
+            data.fillna(fill_value, inplace=True)
         else:
             raise Exception("Unsupported missing values method.")
         
-    def normalize(self, X=None, method='minmax'):
+        if initial_data:
+            self.X = data
+        else:return data
+        
+        
+    def normalize(self, X=None, method='minmax', train_test_set=False, X_test=None):
         """
         Normalizes the dataset using specified method.
 
@@ -92,11 +104,19 @@ class DataLoader:
         if method in ['minmax', 'standard']:
             self.scaler = MinMaxScaler() if method == 'minmax' else StandardScaler()
             X = pd.DataFrame(self.scaler.fit_transform(X), columns=X.columns)
+            if train_test_set:
+                X_test = pd.DataFrame(self.scaler.transform(X_test), columns=X_test.columns)
         else:
             raise Exception("Unsupported normalization method.")
-        print('Normalization completed.')
+        if train_test_set:
+            pass
+        else:
+            print('Normalization completed.')
+            
         if initial_data:
             self.X = X
+        elif train_test_set:
+            return X, X_test
         else: return X
     
     def feature_selection(self, X=None, y=None, method='mrmr', num_features=10, inner_method='chi2'):        

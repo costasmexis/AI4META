@@ -18,11 +18,13 @@ import warnings
 
 
 class ExploreExplain(DataLoader):
-    def __init__(self, X, y):
+    def __init__(self, X, y, normalization_method):
         self.X = X
         self.y = y
+        self.normalization_method = normalization_method
+        self.x_normalized_df = self.normalize(self.X, method=self.normalization_method)
         
-    def correlations(self,data,labels, list_of_feature=None, limit=None, num_of_best_features=None, way_of_selection='mrmr', normalization_method=None):
+    def correlations(self,data=None,labels=None, list_of_feature=None, limit=None, num_of_best_features=None, way_of_selection='mrmr'):
         """
         Calculates and visualizes the correlation matrix of the dataset, optionally after applying feature selection and normalization.
 
@@ -35,7 +37,6 @@ class ExploreExplain(DataLoader):
         - limit (float, optional): A threshold for filtering the correlations displayed in the heatmap. Only correlations with absolute values greater than or equal to this limit are shown. The value must be between 0 and 1. If None, all correlations are shown.
         - num_of_best_features (int, optional): The number of top features to select for correlation analysis, based on the selection method specified. If None, no feature selection is applied.
         - way_of_selection (str, optional): The method to use for feature selection. Defaults to 'mrmr'. The method must be supported by the feature_selection method of the instance.
-        - normalization_method (str, optional): The method to use for data normalization before computing correlations. Supported values are 'minmax' and 'standard'. If None, no normalization is applied.
 
         Returns:
         - numpy.ndarray: The correlation matrix of the selected features with or without the specified limit applied. If feature selection or normalization is applied, the matrix corresponds to the processed dataset.
@@ -47,13 +48,12 @@ class ExploreExplain(DataLoader):
         - The correlation matrix includes an additional row and column for the label correlations.
         - The heatmap visualization is displayed using the seaborn library, with feature names and labels included for clarity.
         """
-        if data and labels is None:
-            data = self.X
+        if data is None and labels is None:
+            data = self.x_normalized_df
             labels = self.y
-       
-        if normalization_method != None:
-            if normalization_method in ['minmax', 'standard']:
-                data = self.normalize(data, method=normalization_method)
+        else:
+            if self.normalization_method in ['minmax', 'standard']:
+                data = self.normalize(data, method=self.normalization_method)
             else: 
                 raise Exception("Unsupported normalization method.")
         
@@ -82,7 +82,7 @@ class ExploreExplain(DataLoader):
         return correl_table
         
         
-    def pairplots_function(self,data,labels,list_of_feature=None, num_of_best_features=10, way_of_selection='mrmr', normalization_method=None):
+    def pairplots_function(self,data=None,labels=None,list_of_feature=None, num_of_best_features=10, way_of_selection='mrmr'):
         """
         Generate pairplots to visualize relationships between features and labels.
         
@@ -92,18 +92,16 @@ class ExploreExplain(DataLoader):
             - list_of_feature (list): List of features to include in the pairplots.
             - num_of_best_features (int): Number of best features to select for pairplots.
             - way_of_selection (str): Feature selection method to use.
-            - normalization_method (str): Method for normalizing the data.
             
         Returns:
             The pairplot.
         """        
-        if data and labels is None:
-            data = self.X
+        if data is None and labels is None:
+            data = self.x_normalized_df
             labels = self.y
-       
-        if normalization_method != None:
-            if normalization_method in ['minmax', 'standard']:
-                data = self.normalize(data, method=normalization_method)
+        else:
+            if self.normalization_method in ['minmax', 'standard']:
+                data = self.normalize(data, method=self.normalization_method)
             else: 
                 raise Exception("Unsupported normalization method.")
         
@@ -118,7 +116,7 @@ class ExploreExplain(DataLoader):
         sns.pairplot(data, hue='labels')
         plt.show()
         
-    def statistical_difference(self,data,labels,p_value=0.05,list_of_feature=None, num_of_best_features=None, way_of_selection='mrmr', normalization_method=None):
+    def statistical_difference(self,data=None,labels=None,p_value=0.05,list_of_feature=None, num_of_best_features=None, way_of_selection='mrmr', normalize=False):
         """
         Perform non-parametric statistical tests to identify significant features based on labels,
         and visualize these features' distributions across groups using boxplots.
@@ -142,7 +140,7 @@ class ExploreExplain(DataLoader):
         - way_of_selection (str): Feature selection method to use when num_of_best_features is specified.
                                 Supported values are 'mrmr' and others as implemented in the feature_selection method.
                                 Defaults to 'mrmr'.
-        - normalization_method (str, optional): Normalization method to apply to the data before performing
+        - normalize (boolean, optional): Normalization method to apply to the data before performing
                                                 statistical tests. Supported method is 'minmax' .
                                                 If None, no normalization is applied. Defaults to None.
 
@@ -156,15 +154,21 @@ class ExploreExplain(DataLoader):
         Note:
         No normalization is required for the statistical tests since the methods used are non-parametric.
         """
-        if data and labels is None:
+        if data is None and labels is None:
             data = self.X
             labels = self.y
-       
-        if normalization_method != None:
-            if normalization_method in ['minmax']:
-                data = self.normalize(data, method=normalization_method)
-            else: 
-                raise Exception("Only minmax normalization is supported for non-parametric statistical difference test.")
+            if normalize:
+                if self.normalization_method == 'minmax':
+                    data = self.x_normalized_df
+                else: 
+                    print("WARNING: Unsupported normalization method. For non-parametric tests, only 'minmax' is supported. The normalization will automaticly change to 'minmax' for this function only.")
+                    data = self.normalize(self.X, method='minmax')
+        else:
+            if normalize:
+                if self.normalization_method in ['minmax']:
+                    data = self.normalize(data, method=self.normalization_method)
+                else: 
+                    raise Exception("Unsupported normalization method. For non-parametric tests, only 'minmax' is supported.")
         
         if list_of_feature is not None:
             data_df = data_df[list_of_feature]
@@ -223,7 +227,7 @@ class ExploreExplain(DataLoader):
     #     Output("graph", "figure"), 
     #     Input("slider", "value"))
     
-    def pca_plot(self,data=None,labels=None,variance_threshold=None,components_resize=None, components_plot=2):
+    def pca_plot(self,data=None,labels=None,variance_threshold=None,components_resize=None, components_plot=2, missing_values_method='drop'):
         """
         Performs Principal Component Analysis (PCA) and visualizes the results. This function can operate in two main modes:
         1. Variance Threshold Mode: Finds the number of components required to explain a specified threshold of variance.
@@ -248,13 +252,22 @@ class ExploreExplain(DataLoader):
         - A scatter matrix plot is also generated to visualize the relationships between the principal components specified by `components_plot`, colored by the provided labels.
         """
         
-        if data == None and labels == None:
-            data = self.X
+        if data is None and labels is None:
+            data = self.x_normalized_df
             labels = self.y
+        else:
+            if self.normalization_method in ['minmax', 'standard']:
+                data = self.normalize(data, method=self.normalization_method)
+            else: 
+                raise Exception("Unsupported normalization method.")
+        # data_all = data.copy()
+        # data_all['labels'] = labels
+        data['labels'] = labels
         
-        data_all = data.copy()
-        data_all['labels'] = labels
-            
+        data = self.missing_values(data, method=missing_values_method)
+        data_labels = pd.DataFrame(data['labels'], columns=['labels'])
+        data = data.drop(['labels'], axis=1)
+                    
         if variance_threshold != None:
             if variance_threshold < 0 or variance_threshold > 1:
                 raise Exception("Variance threshold must be between 0 and 1.")
@@ -268,16 +281,6 @@ class ExploreExplain(DataLoader):
                 total_explained_variance_ratio = explained_variance_ratio.sum()            
                 cumulative_variance_ratio = np.cumsum(explained_variance_ratio)
                 components_found = np.where(cumulative_variance_ratio >= variance_threshold)[0][0] + 1
-
-                # plt.figure(figsize=(10, 6))
-                # plt.plot(cumulative_variance_ratio, marker='o', label='All Components')
-                # plt.axhline(y=variance_threshold, color='r', linestyle='--', label=f'{variance_threshold*100}% Variance Threshold')
-                # plt.axvline(x=components_plot-1, color='g', linestyle='--', label=f'{components_plot} Components Required')
-                # plt.xlabel('Number of Principal Components')
-                # plt.ylabel('Cumulative Explained Variance Ratio')
-                # plt.title('Cumulative Explained Variance Ratio by Principal Components')
-                # plt.legend()
-                # plt.show()
                 
                 hover_text = [f"Component: {i+1}<br>Individual Variance: {var:.3%}<br>Cumulative Variance: {cum_var:.3%}" 
                             for i, (var, cum_var) in enumerate(zip(explained_variance_ratio, cumulative_variance_ratio))]
@@ -307,7 +310,6 @@ class ExploreExplain(DataLoader):
             components_resize = components_found
             pca_optimal = PCA(n_components=components_resize)
         elif components_resize == None and variance_threshold == None:
-            # raise Exception("Please specify either variance or components_plot")
             pca_optimal = PCA()
         elif components_resize != None and variance_threshold == None:
             pca_optimal = PCA(n_components=components_resize)
@@ -322,7 +324,7 @@ class ExploreExplain(DataLoader):
 
         fig = px.scatter_matrix(
             X_pca_optimal,
-            color=data_all.labels,
+            color=data_labels.labels,
             dimensions=range(components_plot),
             labels=lab,
             title=f'Total Explained Variance: {total_var:.2f}%',

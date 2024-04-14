@@ -121,6 +121,7 @@ class MachineLearningEstimator(DataLoader):
         if X is None and y is None:
             X = self.X 
             y = self.y
+
         random_search = RandomizedSearchCV(self.estimator, self.param_grid, scoring=scoring, cv=cv, n_iter=n_iter)
         random_search.fit(X, y)
         self.best_params = random_search.best_params_
@@ -161,6 +162,7 @@ class MachineLearningEstimator(DataLoader):
         if X is None and y is None:
             X = self.X
             y = self.y
+
         if estimator_name == None:
             estimator_name = self.name 
         else: estimator_name = estimator_name
