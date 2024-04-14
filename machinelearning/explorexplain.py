@@ -14,7 +14,9 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import scipy.stats as stats
 from sklearn.decomposition import PCA
-import warnings
+# import warnings
+import umap
+# sns.set(style='white', context='notebook', rc={'figure.figsize':(14,10)})
 
 
 class ExploreExplain(DataLoader):
@@ -342,8 +344,115 @@ class ExploreExplain(DataLoader):
     
     # app.run_server(debug=True)
     
-    def umap_plot(self):
-        pass
+    def umap_plot(self, data=None, labels=None, list_of_feature=None, num_of_best_features=None, way_of_selection='mrmr',
+                  missing_values_method='drop', n_neighbors=15, min_dist=0.1, n_components=2, metric='euclidean', random_state=0):
+        """
+        Perform UMAP dimensionality reduction on the input data and create an interactive plot.
+        
+        Parameters:
+        - data: Input data to be transformed (default: None).
+        - labels: Labels corresponding to the data points (default: None).
+        - list_of_feature: List of features to consider (default: None).
+        - num_of_best_features: Number of best features to select (default: None).
+        - way_of_selection: Method for feature selection (default: 'mrmr').
+        - missing_values_method: Method to handle missing values (default: 'drop').
+        - n_neighbors: Number of neighbors for UMAP (default: 15).
+        - min_dist: Minimum distance for UMAP (default: 0.1).
+        - n_components: Number of components for UMAP (default: 2).
+        - metric: Metric to use for UMAP (default: 'euclidean').
+        - random_state: Random state for UMAP (default: 0).
+        
+        Raises:
+        - Exception: If an unsupported normalization method is encountered.
+        
+        Returns:
+        - None
+        """
+        
+        if data is None and labels is None:
+            data = self.x_normalized_df
+            labels = self.y
+        else:
+            if self.normalization_method in ['minmax', 'standard']:
+                data = self.normalize(data, method=self.normalization_method)
+            else: 
+                raise Exception("Unsupported normalization method.")
+        data_all = data.copy()
+        data_all['labels'] = labels
+        
+        data_all = self.missing_values(data_all, method=missing_values_method)
+        data = data_all.drop(['labels'], axis=1)
+        
+        if list_of_feature is not None:
+            data = data[list_of_feature]
+            
+        if num_of_best_features is not None:
+            selected = self.feature_selection(data, labels, method = way_of_selection, num_features = num_of_best_features)
+            data = data[selected]
+            
+        data['labels'] = data_all['labels']
+        
+        if all(not isinstance(param, list) for param in [n_neighbors, min_dist, n_components, metric, random_state]):
+            if n_components == 1:
+                print('Warning: n_components == 1. No UMAP projection will be performed with n_components = 2.')
+                n_components = 2
+            
+            reducer = umap.UMAP(
+                n_neighbors=n_neighbors, 
+                min_dist=min_dist, 
+                n_components=n_components, 
+                metric=metric, 
+                random_state=random_state
+            )
+            
+            data_less = reducer.fit_transform(data)
+            fig = go.Figure(data=[go.Scatter(
+            x=data_less[:, 0], 
+            y=data_less[:, 1], 
+            mode='markers',
+            marker=dict(color=data['labels'], colorscale='Viridis', showscale=True)
+        )])
+            fig.update_layout(
+                    width=900,  
+                    height=700  
+            )
+            fig.update_layout(title='UMAP Projection colored by labels', xaxis_title='UMAP 1', yaxis_title='UMAP 2')
+            fig.show()
+        else: 
+            from itertools import product
+            param_list = [n_neighbors, min_dist, n_components, metric, random_state]
+            for combo in product(*(param if isinstance(param, list) else [param] for param in param_list)):
+                n_neighbors, min_dist, n_components, metric, random_state = combo
+                print(f"Testing combination: n_neighbors={n_neighbors}, min_dist={min_dist}, n_components={n_components}, metric={metric}, random_state={random_state}")
+                
+                if n_components == 1:
+                    print('Warning: n_components == 1. No UMAP projection will be performed with n_components = 2.')
+                    n_components = 2
+                
+                reducer = umap.UMAP(
+                    n_neighbors=n_neighbors, 
+                    min_dist=min_dist, 
+                    n_components=n_components, 
+                    metric=metric, 
+                    random_state=random_state
+                )
+                
+                data_less = reducer.fit_transform(data)
+                
+                fig = go.Figure(data=[go.Scatter(
+                x=data_less[:, 0], 
+                y=data_less[:, 1], 
+                mode='markers',
+                marker=dict(color=data['labels'], colorscale='Viridis', showscale=True)
+                )])
+                fig.update_layout(
+                    width=900,  
+                    height=700  
+                )
+                fig.update_layout(title=f'UMAP for combo: n_neighbors={n_neighbors}, min_dist={min_dist},n_components={n_components}, metric={metric}, random_state={random_state}', xaxis_title='UMAP 1', yaxis_title='UMAP 2')
+                fig.show()
+        
+        
         
 
 
