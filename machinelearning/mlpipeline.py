@@ -58,7 +58,7 @@ class MLPipelines(MachineLearningEstimator):
     def inner_loop(self, train_index, test_index, X, y, avail_thr):
         num_features = self.params['num_features']
         if type(num_features) is int:
-            feature_loop = num_features.to_list()
+            feature_loop = [num_features]
         elif type(num_features) is list:
             feature_loop = num_features
         elif num_features is None:
