@@ -91,6 +91,7 @@ class MLPipelines(MachineLearningEstimator):
             'Classifiers': [],
             'Selected_Features': [],
             'Number_of_Features': [],
+            'Hyperparameters': [],
             'Way_of_Selection': [],
             'Estimator': []}
         
@@ -122,24 +123,26 @@ class MLPipelines(MachineLearningEstimator):
                         raise Exception("Unsupported optimizer.")   
                     
                     clf.fit(X_train_selected, y_train)
-                    y_pred = clf.predict(X_test_selected)
+                    # y_pred = clf.predict(X_test_selected)
                     nested_score = outer_scorer(clf, X_test_selected, y_test)
-                    nested_scores.append(nested_score)                
+                    nested_scores.append(nested_score)    
+                    
+                    results['Scores'].append(nested_scores[0])
+                    results['Estimator'].append(self.name)    
+                    results['Hyperparameters'].append(clf.best_params_)        
                     
                     if num_feature == 'full' or num_feature is None:
-                        results['Scores'].append(nested_scores[0])
-                        results['Classifiers'].append(self.name)
                         results['Selected_Features'].append(None)  
                         results['Number_of_Features'].append(X_test_selected.shape[1])
                         results['Way_of_Selection'].append('full')
-                        results['Estimator'].append(self.name)
+                        results['Classifiers'].append(f"{self.name}")
+
                     else:
-                        results['Scores'].append(nested_scores[0])
                         results['Classifiers'].append(f"{self.name}_{feature_selection_type}_{num_feature}")
                         results['Selected_Features'].append(X_train_selected.columns.tolist())  
                         results['Number_of_Features'].append(num_feature)
                         results['Way_of_Selection'].append(feature_selection_type)
-                        results['Estimator'].append(self.name)
+
                     
         df_results = pd.DataFrame(results)
         time.sleep(1)
@@ -242,63 +245,13 @@ class MLPipelines(MachineLearningEstimator):
                 
             print(f'Finished with {i+1} round after {(end-start)/3600:.2f} hours.')
             return list_dfs
-
-
-    def nested_cross_validation(self):
-        inner_scoring=self.params['inner_scoring']
-        outer_scoring=self.params['outer_scoring']
-        rounds=self.params['rounds']
-        parallel=self.params['parallel']
-        if inner_scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
-        if outer_scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
-        trial_indices = range(rounds)
-
-        rounds = self.params['rounds']
-        num_cores = multiprocessing.cpu_count()
-        
-        if num_cores < rounds:
-            use_cores = num_cores
-        else:
-            use_cores = rounds
-            
-        avail_thr = max(1, num_cores//rounds)
-
-        if parallel == 'thread_per_round':
-            avail_thr = 1
-            with threadpool_limits(limits=avail_thr):
-                list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
-        
-        elif parallel == 'dynamic_parallel': 
-            # avail_thr = 1
-            with Pool() as pool:
-                list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
-                 
-        elif parallel == 'freely_parallel':
-            with threadpool_limits(limits=avail_thr):
-                list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
-        
-        else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round or freely_parallel')
-
-        list_dfs_flat = list(chain.from_iterable(list_dfs))
-            
-        df_final = pd.DataFrame()
-        for item in list_dfs_flat:
-            dataframe = pd.DataFrame(item)
-            df_final = pd.concat([df_final, dataframe], axis=0)
-            
-        return df_final
-
     
-    
-    def model_selection(self,optimizer = 'grid_search', n_trials_ncv=25, n_trials=100, n_iter=25, 
-                        rounds=10, score = 'matthews_corrcoef', exclude=None,hist_fit=True,N=100,
-                        most_imp_feat=10,search_on=None, return_scores_df=False, alpha=0.2,num_features=None,
-                        feature_selection_type='mrmr',feature_selection_method='chi2', plot='box',
-                        return_best_model=True,choose_model=False,inner_scoring='matthews_corrcoef',
-                        outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5, verbose=True,
-                        parallel='thread_per_round',norm_method='minmax', missing_values_method='median'):
+    def nested_cv(self,optimizer = 'bayesian_search', n_trials_ncv=25, n_iter=25, 
+                    rounds=10, exclude=None,hist_feat=True,N=100,most_imp_feat=10,search_on=None,
+                    num_features=None,feature_selection_type='mrmr', return_csv=True,
+                    feature_selection_method='chi2', plot='box',inner_scoring='matthews_corrcoef',
+                    outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5,norm_method='minmax',
+                    parallel='thread_per_round', missing_values_method='median',return_all_N_features=True):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
 
@@ -306,28 +259,21 @@ class MLPipelines(MachineLearningEstimator):
             optimizer (str, optional): Optimization method used ('grid_search', 'random_search', 'bayesian_search'). 
                                        Defaults to 'grid_search'.
             n_trials_ncv (int, optional): Number of trials for nested cross-validation. Defaults to 25.
-            n_trials (int, optional): Number of trials for Bayesian optimization. Defaults to 100.
             n_iter (int, optional): Number of iterations for random search. Defaults to 25.
             rounds (int, optional): Number of cross-validation splits. Defaults to 10.
-            score (str, optional): Scoring metric used. Defaults to 'matthews_corrcoef'.
             exclude (list, optional): List of classifiers to exclude. Defaults to None.
             hist_fit (bool, optional): Whether to display a histogram of feature selection frequency. Defaults to True.
             N (int, optional): Number of features to display in the histogram. Defaults to None (all features).
             most_imp_feat (int, optional): Number of most important features highlighted in the histogram. Defaults to 10.
             search_on (list, optional): List of classifiers to include in selection. Defaults to None.
-            return_scores_df (bool, optional): Whether to return a DataFrame of scores. Defaults to False.
-            alpha (float, optional): Weight of standard deviation in evaluation score calculation. Defaults to 0.2.
             num_features (int or list, optional): Number of features to consider. Defaults to None (all features).
             feature_selection_type (str, optional): Method of feature selection ('mrmr', etc.). Defaults to 'mrmr'.
             feature_selection_method (str, optional): Method used within feature selection (e.g., 'chi2'). Defaults to 'chi2'.
             plot (str, optional): Type of plot for visualization ('box', 'violin', None). Defaults to 'box'.
-            return_best_model (bool, optional): Whether to return the best fitted model. Defaults to True.
-            choose_model (bool, optional): Allows manual selection of the model from the console. Defaults to False.
             inner_scoring (str, optional): Scoring metric for inner CV. Defaults to 'matthews_corrcoef'.
             outer_scoring (str, optional): Scoring metric for outer CV. Defaults to 'matthews_corrcoef'.
             inner_splits (int, optional): Number of splits for inner CV. Defaults to 5.
             outer_splits (int, optional): Number of splits for outer CV. Defaults to 5.
-            verbose (bool, optional): Enables detailed logging. Defaults to True.
             parallel (str, optional): Parallelization method ('thread_per_round', 'freely_parallel' and  'dynamic_parallel'). Defaults to 'thread_per_round'.
 
         Returns:
@@ -361,7 +307,42 @@ class MLPipelines(MachineLearningEstimator):
         if self.X.isnull().values.any():
             print('Your Dataset contains NaN values. Some estimators does not work with NaN values.')
 
-        df = self.nested_cross_validation()
+        if inner_scoring not in sklearn.metrics.get_scorer_names():
+            raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
+        if outer_scoring not in sklearn.metrics.get_scorer_names():
+            raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
+        
+        trial_indices = range(rounds)
+        num_cores = multiprocessing.cpu_count()
+        if num_cores < rounds:
+            use_cores = num_cores
+        else:
+            use_cores = rounds
+            
+        avail_thr = max(1, num_cores//rounds)
+
+        if parallel == 'thread_per_round':
+            avail_thr = 1
+            with threadpool_limits(limits=avail_thr):
+                list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
+        
+        elif parallel == 'dynamic_parallel': 
+            # avail_thr = 1
+            with Pool() as pool:
+                list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
+                
+        elif parallel == 'freely_parallel':
+            with threadpool_limits(limits=avail_thr):
+                list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
+        
+        else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round or freely_parallel')
+
+        list_dfs_flat = list(chain.from_iterable(list_dfs))
+            
+        df = pd.DataFrame()
+        for item in list_dfs_flat:
+            dataframe = pd.DataFrame(item)
+            df = pd.concat([df, dataframe], axis=0)        
         
         for classif in np.unique(df['Classifiers']):
             indices = df[df['Classifiers'] == classif]
@@ -373,10 +354,8 @@ class MLPipelines(MachineLearningEstimator):
             std_score = np.std(filtered_scores)
             sem_score = sem(filtered_scores)
             median_score = np.median(filtered_scores)
-            evaluated_score = mean_score - alpha * sem_score  
             Numbers_of_Features = indices['Number_of_Features'].unique()[0]
             Way_of_Selection = indices['Way_of_Selection'].unique()[0]
-
             results.append({
                     'Estimator': df[df['Classifiers'] == classif]['Estimator'].unique()[0],
                     'Classifier': classif,
@@ -385,31 +364,34 @@ class MLPipelines(MachineLearningEstimator):
                     'Std': std_score,
                     'SEM':sem_score,
                     'Median': median_score,
-                    'Evaluated': evaluated_score,
+                    'Hyperparameters': df[df['Classifiers'] == classif]['Hyperparameters'].values,
                     'Selected_Features': filtered_features if num_features is not None else None,
                     'Numbers_of_Features': Numbers_of_Features,
                     'Way_of_Selection': Way_of_Selection 
                 })
             
         print(f'Finished with {len(results)} estimators')
-        scores_dataframe = pd.DataFrame(results) if return_scores_df else None
+        scores_dataframe = pd.DataFrame(results)
+
         
-        if hist_fit:
-            feature_counts = Counter()
-            for idx, row in scores_dataframe.iterrows():
-                if row['Way_of_Selection'] != 'full':
-                    features = list(chain.from_iterable([list(index_obj) for index_obj in row['Selected_Features']]))
-                    feature_counts.update(features)
+        feature_counts = Counter()
+        for idx, row in scores_dataframe.iterrows():
+            if row['Way_of_Selection'] != 'full':
+                features = list(chain.from_iterable([list(index_obj) for index_obj in row['Selected_Features']]))
+                feature_counts.update(features)
+
+        sorted_features_counts = feature_counts.most_common()
+        if N is None or N > len(sorted_features_counts):
+            N = len(sorted_features_counts)  # Adjust N as needed to limit the number of features displayed
+        else:
+            N=N
             
-            sorted_features_counts = feature_counts.most_common()
-            if N is None or N > len(sorted_features_counts):
-                N = len(sorted_features_counts)  # Adjust N as needed to limit the number of features displayed
-            else:
-                N=N
+        if hist_feat:
             if len(sorted_features_counts) == 0:
                 print('No features were selected.')
             else:
                 features, counts = zip(*sorted_features_counts[:N])
+                counts = [x / 12 for x in counts]
                 plt.figure(figsize=(max(10, N // 2), 10))
                 bars = plt.bar(range(N), counts, color='skyblue', tick_label=features)
                 if most_imp_feat > N:
@@ -438,13 +420,14 @@ class MLPipelines(MachineLearningEstimator):
                 plt.tight_layout()
                 plt.show()
 
+        all_N_features_list = [x[0] for x in sorted_features_counts]
+        features_list = [x[0] for x in sorted_features_counts[:most_imp_feat]]
+        
         labels = scores_dataframe['Classifier'].unique() 
         x_coords = range(1, len(labels) + 1)
-        evaluated_means = [scores_dataframe[scores_dataframe['Classifier'] == label]['Evaluated'] for label in labels]
         if plot == 'box':
             plt.boxplot(scores_dataframe['Scores'], labels=labels)
             x_coords = range(1, len(labels) + 1)
-            plt.scatter( x_coords, evaluated_means, marker='*', color='red')
             plt.title("Model Selection Results")
             plt.ylabel("Score")
             plt.xticks(rotation=90)  
@@ -452,7 +435,6 @@ class MLPipelines(MachineLearningEstimator):
             plt.show()
         elif plot == 'violin':            
             plt.violinplot(scores_dataframe['Scores'].values)
-            plt.scatter(x_coords,evaluated_means, marker='*', color='red')
             plt.title("Model Selection Results")
             plt.ylabel("Score")
             plt.xticks(x_coords, labels, rotation=90)
@@ -461,54 +443,9 @@ class MLPipelines(MachineLearningEstimator):
         elif plot == None: pass
         else: raise ValueError(f'The "{plot}" is not a valid option for plotting. Choose between "box", "violin" or None.')
         
-        if choose_model:
-            unique_classifiers = scores_dataframe['Estimator'].unique()
-            print("Select a classifier:")
-            for idx, classifier in enumerate(unique_classifiers, start=1):
-                print(f"{idx}: {classifier}")
-
-            selection = int(input("Enter the number for your classifier choice: ")) - 1
-            selected_classifier = unique_classifiers[selection]
-            self.name = selected_classifier
-            self.estimator = self.available_clfs[self.name] 
-
-            features_options = list(scores_dataframe[scores_dataframe['Estimator'] == selected_classifier]['Numbers_of_Features'].unique())
-            if self.X.shape[1] not in features_options:
-                features_options.append(self.X.shape[1])
-    
-            print("Available number of features options:")
-            for idx, features in enumerate(features_options, start=1):
-                print(f"{idx}: {features}")
-
-            feat_sel = int(input("Enter the number for your preferred number of features: ")) - 1
-            selected_features = features_options[feat_sel]
-            print(f"Selected classifier: {selected_classifier}, with {selected_features} features.")
-            final_features = selected_features
+        if return_csv:
+            scores_dataframe.to_csv('ncv_results.csv', index=False)
+        if return_all_N_features:
+            return scores_dataframe, features_list, all_N_features_list
         else:
-            self.name = max(results, key=lambda x: x['Evaluated'])['Estimator']
-            final_features = max(results, key=lambda x: x['Evaluated'])['Numbers_of_Features']
-            self.estimator = self.available_clfs[self.name] 
-
-        X2fit = self.X.copy()
-        if final_features != X2fit.shape[1]:
-            selected_X = self.feature_selection(X=X2fit,y=self.y, method = feature_selection_type, num_features = final_features, inner_method=feature_selection_method)
-            X2fit = X2fit[selected_X]             
-        else:
-            pass
-        X2fit = self.normalize(X=X2fit,method=norm_method)
-        X2fit = self.missing_values(data=X2fit, method=missing_values_method)
-        if return_best_model:
-            if optimizer == 'bayesian_search':
-                self.best_estimator = self.bayesian_search(X=X2fit, y=self.y, cv=5, n_trials=n_trials, verbose=True,return_model=return_best_model)
-            elif optimizer == 'grid_search':
-                self.best_estimator = self.grid_search(X=X2fit, y=self.y, cv=5, verbose=True,return_model=return_best_model)
-            elif optimizer == 'random_search':
-                self.best_estimator = self.random_search(X=X2fit, y=self.y, cv=5, n_iter=n_iter, verbose=True,return_model=return_best_model)
-            self.best_estimator = self.estimator.fit(X2fit, self.y)
-            if return_scores_df:
-                return self.best_estimator, scores_dataframe
-            else: return self.best_estimator
-        elif return_scores_df:
-            return scores_dataframe
-        else:
-            print(f'Best estimator: {self.best_estimator}')
+            return scores_dataframe, features_list
