@@ -74,7 +74,28 @@ class FeaturesExplanation(MachineLearningEstimator):
             except IndexError:
                 print(f'The shap values do not exist for the label {label}. The following is the beeswarm plot for all the labels.')
                 shap.plots.beeswarm(self.shap_values, max_display=max_display)    
-           
+        # elif plot_type == 'decision':
+        #     print(self.shap_values[:,:,label][0])
+        #     if isinstance(self.shap_values, np.ndarray):
+        #         if self.shap_values.ndim == 3:  # Multi-class case
+        #             shap_values_for_label = self.shap_values[:, :, label]
+        #         else:
+        #             shap_values_for_label = self.shap_values
+
+        #         expected_value = self.explainer.expected_value
+        #         if isinstance(expected_value, list):
+        #             expected_value = expected_value[label]
+        #         elif isinstance(expected_value, np.ndarray):
+        #             expected_value = expected_value[label] if expected_value.ndim > 0 else expected_value
+                
+        #         shap.decision_plot(expected_value, shap_values_for_label, feature_names=self.X.columns, link='logit', show=True)
+        #         print(f'The decision plot is for label {label}, corresponding to {self.label_mapping[label]}')
+        elif plot_type == 'bar':
+            if len(self.shap_values.shape)==3:
+                shap.plots.bar(self.shap_values[:, :, label], max_display=max_display)
+            elif len(self.shap_values.shape)==2:
+                shap.plots.bar(self.shap_values, max_display=max_display)
+            else:pass
         else: 
             raise ValueError("Unsupported plot type. Select one of 'summary', 'beeswarm'")
 
