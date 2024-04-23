@@ -32,7 +32,7 @@ class DataLoader:
         self._load_data() 
         self._encode_labels()
         
-    def _load_data(self, index_col=0):
+    def _load_data(self):
         """
         Function to load the dataset from the csv file.
 
@@ -43,7 +43,7 @@ class DataLoader:
         file_extension = self.csv_dir.split('.')[-1]
         if file_extension in self.supported_extensions:
             sep = ',' if file_extension == 'csv' else '\t'
-            self.data = pd.read_csv(self.csv_dir, sep=sep, index_col=index_col)
+            self.data = pd.read_csv(self.csv_dir, sep=sep)
         else:
             raise Exception("Unsupported file type.")
                 
@@ -60,13 +60,17 @@ class DataLoader:
         self.label_mapping = {index: class_label for index, class_label in enumerate(label_encoder.classes_)}
         print("Label mapping:", self.label_mapping)
         
-    def missing_values(self, method='drop'):
+    def missing_values(self, data=None, method='drop'):
         """
         Function to handle missing values in the dataset.
 
         :param method: Method to be used, defaults to 'drop'
         :type method: str, optional
         """
+
+        if data is None:
+            data = self.X
+            
         total_missing = self.X.isnull().sum().sum()
         print(f'Number of missing values: {total_missing}')
 
@@ -79,8 +83,8 @@ class DataLoader:
         
     # TODO: FIX NORMALIZE FUNCTION
     def normalize(self, X=None, method='minmax', train_test_set=False, X_test=None):
+       
         initial_data=False
-        
         if X is None:
             X = self.X
             initial_data=True
@@ -137,7 +141,6 @@ class DataLoader:
                 y = self.y
                 datasetXy=True
 
-
             method_mapping = {
                 'chi2': chi2,
                 'f_classif': f_classif,
@@ -178,9 +181,13 @@ class DataLoader:
         test_data.to_csv(output_dir)
         
     def __str__(self):
-        ''' Function to print the dataset information.'''
+        """
+        Function to print the dataset information
+        """
         return f'Number of rows: {self.data.shape[0]} \nNumber of columns: {self.data.shape[1]}'
     
     def __getitem__(self, idx):
-        ''' Function to get a sample from the dataset.'''
+        """
+        Function to get a sample from the dataset.
+        """
         return self.data.iloc[idx]

@@ -1,17 +1,22 @@
+import logging
+
 import matplotlib.pyplot as plt
 import numpy as np
 import optuna
 import pandas as pd
+import progressbar
 import sklearn
+import sklearn.metrics as metrics
 from catboost import CatBoostClassifier
-from dataloader import DataLoader
+from joblib import Parallel, delayed, parallel_backend
 from lightgbm import LGBMClassifier
-from optuna.samplers import TPESampler
+from optuna.samplers import RandomSampler, TPESampler
+
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import get_scorer
+from sklearn.metrics import get_scorer, make_scorer
 from sklearn.model_selection import (
     GridSearchCV,
     RandomizedSearchCV,
@@ -23,33 +28,38 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
+from threadpoolctl import threadpool_limits
 from tqdm import tqdm
 from xgboost import XGBClassifier
+
+from dataloader import DataLoader
 
 from .optuna_grid import optuna_grid
 
 
 class MachineLearningEstimator(DataLoader):
-    """ Class to hold the machine learning estimator information and related data 
+    def __init__(self, label, csv_dir, estimator=None, param_grid=None):
+        """
+        Initialize the MLEstimator object.
 
-    :param estimator: Estimator to be used
-    :type estimator: sklearn estimator
-    :param param_grid: Hyperparameters grid to be searched
-    :type param_grid: dict
-    :param label: Name of target column
-    :type label: str
-    :param csv_dir: Path to the csv file
-    :type csv_dir: str
-    """        
-    def __init__(self, estimator, param_grid: dict, label: str, csv_dir: str):
+        :param label: The label for the estimator.
+        :type label: str
+        :param csv_dir: The directory containing the CSV files.
+        :type csv_dir: str
+        :param estimator: The estimator object to use, defaults to None.
+        :type estimator: object, optional
+        :param param_grid: The parameter grid for hyperparameter tuning, defaults to None.
+        :type param_grid: dict, optional
+        """
 
         super().__init__(label, csv_dir)
         self.estimator = estimator
+        self.name = estimator.__class__.__name__
         self.param_grid = param_grid
         self.best_params = None
         self.best_score = None
         self.best_estimator = None
-
+        
         self.available_clfs = {
             'RandomForestClassifier': RandomForestClassifier(),
             'GradientBoostingClassifier': GradientBoostingClassifier(),
@@ -64,228 +74,214 @@ class MachineLearningEstimator(DataLoader):
             'GaussianProcessClassifier': GaussianProcessClassifier(),
             'CatBoostClassifier': CatBoostClassifier()
         }
+        
+        if self.estimator is not None: # Checking if estimator is valid
+            if self.name not in self.available_clfs.keys():
+                raise ValueError(f'Invalid estimator: {self.name}. Select one of the following: {list(self.available_clfs.keys())}')
+        elif self.estimator is None: 
+            print('There is no selected classifier.')
+    
+    @staticmethod
+    def set_optuna_verbosity(level):
+        """
+        Set the verbosity level for Optuna.
 
-        if self.estimator is None:
-            print('You have not provided an estimator.')
-        elif self.estimator.__class__.__name__ not in self._available_clfs.keys():
-            raise ValueError(
-                f"Invalid estimator: {self.estimator.__class__.__name__}. Select one of the following: {list(self._available_clfs.keys())}"
-            )
+        :param level: The verbosity level.
+        :type level: int
+        """
+        optuna.logging.set_verbosity(level)  
+        logging.getLogger("optuna").setLevel(level)
 
-    def grid_search(self, X=None, y=None, scoring: str="matthews_corrcoef", cv: int=5, 
-                    verbose: bool=True, return_model: bool=False):
-        """ Performs a grid search
-
-        :param X: Features vector, defaults to ``None``
-        :type X: np.array, optional
-        :param y: Target vector, defaults to ``None``
-        :type y: np.array, optional
-        :param scoring: Scoring metric, defaults to ``matthews_corrcoef``
-        :type scoring: str, optional
-        :param cv: Number of folds for Cross Validation, defaults to 5
-        :type cv: int, optional
-        :param verbose: Verbose, defaults to ``True``
-        :type verbose: bool, optional
-        :param return_model: Return the best model fitted on X, y, defaults to ``False``
-        :type return_model: bool, optional
-        """        
+    def grid_search(self, X=None, y=None, scoring='matthews_corrcoef',
+                    features_list=None, feat_num = None, feat_way = 'mrmr', 
+                    cv=5, verbose=True, return_model=False):
+        """ Function to perform a grid search
+        Args:
+            X (array, optional): Features. Defaults to None.
+            y (array, optional): Target. Defaults to None.
+            scoring (str, optional): Scoring metric. Defaults to 'matthews_corrcoef'.
+            cv (int, optional): No. of folds for cross-validation. Defaults to 5.
+            verbose (bool, optional): Whether to print the results. Defaults to True.
+        """
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
-                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
-            )
-                        
+                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
+        
         if X is None and y is None:
             X = self.X 
             y = self.y
-          
+
+        if features_list is not None:
+            X = X[features_list]
+        elif feat_num is not None:
+            selected = self.feature_selection(X, y, feat_way, feat_num)
+            X = X[selected]
+        
         grid_search = GridSearchCV(self.estimator, self.param_grid, scoring=scoring, cv=cv)
         grid_search.fit(X, y)
         self.best_params = grid_search.best_params_
         self.best_score = grid_search.best_score_
+        self.name = self.best_estimator.__class__.__name__
         self.best_estimator = grid_search.best_estimator_
         if verbose:
-            print(f"Best parameters: {self.best_params}")
-            print(f"Best {scoring}: {self.best_score}")
+            print(f'Best parameters: {self.best_params}')
+            print(f'Best {scoring}: {self.best_score}')
+
         if return_model:
-            return self.best_estimator.fit(self.X, self.y )
+           return self.best_estimator
 
-    def random_search(
-        self, X=None, y=None, scoring="matthews_corrcoef", cv=5, n_iter=100, verbose=True, return_model=False
-    ):
-        """ Performs a random search
-
-        :param X: Features vector, defaults to ``None``
-        :type X: np.array, optional
-        :param y: Target vector, defaults to ``None``
-        :type y: np.array, optional
-        :param scoring: Scoring metric, defaults to ``matthews_corrcoef``
-        :type scoring: str, optional
-        :param cv: Number of folds for Cross Validation, defaults to 5
-        :type cv: int, optional
-        :param n_iter: Number of interations for Random Search, defaults to 100
-        :type n_iter: int, optional
-        :param verbose: Verbose, defaults to ``True``
-        :type verbose: bool, optional
-        :param return_model: Return the best model fitted on X, y, defaults to ``False``
-        :type return_model: bool, optional
-        """        
+    def random_search(self, X=None, y=None, scoring='matthews_corrcoef', 
+                      features_list=None,cv=5, n_iter=100, verbose=True, 
+                      return_model=False, feat_num = None, feat_way = 'mrmr'):
+        """ Function to perform a random search
+        Args:
+            X (array, optional): Features. Defaults to None.
+            y (array, optional): Target. Defaults to None.
+            scoring (str, optional): Scoring metric. Defaults to 'matthews_corrcoef'.
+            cv (int, optional): No. of folds for cross-validation. Defaults to 5.
+            n_iter (int, optional): No. of iterations. Defaults to 100.
+            verbose (bool, optional): Whether to print the results. Defaults to True.
+        """
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
-                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
-            )
-        
+                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
+
         if X is None and y is None:
             X = self.X 
             y = self.y
+        if features_list != None:
+            X = X[features_list]
+        elif feat_num != None:
+            selected = self.feature_selection(X, y, feat_way, feat_num)
+            X = X[selected]
+        else: pass
 
-        random_search = RandomizedSearchCV(
-            self.estimator, self.param_grid, scoring=scoring, cv=cv, n_iter=n_iter
-        )
+        random_search = RandomizedSearchCV(self.estimator, self.param_grid, scoring=scoring, cv=cv, n_iter=n_iter)
         random_search.fit(X, y)
         self.best_params = random_search.best_params_
         self.best_score = random_search.best_score_
+        self.name = self.best_estimator.__class__.__name__
         self.best_estimator = random_search.best_estimator_
         if verbose:
-            print(f"Best parameters: {self.best_params}")
-            print(f"Best {scoring}: {self.best_score}")
+            print(f'Best parameters: {self.best_params}')
+            print(f'Best {scoring}: {self.best_score}')
+        
         if return_model:
-            return self.best_estimator.fit(self.X, self.y)
+           return self.best_estimator
 
-    def bayesian_search(
-        self,
-        X=None,
-        y=None,
-        scoring="matthews_corrcoef",
-        cv=5,
-        direction="maximize",
-        n_trials=100,
-        verbose=True,
-        return_model=False
-    ):  
-        """ Performs a bayesian search
+    def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', features_list=None,rounds=10,
+                        cv=5, direction='maximize', n_trials=100, estimator_name=None,evaluation='cv_simple',
+                        feat_num = None, feat_way = 'mrmr', verbose=True, missing_values='median'):
+        """ Function to perform a bayesian search
 
-        :param X: Features vector, defaults to ``None``
-        :type X: np.array, optional
-        :param y: Target vector, defaults to ``None``
-        :type y: np.array, optional
-        :param scoring: Scoring metric, defaults to ``matthews_corrcoef``
-        :type scoring: str, optional
-        :param cv: Number of folds for Cross Validation, defaults to 5
-        :type cv: int, optional
-        :param direction: *Minimize* or *Maximize* the scoring metric, defaults to ``maximize``
-        :type direction: str, optional
-        :param n_trials: Number of trials for bayesian search, defaults to 100
-        :type n_trials: int, optional
-        :param verbose: Verbose, defaults to ``True``
-        :type verbose: bool, optional
-        :param return_model: Return the best model fitted on X, y, defaults to ``False``
-        :type return_model: bool, optional
-        """        
-        
-        grid = optuna_grid["ManualSearch"]
-        
+        Args:
+            X (_type_, optional): _description_. Defaults to None.
+            y (_type_, optional): _description_. Defaults to None.
+            scoring (str, optional): _description_. Defaults to 'matthews_corrcoef'.
+            cv (int, optional): _description_. Defaults to 5.
+            direction (str, optional): _description_. Defaults to 'maximize'.
+            n_trials (int, optional): _description_. Defaults to 100.
+            verbose (bool, optional): _description_. Defaults to True.
+            box (bool, optional): _description_. Defaults to False.
+        Returns:
+            _type_: _description_
+        """
+        self.set_optuna_verbosity(logging.WARNING)
+
+        grid = optuna_grid['ManualSearch']
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
-                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
-            )
-
+                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
+        else:
+            scoring_function = getattr(metrics, scoring, None)
+            scorer = make_scorer(scoring_function)
+            
         if X is None and y is None:
-            X = self.X 
+            X = self.X
             y = self.y
             
-        def objective(trial):
-            clf = grid[self.estimator.__class__.__name__](trial)
-            final_score = cross_val_score(clf, X, y, scoring=scoring, cv=cv).mean()
-            return final_score
+        if missing_values != None:
+            X = self.missing_values(X, method=missing_values)
+            
+        if features_list != None:
+            X = X[features_list]
+        elif feat_num != None:
+            selected = self.feature_selection(X, y, feat_way, feat_num)
+            X = X[selected]
+        else: pass
+
+        if estimator_name == None:
+            estimator_name = self.name 
+        else: estimator_name = estimator_name
+                              
+                              
+        if evaluation == 'cv_rounds':     
+            columns = ['Hyperparameters','Score','Estimator','SEM']
+            data_full_outer = pd.DataFrame(columns=columns)  
+            def c_v(i):
+                cv_splits = StratifiedKFold(n_splits=cv, shuffle=True, random_state=i)
+                train_test_indices = list(cv_splits.split(X, y))  
+                local_data_full_outer = pd.DataFrame(columns=columns)  
+                for train_index, test_index in train_test_indices:
+                    X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+                    y_train, y_test = y[train_index], y[test_index]
+                    def objective(trial):
+                        clf = grid[estimator_name](trial)
+                        clf.fit(X_train, y_train)
+                        score = scorer(clf, X_test, y_test)
+                        return score 
+                    
+                    study = optuna.create_study(sampler=TPESampler(),direction=direction)
+                    study.optimize(objective, n_trials=n_trials, show_progress_bar=True,n_jobs=-1)
+                    trial_scores = [trial.value for trial in study.trials]
+                    
+                    new_row = {
+                        'Hyperparameters': study.best_params,
+                        'Score': study.best_value,
+                        'Estimator': estimator_name,
+                        'all_scores': trial_scores,
+                        'SEM': np.std(trial_scores) / np.sqrt(len(trial_scores)),
+                        
+                    }
+                    new_row = pd.DataFrame([new_row])
+                    local_data_full_outer = pd.concat([local_data_full_outer, new_row], ignore_index=True)
+                    return local_data_full_outer
+                
+            with threadpool_limits():
+                list_dfs = Parallel(verbose=0)(delayed(c_v)(i) for i in range(rounds))
+            
+            data_full_outer = pd.concat(list_dfs, ignore_index=True) 
+            min_sem_index = data_full_outer['SEM'].idxmin()
+            self.best_params = data_full_outer.loc[min_sem_index, 'Hyperparameters']
+            self.best_score = data_full_outer.loc[min_sem_index, 'Score']
+            best_clf = self.available_clfs[estimator_name]
+            best_clf.set_params(**self.best_params)
+            best_clf.fit(X, y)
+            self.best_estimator = best_clf
         
-        study = optuna.create_study(sampler=TPESampler(), direction=direction)
-        study.optimize(objective, n_trials=n_trials)
-        self.best_params = study.best_params
-        self.best_score = study.best_value
-        self.best_estimator = self.estimator.__class__(**self.best_params).fit(self.X, self.y)
+                                    
+        elif evaluation == 'cv_simple':       
+            def objective(trial):
+                clf = grid[estimator_name](trial)
+                final_score = cross_val_score(clf, X, y, scoring=scoring, cv=cv).mean()
+                return final_score
 
-        if verbose:
-            print(
-                f"For the {self.estimator.__class__.__name__} model: \nBest parameters: {self.best_params}\nBest {scoring}: {self.best_score}"
-            )
-        if return_model:
-            return self.best_estimator.fit(self.X, self.y)
+            study = optuna.create_study(sampler=TPESampler(),direction=direction)
+            study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
+       
+            self.best_params = study.best_params
+            self.best_score = study.best_value
+            best_clf = self.available_clfs[estimator_name]
+            best_clf.set_params(**self.best_params)
+            self.best_estimator = best_clf.fit(X, y)
+            
+            if verbose:
+                print(f'For the {self.name} model: \nBest parameters: {self.best_params}\nBest {scoring}: {self.best_score}')
+                
+        if evaluation == 'cv_rounds':
+            return  self.best_estimator, data_full_outer
+        else:
+            return self.best_estimator 
+        
 
-    def cross_validation(self, scoring: str = "matthews_corrcoef", cv: int = 5) -> list:
-        """ Performs cross validation on a given estimator
-
-        :param scoring: Scoring metric, defaults to ``matthews_corrcoef``
-        :type scoring: str, optional
-        :param cv: Number of folds for Cross Validation, defaults to 5
-        :type cv: int, optional
-        :return: List of scores for each fold
-        :rtype: list
-        """        
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
-            )
-
-        scores = cross_val_score(self.estimator, self.X, self.y, cv=cv, scoring=scoring)
-        print(f"Average {scoring}: {np.mean(scores)}")
-        print(f"Standard deviation {scoring}: {np.std(scores)}")
-        return scores
-
-    def bootstrap(
-        self,
-        n_iter=10,
-        test_size=0.2,
-        optimizer="grid",
-        random_iter=25,
-        n_trials=100,
-        cv=5,
-        scoring="matthews_corrcoef",
-        verbose=False
-    ):
-        """Performs boostrap validation on a given estimator.
-
-        :param n_iter: Number of iterations to perform bootstrap validation, defaults to 100
-        :type n_iter: int, optional
-        :param test_size: Test size for each iteration, defaults to 0.2
-        :type test_size: float, optional
-        :param optimizer: Method to use for hyperparameter optimization, defaults to ``grid``
-        :type optimizer: str, optional
-        :param random_iter: Number of iterations for ``RandomSearchCV``, defaults to 25
-        :type random_iter: int, optional
-        :param n_trials: Number of trials for ``Optuna``, defaults to 100
-        :type n_trials: int, optional
-        :param cv: Number of folds for Cross Validation, defaults to 5
-        :type cv: int, optional
-        :param scoring: Scoring metric, defaults to ``matthews_corrcoef``
-        :type scoring: str, optional
-        :return: List of evaluation metrics for each iteration
-        :rtype: list
-        """        
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
-            )
-
-        eval_metrics = []
-        for i in range(n_iter):
-            X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, test_size=test_size, random_state=i)
-
-            if (self.param_grid is None or self.param_grid == {}) or (optimizer=='evaluation'):
-                self.best_estimator.fit(X_train, y_train)
-            else:
-                if optimizer == "grid":
-                    self.grid_search(X_train, y_train, scoring=scoring, cv=cv, verbose=verbose)
-                elif optimizer == "random":
-                    self.random_search(X_train, y_train, scoring=scoring, cv=cv, n_iter=random_iter, verbose=verbose)
-                elif optimizer == "bayesian":
-                    self.bayesian_search(X_train, y_train, scoring=scoring, direction="maximize", cv=cv, n_trials=n_trials, verbose=verbose)
-                    self.best_estimator.fit(X_train, y_train)
-                else:
-                    raise ValueError(f"Invalid optimizer: {optimizer}. Select one of the following: grid, random, bayesian")
-
-            y_pred = self.best_estimator.predict(X_test)
-            eval_metrics.append(get_scorer(scoring)._score_func(y_test, y_pred))
-
-        print(f"Average {scoring}: {np.mean(eval_metrics)}")
-        print(f"Standard deviation {scoring}: {np.std(eval_metrics)}")
-        return eval_metrics
+        
