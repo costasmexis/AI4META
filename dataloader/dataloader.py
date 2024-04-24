@@ -61,25 +61,28 @@ class DataLoader:
         print("Label mapping:", self.label_mapping)
         
     def missing_values(self, data=None, method='drop'):
-        """
-        Function to handle missing values in the dataset.
-
-        :param method: Method to be used, defaults to 'drop'
-        :type method: str, optional
-        """
-
+        ''' Function to handle missing values in the dataset.'''
+        initial_data=False
         if data is None:
             data = self.X
-            
-        total_missing = self.X.isnull().sum().sum()
-        print(f'Number of missing values: {total_missing}')
-
+            initial_data=True
+            total_missing = data.isnull().sum().sum()
+            print(f'Number of missing values: {total_missing}')
         if method == 'drop':
-            self.X.dropna(inplace=True)
+            data.dropna(inplace=True)
         elif method in ['mean', 'median', '0']:
-            fill_value = 0 if method == '0' else getattr(self.X, method)()
-            self.X.fillna(fill_value, inplace=True)
+            if method == '0':
+                fill_value = 0  
+            else:
+                fill_value = getattr(data, method)()  
+            data.fillna(fill_value, inplace=True)
+        else:
+            raise Exception("Unsupported missing values method.")
         
+        if initial_data:
+            self.X = data
+        else:
+            return data
         
     # TODO: FIX NORMALIZE FUNCTION
     def normalize(self, X=None, method='minmax', train_test_set=False, X_test=None):

@@ -248,37 +248,7 @@ class MLPipelines(MachineLearningEstimator):
                     feature_selection_method='chi2', plot='box',inner_scoring='matthews_corrcoef',
                     outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5,norm_method='minmax',
                     parallel='thread_per_round', missing_values_method='median',return_all_N_features=True):
-        """
-        Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
-
-        Parameters:
-            optimizer (str, optional): Optimization method used ('grid_search', 'random_search', 'bayesian_search'). 
-                                       Defaults to 'grid_search'.
-            n_trials_ncv (int, optional): Number of trials for nested cross-validation. Defaults to 25.
-            n_iter (int, optional): Number of iterations for random search. Defaults to 25.
-            rounds (int, optional): Number of cross-validation splits. Defaults to 10.
-            exclude (list, optional): List of classifiers to exclude. Defaults to None.
-            hist_fit (bool, optional): Whether to display a histogram of feature selection frequency. Defaults to True.
-            N (int, optional): Number of features to display in the histogram. Defaults to None (all features).
-            most_imp_feat (int, optional): Number of most important features highlighted in the histogram. Defaults to 10.
-            search_on (list, optional): List of classifiers to include in selection. Defaults to None.
-            num_features (int or list, optional): Number of features to consider. Defaults to None (all features).
-            feature_selection_type (str, optional): Method of feature selection ('mrmr', etc.). Defaults to 'mrmr'.
-            feature_selection_method (str, optional): Method used within feature selection (e.g., 'chi2'). Defaults to 'chi2'.
-            plot (str, optional): Type of plot for visualization ('box', 'violin', None). Defaults to 'box'.
-            inner_scoring (str, optional): Scoring metric for inner CV. Defaults to 'matthews_corrcoef'.
-            outer_scoring (str, optional): Scoring metric for outer CV. Defaults to 'matthews_corrcoef'.
-            inner_splits (int, optional): Number of splits for inner CV. Defaults to 5.
-            outer_splits (int, optional): Number of splits for outer CV. Defaults to 5.
-            parallel (str, optional): Parallelization method ('thread_per_round', 'freely_parallel' and  'dynamic_parallel'). Defaults to 'thread_per_round'.
-
-        Returns:
-            The best fitted estimator if return_best_model is True. Optionally returns a DataFrame of scores if return_scores_df is True. The exact return type depends on the flags `return_best_model` and `return_scores_df`:
-                - If both are True, returns a tuple (best_estimator, scores_dataframe).
-                - If only return_best_model is True, returns best_estimator.
-                - If only return_scores_df is True, returns scores_dataframe.
-                - Otherwise, returns None.
-        """
+   
         if missing_values_method == 'drop':
             print('Values cannot be dropped at ncv because of inconsistent shapes. \
                   The "median" will be used to handle missing values.')
@@ -406,8 +376,8 @@ class MLPipelines(MachineLearningEstimator):
                 tl = plt.gca().get_xticklabels()
                 maxsize = max([t.get_window_extent().width for t in tl])
                 m = 0.5
-                s = maxsize/plt.gcf().dpi*N+2*m
-                margin = m/plt.gcf().get_size_inches()[0]
+                s = maxsize / plt.gcf().dpi*N+2*m
+                margin = m / plt.gcf().get_size_inches()[0]
 
                 plt.gcf().subplots_adjust(left=margin, right=1.-margin)
                 plt.gca().set_xticks(plt.gca().get_xticks()[::1]) 
