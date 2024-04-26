@@ -95,6 +95,7 @@ class MachineLearningEstimator(DataLoader):
     def grid_search(self, X=None, y=None, scoring='matthews_corrcoef',
                     features_list=None, feat_num = None, feat_way = 'mrmr', 
                     cv=5, verbose=True, return_model=False):
+        
         """ Function to perform a grid search
         Args:
             X (array, optional): Features. Defaults to None.
@@ -200,19 +201,21 @@ class MachineLearningEstimator(DataLoader):
             X = self.X
             y = self.y
             
-        if missing_values != None:
+        if missing_values is not None:
             X = self.missing_values(X, method=missing_values)
             
-        if features_list != None:
+        if features_list is not None:
             X = X[features_list]
-        elif feat_num != None:
+        elif feat_num is not None:
             selected = self.feature_selection(X, y, feat_way, feat_num)
             X = X[selected]
-        else: pass
+        else: 
+            pass
 
-        if estimator_name == None:
+        if estimator_name is None:
             estimator_name = self.name 
-        else: estimator_name = estimator_name
+        else: 
+            estimator_name = estimator_name
                               
                               
         if evaluation == 'cv_rounds':     

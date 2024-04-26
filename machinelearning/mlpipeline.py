@@ -104,7 +104,7 @@ class MLPipelines(MachineLearningEstimator):
                     self.estimator = self.available_clfs[estimator]
                     self.name = self.estimator.__class__.__name__
                     nested_scores = []
-                    
+
                     if optimizer == 'grid_search':
                         clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
                                         param_grid=self.param_grid, cv=inner_cv, n_jobs=1, verbose=0)
@@ -272,7 +272,7 @@ class MLPipelines(MachineLearningEstimator):
         self.params['clfs'] = clfs
 
         if self.X.isnull().values.any():
-            print('Your Dataset contains NaN values. Some estimators does not work with NaN values.')
+            print('Your Dataset contains NaN values. Some estimators may not work with NaN values.')
 
         if inner_scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
@@ -301,7 +301,8 @@ class MLPipelines(MachineLearningEstimator):
             with threadpool_limits(limits=avail_thr):
                 list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
         
-        else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round or freely_parallel')
+        else: 
+            raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round or freely_parallel')
 
         list_dfs_flat = list(chain.from_iterable(list_dfs))
             
@@ -409,7 +410,8 @@ class MLPipelines(MachineLearningEstimator):
         elif plot is None: 
             pass
         else: 
-            raise ValueError(f'The "{plot}" is not a valid option for plotting. Choose between "box", "violin" or None.')
+            raise ValueError(f'The "{plot}" is not a valid option for plotting.\
+                              Choose between "box", "violin" or None.')
         
         if return_csv:
             scores_dataframe.to_csv('ncv_results.csv', index=False)
