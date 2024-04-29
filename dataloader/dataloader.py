@@ -52,125 +52,159 @@ class DataLoader:
     
     def _encode_labels(self):
         """
-        Function to encode the target labels.
+        Function to encode the target labels using LabelEncoder.
         """
-        
         label_encoder = LabelEncoder()
         self.y = label_encoder.fit_transform(self.y)
         self.label_mapping = {index: class_label for index, class_label in enumerate(label_encoder.classes_)}
         print("Label mapping:", self.label_mapping)
         
-    def missing_values(self, data=None, method='drop'):
-        ''' Function to handle missing values in the dataset.'''
-        initial_data=False
+    def missing_values(self, data=None, method='drop', verbose=True):
+        """
+        Function to handle missing values in the dataset.
+
+        :param data: The input data, defaults to None
+        :type data: pandas.DataFrame, optional
+        :param method: The method to handle missing values, defaults to 'drop'
+        :type method: str, optional
+        :return: The data with missing values handled or None if data is provided
+        :rtype: pandas.DataFrame or None
+        :raises Exception: If an unsupported method is selected
+        :param verbose: Whether to print the number of missing values, defaults to True
+        :type verbose: bool, optional
+
+        Supported methods:
+        - 'drop': Drops rows with missing values
+        - 'mean': Fills missing values with the mean of the column
+        - 'median': Fills missing values with the median of the column
+        - 'zero': Fills missing values with zero
+
+        Usage:
+        >>> data_loader = DataLoader()
+        >>> data_loader.missing_values(data, method='mean')
+
+        """
         if data is None:
             data = self.X
-            initial_data=True
+
+        if verbose:
             total_missing = data.isnull().sum().sum()
             print(f'Number of missing values: {total_missing}')
+
         if method == 'drop':
             data.dropna(inplace=True)
-        elif method in ['mean', 'median', '0']:
-            if method == '0':
-                fill_value = 0  
+        elif method in ['mean', 'median', 'zero']:
+            if method == 'zero':
+                fill_value = 0
             else:
-                fill_value = getattr(data, method)()  
+                fill_value = getattr(data, method)()
             data.fillna(fill_value, inplace=True)
         else:
-            raise Exception("Unsupported missing values method.")
-        
-        if initial_data:
-            self.X = data
+            raise Exception("Unsupported missing values method. Select one of 'drop', 'mean', 'median', 'zero'")
+
+        if data is self.X:
+            return None
         else:
             return data
         
-    # TODO: FIX NORMALIZE FUNCTION
     def normalize(self, X=None, method='minmax', train_test_set=False, X_test=None):
-       
-        initial_data=False
+        """
+        Normalize the input features using the specified method.
+
+        :param X: The input features, defaults to None
+        :type X: pandas.DataFrame, optional
+        :param method: The normalization method to use, defaults to 'minmax'
+        :type method: str, optional
+        :param train_test_set: Whether the normalization is applied to a train-test set, defaults to False
+        :type train_test_set: bool, optional
+        :param X_test: The test features, defaults to None
+        :type X_test: pandas.DataFrame, optional
+        :return: The normalized features or the train-test set if train_test_set is True
+        :rtype: pandas.DataFrame or tuple(pandas.DataFrame, pandas.DataFrame)
+        :raises Exception: If an unsupported normalization method is selected
+        """
         if X is None:
             X = self.X
-            initial_data=True
             print(f'Converting the raw data with {method} normalization method....')
             
-        if method in ['minmax', 'standard']:
-            self.scaler = MinMaxScaler() if method == 'minmax' else StandardScaler()
-            X = pd.DataFrame(self.scaler.fit_transform(X), columns=X.columns)
-            if train_test_set:
-                X_test = pd.DataFrame(self.scaler.transform(X_test), columns=X_test.columns)
+        if method == 'minmax':
+            self.scaler = MinMaxScaler()
+        elif method == 'standard':
+            self.scaler = StandardScaler()
         else:
             raise Exception("Unsupported normalization method.")
+        
+        X = pd.DataFrame(self.scaler.fit_transform(X), columns=X.columns)
+        
         if train_test_set:
-            pass
-        else:
-            print('Normalization completed.')
-            
-        if initial_data:
-            self.X = X
-        elif train_test_set:
+            if X_test is None:
+                raise Exception("X_test is required when train_test_set is True.")
+            X_test = pd.DataFrame(self.scaler.transform(X_test), columns=X_test.columns)
             return X, X_test
-        else: 
+        
+        print('Normalization completed.')
+        
+        if X is self.X:
             return X
+        else:
+            self.X = X
     
     def feature_selection(self, X=None, y=None, method='mrmr', num_features=10, inner_method='chi2'):        
-            """
-            Perform feature selection on the input dataset.
+        """
+        Perform feature selection on the input dataset.
 
-            :param X: The input features, defaults to None
-            :type X: array-like, optional
-            :param y: The target variable, defaults to None
-            :type y: array-like, optional
-            :param method: The feature selection method to use, defaults to 'mrmr'
-            :type method: str, optional
-            :param num_features: The number of features to select, defaults to 10
-            :type num_features: int, optional
-            :param inner_method: The scoring method used for feature selection, defaults to 'chi2'
-            :type inner_method: str, optional
-            :return: The selected features or None if X and y are provided
-            :rtype: array-like or None
-            :raises Exception: If an unsupported feature selection method or inner method is selected
-            """
+        :param X: The input features, defaults to None
+        :type X: array-like, optional
+        :param y: The target variable, defaults to None
+        :type y: array-like, optional
+        :param method: The feature selection method to use, defaults to 'mrmr'
+        :type method: str, optional
+        :param num_features: The number of features to select, defaults to 10
+        :type num_features: int, optional
+        :param inner_method: The scoring method used for feature selection, defaults to 'chi2'
+        :type inner_method: str, optional
+        :return: The selected features or None if X and y are provided
+        :rtype: array-like or None
+        :raises Exception: If an unsupported feature selection method or inner method is selected
+        """
 
-            if method not in ['mrmr', 'kbest', 'percentile']:
-                raise Exception("Unsupported feature selection method. Select one of 'mrmr', 'kbest', 'percentile'")
-            if inner_method not in ['chi2', 'f_classif', 'mutual_info_classif']:
-                raise Exception("Unsupported inner method. Select one of 'chi2', 'f_classif', 'mutual_info_classif'")
-            if method == 'percentile' and num_features is not None and (num_features >= 100 or num_features <= 0):
-                raise Exception("num_features for percentile option must be between 0 and 100.")
-            
-            datasetXy=False
-            if X is None and y is None:
-                X = self.X
-                y = self.y
-                datasetXy=True
+        if method not in ['mrmr', 'kbest', 'percentile']:
+            raise Exception("Unsupported feature selection method. Select one of 'mrmr', 'kbest', 'percentile'")
+        if inner_method not in ['chi2', 'f_classif', 'mutual_info_classif']:
+            raise Exception("Unsupported inner method. Select one of 'chi2', 'f_classif', 'mutual_info_classif'")
+        if method == 'percentile' and not 0 <= num_features <= 100:
+            raise Exception("num_features for percentile option must be between 0 and 100.")
+        
+        if X is None and y is None:
+            X = self.X
+            y = self.y
 
-            method_mapping = {
-                'chi2': chi2,
-                'f_classif': f_classif,
-                'mutual_info_classif': mutual_info_classif
-            }
-            scoring_function = method_mapping[inner_method]    
-            
-            if method == 'mrmr':
-                self.selected_features = mrmr_classif(X, y, K=num_features, show_progress=False)
-                X = X[self.selected_features]
+        method_mapping = {
+            'chi2': chi2,
+            'f_classif': f_classif,
+            'mutual_info_classif': mutual_info_classif
+        }
+        scoring_function = method_mapping[inner_method]    
+        
+        if method == 'mrmr':
+            self.selected_features = mrmr_classif(X, y, K=num_features, show_progress=False)
+            X = X[self.selected_features]
 
-            else:
-                if not isinstance(self.scaler, MinMaxScaler):
-                    raise Exception("Feature selection method requires MinMaxScaler.")
-                if method == 'kbest':
-                    X = SelectKBest(scoring_function, k=num_features).fit_transform(X, y)
+        else:
+            if not isinstance(self.scaler, MinMaxScaler):
+                raise Exception("Feature selection method requires MinMaxScaler.")
+            if method == 'kbest':
+                X = SelectKBest(scoring_function, k=num_features).fit_transform(X, y)
 
-                elif method == 'percentile':
-                    X = SelectPercentile(scoring_function, percentile=num_features).fit_transform(X, y)
-                else: 
-                    raise Exception("Unsupported feature selection method.")
-            
-            if datasetXy:
-                self.X = X
-                self.y = y
+            elif method == 'percentile':
+                X = SelectPercentile(scoring_function, percentile=num_features).fit_transform(X, y)
             else: 
-                return self.selected_features
+                raise Exception("Unsupported feature selection method.")
+        
+        if X is self.X and y is self.y:
+            return None
+        else: 
+            return self.selected_features
         
 
     def create_test_data(self, output_dir='./test_data.csv'):
