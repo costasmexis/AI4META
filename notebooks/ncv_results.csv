@@ -1,13 +1,13 @@
 Estimator,Classifier,Scores,Max,Std,SEM,Median,Hyperparameters,Selected_Features,Numbers_of_Features,Way_of_Selection
-GaussianNB,GaussianNB,"[0.46291004988627577, 0.1543033499620919, -0.0778498944161523]",0.46291004988627577,0.22149856821092426,0.15662313960505558,0.1543033499620919,"[{'var_smoothing': 6.914434075410241e-07}
- {'var_smoothing': 3.644567016006173e-06}
- {'var_smoothing': 4.047029337807011e-06}]",,60,full
-LinearDiscriminantAnalysis,LinearDiscriminantAnalysis,"[0.38461538461538464, 0.1543033499620919, -0.0778498944161523]",0.38461538461538464,0.18880115833307615,0.1335025793531932,0.1543033499620919,"[{'solver': 'lsqr', 'shrinkage': 0.9177023221422002, 'tol': 1e-05, 'store_covariance': True}
- {'solver': 'lsqr', 'shrinkage': 0.8618007452355425, 'tol': 1e-05, 'store_covariance': True}
- {'solver': 'lsqr', 'shrinkage': 0.5372850744944846, 'tol': 0.0001, 'store_covariance': False}]",,60,full
-LogisticRegression,LogisticRegression,"[0.3086066999241838, 0.2335496832484569, 0.07692307692307693]",0.3086066999241838,0.09651870902586995,0.06824903366356387,0.2335496832484569,"[{'penalty': 'l1', 'C': 8.37236400686964, 'solver': 'saga', 'max_iter': 926, 'n_jobs': None}
- {'penalty': 'l1', 'C': 6.574398236135816, 'solver': 'liblinear', 'max_iter': 213, 'n_jobs': None}
- {'penalty': None, 'C': 3.6536642235173247, 'solver': 'newton-cg', 'max_iter': 550, 'n_jobs': None}]",,60,full
-RandomForestClassifier,RandomForestClassifier,"[0.1543033499620919, 0.0, 0.1543033499620919]",0.1543033499620919,0.07273929674533079,0.051434449987363975,0.1543033499620919,"[{'n_estimators': 169, 'criterion': 'entropy', 'max_depth': 27, 'min_samples_leaf': 8, 'min_samples_split': 3, 'bootstrap': True, 'n_jobs': 1}
- {'n_estimators': 197, 'criterion': 'gini', 'max_depth': 39, 'min_samples_leaf': 4, 'min_samples_split': 6, 'bootstrap': True, 'n_jobs': 1}
- {'n_estimators': 97, 'criterion': 'gini', 'max_depth': 22, 'min_samples_leaf': 5, 'min_samples_split': 8, 'bootstrap': False, 'n_jobs': 1}]",,60,full
+GaussianNB,GaussianNB,"[0.3086066999241838, 0.0778498944161523, 0.23076923076923078]",0.3086066999241838,0.09585388088322867,0.06777892917557857,0.23076923076923078,"[{'var_smoothing': 1.5474518976833325e-06}
+ {'var_smoothing': 3.9465220043779665e-06}
+ {'var_smoothing': 2.349302718424028e-06}]",,329,full
+LinearDiscriminantAnalysis,LinearDiscriminantAnalysis,"[0.3892494720807615, 0.1543033499620919, 0.40422604172722165]",0.40422604172722165,0.11444811041404268,0.08092703496775631,0.3892494720807615,"[{'solver': 'eigen', 'shrinkage': 0.21180707891408446, 'tol': 0.0001, 'store_covariance': False}
+ {'solver': 'eigen', 'shrinkage': 0.039757071112989095, 'tol': 0.0001, 'store_covariance': False}
+ {'solver': 'eigen', 'shrinkage': 0.5082862014642917, 'tol': 0.001, 'store_covariance': False}]",,329,full
+LogisticRegression,LogisticRegression,"[1.0, 0.23076923076923078, 0.40422604172722165]",1.0,0.32943551905833157,0.2329460894898564,0.40422604172722165,"[{'penalty': 'l1', 'C': 4.3753208848910194, 'solver': 'liblinear', 'max_iter': 163, 'n_jobs': None}
+ {'penalty': 'l1', 'C': 2.4330072902803526, 'solver': 'saga', 'max_iter': 418, 'n_jobs': None}
+ {'penalty': None, 'C': 6.269226173299812, 'solver': 'sag', 'max_iter': 127, 'n_jobs': None}]",,329,full
+RandomForestClassifier,RandomForestClassifier,"[0.5384615384615384, 0.31622776601683794, 0.4743416490252569]",0.5384615384615384,0.09339236813711391,0.0660383768208237,0.4743416490252569,"[{'n_estimators': 183, 'criterion': 'gini', 'max_depth': 50, 'min_samples_leaf': 1, 'min_samples_split': 5, 'bootstrap': True, 'n_jobs': 1}
+ {'n_estimators': 71, 'criterion': 'gini', 'max_depth': 27, 'min_samples_leaf': 2, 'min_samples_split': 6, 'bootstrap': True, 'n_jobs': 1}
+ {'n_estimators': 101, 'criterion': 'gini', 'max_depth': 50, 'min_samples_leaf': 7, 'min_samples_split': 9, 'bootstrap': True, 'n_jobs': 1}]",,329,full
