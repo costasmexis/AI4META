@@ -106,7 +106,8 @@ class DataLoader:
             return None
         else:
             return data
-        
+    
+    # TODO: Να τσεκάρουμε με AkisNakis μήπως φυγει το train_test_set και χρησιμοποιήσουμε ΜΟΝΟ το X_test 
     def normalize(self, X=None, method='minmax', train_test_set=False, X_test=None):
         """
         Normalize the input features using the specified method.
@@ -123,7 +124,9 @@ class DataLoader:
         :rtype: pandas.DataFrame or tuple(pandas.DataFrame, pandas.DataFrame)
         :raises Exception: If an unsupported normalization method is selected
         """
+        use_self = False
         if X is None:
+            use_self = True
             X = self.X
             print(f'Converting the raw data with {method} normalization method....')
             
@@ -134,20 +137,22 @@ class DataLoader:
         else:
             raise Exception("Unsupported normalization method.")
         
-        X = pd.DataFrame(self.scaler.fit_transform(X), columns=X.columns)
+        X_scaled = pd.DataFrame(self.scaler.fit_transform(X), columns=X.columns)
         
         if train_test_set:
             if X_test is None:
                 raise Exception("X_test is required when train_test_set is True.")
+            if not X_scaled.columns.equals(X_test.columns):
+                raise Exception("X and X_test must have the same columns.")
             X_test = pd.DataFrame(self.scaler.transform(X_test), columns=X_test.columns)
-            return X, X_test
+            return X_scaled, X_test
         
         print('Normalization completed.')
         
-        if X is self.X:
-            return X
+        if use_self:
+            self.X = X_scaled
         else:
-            self.X = X
+            return X_scaled
     
     def feature_selection(self, X=None, y=None, method='mrmr', num_features=10, inner_method='chi2'):        
         """

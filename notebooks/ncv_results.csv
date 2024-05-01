@@ -1,31 +1,27 @@
 Estimator,Classifier,Scores,Max,Std,SEM,Median,Hyperparameters,Selected_Features,Numbers_of_Features,Way_of_Selection
-GaussianNB,GaussianNB_mrmr_10,"[0.5, 0.15811388300841897, 0.260132990857236]",0.5,0.14330627552085948,0.10133283920738748,0.260132990857236,"[{'var_smoothing': 7.224434962415428e-07}
- {'var_smoothing': 3.910170181420196e-06}
- {'var_smoothing': 7.575973569734824e-06}]","[list(['Lactamide', '1-Monopalmitin', '2-Hydroxy-3-methylbutyric acid', 'Trans-aconitic acid', 'Palmitoleic acid', '3-Hydroxybutyric acid', 'Stearic acid', 'Threitol', 'Urea', 'Palmitic acid'])
- list(['Stearic acid', 'Hypoxanthine', 'Lactamide', 'Palmitic acid', '3-Hydroxybutyric acid', 'Palmitoleic acid', 'Trans-aconitic acid', 'Arachidonic acid', 'Linoleic acid', 'Oleic acid'])
- list(['Stearic acid', '2-Hydroxy-3-methylbutyric acid', '3-Hydroxybutyric acid', 'Threitol', 'Lactamide', 'Palmitic acid', 'Palmitoleic acid', 'Trans-aconitic acid', 'Fructose', 'Acetoacetate'])]",10,mrmr
-GaussianNB,GaussianNB_mrmr_2,"[0.36514837167011077, 0.260132990857236, 0.0778498944161523]",0.36514837167011077,0.11869464674246444,0.08392978960213836,0.260132990857236,"[{'var_smoothing': 3.958386372002248e-06}
- {'var_smoothing': 8.170164364659624e-06}
- {'var_smoothing': 6.259025843495599e-06}]","[list(['Lactamide', '1-Monopalmitin'])
- list(['Stearic acid', 'Hypoxanthine'])
- list(['Stearic acid', '2-Hydroxy-3-methylbutyric acid'])]",2,mrmr
-GaussianNB,GaussianNB_mrmr_5,"[0.43355498476206, 0.242535625036333, 0.18257418583505539]",0.43355498476206,0.10701771993000492,0.07567295546962921,0.242535625036333,"[{'var_smoothing': 3.3348152312661684e-06}
- {'var_smoothing': 2.482813193242854e-06}
- {'var_smoothing': 6.815353731805023e-06}]","[list(['Lactamide', '1-Monopalmitin', '2-Hydroxy-3-methylbutyric acid', 'Trans-aconitic acid', 'Palmitoleic acid'])
- list(['Stearic acid', 'Hypoxanthine', 'Lactamide', 'Palmitic acid', '3-Hydroxybutyric acid'])
- list(['Stearic acid', '2-Hydroxy-3-methylbutyric acid', '3-Hydroxybutyric acid', 'Threitol', 'Lactamide'])]",5,mrmr
-LogisticRegression,LogisticRegression_mrmr_10,"[0.4743416490252569, 0.2335496832484569, 0.07692307692307693]",0.4743416490252569,0.16345376038072554,0.11557926237565208,0.2335496832484569,"[{'penalty': 'l2', 'C': 0.9692232140986667, 'solver': 'sag', 'max_iter': 730, 'n_jobs': None}
- {'penalty': None, 'C': 2.472278986164467, 'solver': 'saga', 'max_iter': 189, 'n_jobs': None}
- {'penalty': 'l1', 'C': 3.8939991287700026, 'solver': 'liblinear', 'max_iter': 111, 'n_jobs': None}]","[list(['Lactamide', '1-Monopalmitin', '2-Hydroxy-3-methylbutyric acid', 'Trans-aconitic acid', 'Palmitoleic acid', '3-Hydroxybutyric acid', 'Stearic acid', 'Threitol', 'Urea', 'Palmitic acid'])
- list(['Stearic acid', 'Hypoxanthine', 'Lactamide', 'Palmitic acid', '3-Hydroxybutyric acid', 'Palmitoleic acid', 'Trans-aconitic acid', 'Arachidonic acid', 'Linoleic acid', 'Oleic acid'])
- list(['Stearic acid', '2-Hydroxy-3-methylbutyric acid', '3-Hydroxybutyric acid', 'Threitol', 'Lactamide', 'Palmitic acid', 'Palmitoleic acid', 'Trans-aconitic acid', 'Fructose', 'Acetoacetate'])]",10,mrmr
-LogisticRegression,LogisticRegression_mrmr_2,"[0.31622776601683794, 0.18257418583505539, 0.3086066999241838]",0.31622776601683794,0.061287623140060886,0.043336893925142624,0.3086066999241838,"[{'penalty': 'l1', 'C': 8.244071701648828, 'solver': 'saga', 'max_iter': 505, 'n_jobs': None}
- {'penalty': 'l2', 'C': 0.4830608843529004, 'solver': 'liblinear', 'max_iter': 231, 'n_jobs': None}
- {'penalty': None, 'C': 1.6035266444542238, 'solver': 'sag', 'max_iter': 832, 'n_jobs': None}]","[list(['Lactamide', '1-Monopalmitin'])
- list(['Stearic acid', 'Hypoxanthine'])
- list(['Stearic acid', '2-Hydroxy-3-methylbutyric acid'])]",2,mrmr
-LogisticRegression,LogisticRegression_mrmr_5,"[0.31622776601683794, 0.15811388300841897, 0.07692307692307693]",0.31622776601683794,0.09936391096203961,0.07026089524647454,0.15811388300841897,"[{'penalty': 'l2', 'C': 3.386849995191499, 'solver': 'sag', 'max_iter': 641, 'n_jobs': None}
- {'penalty': 'l2', 'C': 1.5217401457422128, 'solver': 'lbfgs', 'max_iter': 750, 'n_jobs': None}
- {'penalty': 'l1', 'C': 3.8884226469420993, 'solver': 'liblinear', 'max_iter': 985, 'n_jobs': None}]","[list(['Lactamide', '1-Monopalmitin', '2-Hydroxy-3-methylbutyric acid', 'Trans-aconitic acid', 'Palmitoleic acid'])
- list(['Stearic acid', 'Hypoxanthine', 'Lactamide', 'Palmitic acid', '3-Hydroxybutyric acid'])
- list(['Stearic acid', '2-Hydroxy-3-methylbutyric acid', '3-Hydroxybutyric acid', 'Threitol', 'Lactamide'])]",5,mrmr
+GaussianNB,GaussianNB_mrmr_10,"[0.3237481030440162, 0.1974882866820799, 0.21957751641341997]",0.3237481030440162,0.05505652289222246,0.03893084068564289,0.21957751641341997,"[{'var_smoothing': 6.571491356428424e-06}
+ {'var_smoothing': 1.9628728931252606e-06}
+ {'var_smoothing': 5.306859813869514e-06}]","[list(['M118', 'M39', 'M41', 'M140', 'M1', 'M7', 'M64', 'M154', 'M47', 'M121'])
+ list(['M140', 'M35', 'M53', 'M66', 'M20', 'M3', 'M37', 'M89', 'M1', 'M115'])
+ list(['M121', 'M20', 'M1', 'M47', 'M131', 'M28', 'M30', 'M176', 'M140', 'M45'])]",10,mrmr
+GaussianNB,GaussianNB_mrmr_2,"[-0.029250896965085225, 0.1445304031446501, 0.2160246899469287]",0.2160246899469287,0.102994868722362,0.07282837010100042,0.1445304031446501,"[{'var_smoothing': 1.367197675090621e-06}
+ {'var_smoothing': 9.730291918292737e-06}
+ {'var_smoothing': 1.3658115355008372e-06}]","[list(['M118', 'M39']) list(['M140', 'M35']) list(['M121', 'M20'])]",2,mrmr
+GaussianNB,GaussianNB_mrmr_5,"[0.2169304578186562, 0.2873556429761546, 0.5393598899705937]",0.5393598899705937,0.1384142678602186,0.09787366741693176,0.2873556429761546,"[{'var_smoothing': 9.695640172523556e-06}
+ {'var_smoothing': 5.80306519535627e-06}
+ {'var_smoothing': 4.606698185248575e-06}]","[list(['M118', 'M39', 'M41', 'M140', 'M1'])
+ list(['M140', 'M35', 'M53', 'M66', 'M20'])
+ list(['M121', 'M20', 'M1', 'M47', 'M131'])]",5,mrmr
+LogisticRegression,LogisticRegression_mrmr_10,"[0.3006232385408722, 0.1974882866820799, 0.28311042925246527]",0.3006232385408722,0.04506127689963586,0.031863134464657245,0.28311042925246527,"[{'penalty': 'l2', 'C': 4.091934443973539, 'solver': 'saga', 'max_iter': 622, 'n_jobs': None}
+ {'penalty': 'l2', 'C': 1.8602655814624756, 'solver': 'sag', 'max_iter': 923, 'n_jobs': None}
+ {'penalty': 'l2', 'C': 7.544269661789864, 'solver': 'lbfgs', 'max_iter': 472, 'n_jobs': None}]","[list(['M118', 'M39', 'M41', 'M140', 'M1', 'M7', 'M64', 'M154', 'M47', 'M121'])
+ list(['M140', 'M35', 'M53', 'M66', 'M20', 'M3', 'M37', 'M89', 'M1', 'M115'])
+ list(['M121', 'M20', 'M1', 'M47', 'M131', 'M28', 'M30', 'M176', 'M140', 'M45'])]",10,mrmr
+LogisticRegression,LogisticRegression_mrmr_2,"[0.14348601079588788, 0.025482359571881278, 0.2160246899469287]",0.2160246899469287,0.07852324591406629,0.05552431966661514,0.14348601079588788,"[{'penalty': 'l2', 'C': 5.770925317996016, 'solver': 'newton-cg', 'max_iter': 117, 'n_jobs': None}
+ {'penalty': None, 'C': 9.695640394862423, 'solver': 'newton-cg', 'max_iter': 254, 'n_jobs': None}
+ {'penalty': 'l2', 'C': 8.599567956571192, 'solver': 'lbfgs', 'max_iter': 145, 'n_jobs': None}]","[list(['M118', 'M39']) list(['M140', 'M35']) list(['M121', 'M20'])]",2,mrmr
+LogisticRegression,LogisticRegression_mrmr_5,"[0.5235294117647059, 0.23295454545454544, 0.3294039229342062]",0.5235294117647059,0.1208400875174672,0.08544684532277694,0.3294039229342062,"[{'penalty': 'l1', 'C': 8.940311006500016, 'solver': 'liblinear', 'max_iter': 142, 'n_jobs': None}
+ {'penalty': 'l1', 'C': 9.898320523931309, 'solver': 'liblinear', 'max_iter': 336, 'n_jobs': None}
+ {'penalty': 'l1', 'C': 6.020259675680776, 'solver': 'saga', 'max_iter': 934, 'n_jobs': None}]","[list(['M118', 'M39', 'M41', 'M140', 'M1'])
+ list(['M140', 'M35', 'M53', 'M66', 'M20'])
+ list(['M121', 'M20', 'M1', 'M47', 'M131'])]",5,mrmr
