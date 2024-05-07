@@ -34,6 +34,8 @@ from optuna.samplers import TPESampler,RandomSampler
 import logging
 from sklearn.metrics import make_scorer
 import sklearn.metrics as metrics  
+import shap
+shap.initjs()
 
 # from logging_levels import add_log_level
 
@@ -159,7 +161,7 @@ class MachineLearningEstimator(DataLoader):
 
     def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', features_list=None,rounds=10,
                         cv=5, direction='maximize', n_trials=100, estimator_name=None,evaluation='cv_simple',
-                        feat_num = None, feat_way = 'mrmr', verbose=True, missing_values='median'):#, box=False):
+                        feat_num = None, feat_way = 'mrmr', verbose=True, missing_values='median',calculate_shap=False):#, box=False):
         """ Function to perform a bayesian search
 
         Args:
@@ -204,12 +206,15 @@ class MachineLearningEstimator(DataLoader):
                               
                               
         if evaluation == 'cv_rounds':     
-            columns = ['Hyperparameters','Score','Estimator','SEM']
-            data_full_outer = pd.DataFrame(columns=columns)  
+            # columns = ['best_hyperparameters','Score','Estimator','SEM']
+            data_full_outer = pd.DataFrame()  
             def c_v(i):
                 cv_splits = StratifiedKFold(n_splits=cv, shuffle=True, random_state=i)
                 train_test_indices = list(cv_splits.split(X, y))  
-                local_data_full_outer = pd.DataFrame(columns=columns)  
+                local_data_full_outer = pd.DataFrame()  
+                
+                shaps=[]
+                
                 for train_index, test_index in train_test_indices:
                     X_train, X_test = X.iloc[train_index], X.iloc[test_index]
                     y_train, y_test = y[train_index], y[test_index]
@@ -222,15 +227,54 @@ class MachineLearningEstimator(DataLoader):
                     study = optuna.create_study(sampler=TPESampler(),direction=direction)
                     study.optimize(objective, n_trials=n_trials, show_progress_bar=True,n_jobs=-1)
                     trial_scores = [trial.value for trial in study.trials]
+                    all_params = [trial.params for trial in study.trials]
                     
-                    new_row = {
-                        'Hyperparameters': study.best_params,
-                        'Score': study.best_value,
-                        'Estimator': estimator_name,
-                        'all_scores': trial_scores,
-                        'SEM': np.std(trial_scores) / np.sqrt(len(trial_scores)),
+                    if calculate_shap:
+                        best_params = study.best_params
+                        best_model = self.available_clfs[estimator_name]
+                        best_model.set_params(**best_params)
                         
-                    }
+                        try:
+                            explainer = shap.Explainer(best_model, X_train)
+                        except TypeError as e:
+                            if "The passed model is not callable and cannot be analyzed directly with the given masker!" in str(e):
+                                print("Switching to predict_proba due to compatibility issue with the model.")
+                                explainer = shap.Explainer(lambda X: best_model.predict_proba(X), X_train)
+                            else:
+                                raise TypeError(e)
+                        try:
+                            shap_values = explainer(X_train)
+                        except ValueError:
+                            num_features = X_train.shape[1]
+                            max_evals = 2 * num_features + 1
+                            shap_values = explainer(X_train, max_evals=max_evals)    
+                        
+                        if len(shap_values.shape) == 3:
+                            shap_values = shap_values[:,:,1]
+                        else:
+                            pass
+
+                        new_row = {
+                            'best_hyperparameters': study.best_params,
+                            'Score': study.best_value,
+                            'Estimator': estimator_name,
+                            'all_scores': trial_scores,
+                            'all_hyperparameters': all_params,
+                            'SEM': np.std(trial_scores) / np.sqrt(len(trial_scores)),
+                            'shap_values': shap_values.values
+                        }
+                        
+                    else:
+                        new_row = {
+                            'best_hyperparameters': study.best_params,
+                            'Score': study.best_value,
+                            'Estimator': estimator_name,
+                            'all_scores': trial_scores,
+                            'all_hyperparameters': all_params,
+                            'SEM': np.std(trial_scores) / np.sqrt(len(trial_scores))
+                        }
+                        
+                    
                     new_row = pd.DataFrame([new_row])
                     local_data_full_outer = pd.concat([local_data_full_outer, new_row], ignore_index=True)
                     return local_data_full_outer
@@ -240,12 +284,20 @@ class MachineLearningEstimator(DataLoader):
             
             data_full_outer = pd.concat(list_dfs, ignore_index=True) 
             min_sem_index = data_full_outer['SEM'].idxmin()
-            self.best_params = data_full_outer.loc[min_sem_index, 'Hyperparameters']
+            self.best_params = data_full_outer.loc[min_sem_index, 'best_hyperparameters']
             self.best_score = data_full_outer.loc[min_sem_index, 'Score']
             best_clf = self.available_clfs[estimator_name]
             best_clf.set_params(**self.best_params)
             best_clf.fit(X, y)
             self.best_estimator = best_clf
+            
+            ##Λαθος, μετραει μονο για 65 ενω θελω για 78. Χρησιμοποιησε τα ινδεχεσ
+            
+            if calculate_shap:
+                all_shap_values = np.stack(data_full_outer['shap_values'].values)
+                mean_shap_values = np.mean(all_shap_values, axis=0)
+                self.shap_values = mean_shap_values
+                data_full_outer.drop('shap_values', axis=1, inplace=True)
         
                                     
         elif evaluation == 'cv_simple':       
@@ -263,8 +315,8 @@ class MachineLearningEstimator(DataLoader):
             best_clf.set_params(**self.best_params)
             self.best_estimator = best_clf.fit(X, y)
             
-            if verbose:
-                print(f'For the {self.name} model: \nBest parameters: {self.best_params}\nBest {scoring}: {self.best_score}')
+            # if verbose:
+            #     print(f'For the {self.name} model: \nBest parameters: {self.best_params}\nBest {scoring}: {self.best_score}')
                 
         if evaluation == 'cv_rounds':
             return  self.best_estimator, data_full_outer

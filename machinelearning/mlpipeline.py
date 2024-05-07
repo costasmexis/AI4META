@@ -42,7 +42,6 @@ import multiprocessing
 from collections import Counter
 import progressbar
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from scipy.stats import bootstrap
 
 
     
