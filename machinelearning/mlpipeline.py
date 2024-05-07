@@ -42,6 +42,8 @@ import multiprocessing
 from collections import Counter
 import progressbar
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from scipy.stats import bootstrap
+
 
     
 class MLPipelines(MachineLearningEstimator):
@@ -248,7 +250,7 @@ class MLPipelines(MachineLearningEstimator):
     
     def nested_cv(self,optimizer = 'bayesian_search', n_trials_ncv=25, n_iter=25, 
                     rounds=10, exclude=None,hist_feat=True,N=100,most_imp_feat=10,search_on=None,
-                    num_features=None,feature_selection_type='mrmr', return_csv=True,
+                    num_features=None,feature_selection_type='mrmr', return_csv=True, hist_fit=False,
                     feature_selection_method='chi2', plot='box',inner_scoring='matthews_corrcoef',
                     outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5,norm_method='minmax',
                     parallel='thread_per_round', missing_values_method='median',return_all_N_features=True):
@@ -372,7 +374,6 @@ class MLPipelines(MachineLearningEstimator):
             
         print(f'Finished with {len(results)} estimators')
         scores_dataframe = pd.DataFrame(results)
-
         
         feature_counts = Counter()
         for idx, row in scores_dataframe.iterrows():
@@ -426,8 +427,8 @@ class MLPipelines(MachineLearningEstimator):
         labels = scores_dataframe['Classifier'].unique() 
         x_coords = range(1, len(labels) + 1)
         if plot == 'box':
-            plt.boxplot(scores_dataframe['Scores'], labels=labels)
-            x_coords = range(1, len(labels) + 1)
+            plt.boxplot(scores_dataframe['Scores'], bootstrap=1000, notch=True, labels=labels)
+            # x_coords = range(1, len(labels) + 1)
             plt.title("Model Selection Results")
             plt.ylabel("Score")
             plt.xticks(rotation=90)  
