@@ -107,8 +107,7 @@ class DataLoader:
         else:
             return data
     
-    # TODO: Να τσεκάρουμε με AkisNakis μήπως φυγει το train_test_set και χρησιμοποιήσουμε ΜΟΝΟ το X_test 
-    def normalize(self, X=None, method='minmax', train_test_set=False, X_test=None):
+    def normalize(self, X=None, method='minmax', X_test=None):
         """
         Normalize the input features using the specified method.
 
@@ -116,13 +115,10 @@ class DataLoader:
         :type X: pandas.DataFrame, optional
         :param method: The normalization method to use, defaults to 'minmax'
         :type method: str, optional
-        :param train_test_set: Whether the normalization is applied to a train-test set, defaults to False
-        :type train_test_set: bool, optional
         :param X_test: The test features, defaults to None
         :type X_test: pandas.DataFrame, optional
         :return: The normalized features or the train-test set if train_test_set is True
         :rtype: pandas.DataFrame or tuple(pandas.DataFrame, pandas.DataFrame)
-        :raises Exception: If an unsupported normalization method is selected
         """
         use_self = False
         if X is None:
@@ -139,14 +135,12 @@ class DataLoader:
         
         X_scaled = pd.DataFrame(self.scaler.fit_transform(X), columns=X.columns)
         
-        if train_test_set:
-            if X_test is None:
-                raise Exception("X_test is required when train_test_set is True.")
+        if X_test is not None:
             if not X_scaled.columns.equals(X_test.columns):
                 raise Exception("X and X_test must have the same columns.")
             X_test = pd.DataFrame(self.scaler.transform(X_test), columns=X_test.columns)
             return X_scaled, X_test
-        
+
         print('Normalization completed.')
         
         if use_self:

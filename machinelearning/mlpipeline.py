@@ -146,12 +146,12 @@ class MLPipelines(MachineLearningEstimator):
         X_tr, X_te = X.iloc[train_index], X.iloc[test_index]
         norm_method = self.params['norm_method']
         missing_values_method = self.params['missing_values_method']
-        X_train, X_test = self.normalize(X=X_tr, train_test_set=True, X_test=X_te, method=norm_method)
+        X_train, X_test = self.normalize(X=X_tr, X_test=X_te, method=norm_method)
         
         X_train = self.missing_values(data=X_train, method=missing_values_method, verbose=False)
         X_test = self.missing_values(data=X_test, method=missing_values_method, verbose=False)
         
-        y_train, y_test = y[train_index], y[test_index]
+        y_train, _ = y[train_index], y[test_index]
         feature_selection_type = self.params['feature_selection_type']
         feature_selection_method = self.params['feature_selection_method']
         
@@ -396,7 +396,7 @@ class MLPipelines(MachineLearningEstimator):
                 print('No features were selected.')
             else:
                 features, counts = zip(*sorted_features_counts[:N])
-                counts = [x / 12 for x in counts]
+                counts = [x / len(clfs) for x in counts]
                 plt.figure(figsize=(max(10, N // 2), 10))
                 bars = plt.bar(range(N), counts, color='skyblue', tick_label=features)
                 most_imp_feat = min(most_imp_feat, N) if most_imp_feat is not None else N

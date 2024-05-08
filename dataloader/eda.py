@@ -53,9 +53,8 @@ class DataExplorer(DataLoader):
             else: 
                 raise Exception("Unsupported normalization method.")
         
-        # TODO: data_df is not defined.. Maybe data ??
         if list_of_feature is not None:
-            data_df = data_df[list_of_feature]
+            data = data[list_of_feature]
             
         if num_of_best_features is not None:
             selected = self.feature_selection(data, labels, method = way_of_selection, num_features = num_of_best_features)
@@ -103,9 +102,8 @@ class DataExplorer(DataLoader):
             else: 
                 raise Exception("Unsupported normalization method.")
         
-        # TODO: data_df is not defined.. Maybe data ??
         if list_of_feature is not None:
-            data_df = data_df[list_of_feature]
+            data = data[list_of_feature]
             
         if num_of_best_features is not None:
             selected = self.feature_selection(data, labels, method = way_of_selection, num_features = num_of_best_features)
@@ -169,9 +167,8 @@ class DataExplorer(DataLoader):
                 else: 
                     raise Exception("Unsupported normalization method. For non-parametric tests, only 'minmax' is supported.")
 
-        # TODO: data_df is not defined.. Maybe data ??
         if list_of_feature is not None:
-            data_df = data_df[list_of_feature]
+            data = data[list_of_feature]
             
         if num_of_best_features is not None:
             selected = self.feature_selection(data, labels, method = way_of_selection, num_features = num_of_best_features)
