@@ -25,6 +25,7 @@ from sklearn.model_selection import (
     cross_val_score,
     train_test_split,
 )
+from sklearn.utils import resample
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -344,3 +345,29 @@ class MachineLearningEstimator(DataLoader):
 
         if return_model:
             return self.best_estimator
+
+    # TODO: Complete the method
+    def bootstrap_validation(self, scoring="matthews_corrcoef", n_iter=100, test_size=0.2):
+        """
+        Perform bootstrap validation on the estimator.
+
+        :param n_iter: The number of iterations to perform, defaults to 100
+        :type n_iter: int, optional
+        :param test_size: The size of the test set, defaults to 0.2
+        :type test_size: float, optional
+        """
+        if scoring not in sklearn.metrics.get_scorer_names():
+            raise ValueError(
+                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
+            )
+        
+        X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, stratify=self.y, test_size=test_size)
+
+        scores = []
+        for i in tqdm(range(n_iter)):
+            X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
+            self.best_estimator.fit(X_train_res, y_train_res)
+            y_pred = self.best_estimator.predict(X_test)
+            score = metrics.get_scorer(scoring)._score_func(y_test, y_pred)
+            scores.append(score)
+        return scores
