@@ -205,7 +205,6 @@ class DataLoader:
         else: 
             return self.selected_features
         
-
     def create_test_data(self, output_dir='./test_data.csv'):
         """
         Create a test dataset.

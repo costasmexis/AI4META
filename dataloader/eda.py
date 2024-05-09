@@ -23,7 +23,8 @@ class DataExplorer(DataLoader):
     
     # TODO: Maybe use also seaborn.clustermap for better visualization
     def correlations(self, data=None, labels=None, list_of_feature=None, 
-                     limit=None, num_of_best_features=None, way_of_selection='mrmr', get_table: bool = False):
+                     limit=None, num_of_best_features=None, way_of_selection='mrmr', 
+                     get_table: bool = False):
         """
         Calculates and visualizes the correlation matrix of the dataset, optionally after applying feature selection and normalization.
 
@@ -52,6 +53,7 @@ class DataExplorer(DataLoader):
                 data = self.normalize(data, method=self.normalization_method)
             else: 
                 raise Exception("Unsupported normalization method.")
+
         
         if list_of_feature is not None:
             data = data[list_of_feature]
@@ -60,6 +62,10 @@ class DataExplorer(DataLoader):
             selected = self.feature_selection(data, labels, method = way_of_selection, num_features = num_of_best_features)
             data = data[selected]
         
+        # Drop rows with missing values to generate correlation table
+        data = self.missing_values(data=data, method='drop', verbose=False)
+        labels = pd.DataFrame(self.y).iloc[data.index][0].values
+
         correl_table = np.corrcoef(data, y=labels, rowvar=False)
         
         if limit is not None and 0 < limit < 1:
@@ -72,48 +78,54 @@ class DataExplorer(DataLoader):
         df_correl = pd.DataFrame(correl_table,index=feature_names, columns=feature_names)
                 
         plt.figure(figsize=(10, 8))
-        sns.heatmap(df_correl,  cmap='coolwarm')
+        sns.heatmap(df_correl, annot=True, fmt=".3f", cmap='crest')
         plt.show()
-        
+
         if get_table:
             return correl_table
-    
-        
-    def pairplots_function(self,data=None,labels=None,list_of_feature=None, num_of_best_features=10, way_of_selection='mrmr'):
-        """
-        Generate pairplots to visualize relationships between features and labels.
-        
-        Parameters:
-            - data (DataFrame, optional): The input data for PCA. If None, the instance's data is used.
-            - labels (Series or array-like, optional): The labels corresponding to the input data. If None, the instance's labels are used.
-            - list_of_feature (list): List of features to include in the pairplots.
-            - num_of_best_features (int): Number of best features to select for pairplots.
-            - way_of_selection (str): Feature selection method to use.
             
-        Returns:
-            The pairplot.
-        """        
-        if data is None and labels is None:
-            data = self.X_normalized_df
-            labels = self.y
-        else:
-            if self.normalization_method in ['minmax', 'standard']:
-                data = self.normalize(data, method=self.normalization_method)
-            else: 
-                raise Exception("Unsupported normalization method.")
-        
-        if list_of_feature is not None:
-            data = data[list_of_feature]
+    def pairplots_function(self, data=None, labels=None, list_of_feature=None, 
+                               num_of_best_features=10, way_of_selection='mrmr') -> None:
+            """
+            Generate pair plots for visualizing relationships between features.
+
+            :param data: The input data, defaults to None.
+            :type data: pandas.DataFrame, optional
+            :param labels: The labels for the data, defaults to None.
+            :type labels: pandas.Series, optional
+            :param list_of_feature: A list of features to include in the pair plots, defaults to None.
+            :type list_of_feature: list, optional
+            :param num_of_best_features: The number of best features to select, defaults to 10.
+            :type num_of_best_features: int, optional
+            :param way_of_selection: The method for feature selection, defaults to 'mrmr'.
+            :type way_of_selection: str, optional
+            """
+            if data is None and labels is None:
+                data = self.X_normalized_df
+                labels = self.y
+            else:
+                if self.normalization_method in ['minmax', 'standard']:
+                    data = self.normalize(data, method=self.normalization_method)
+                else: 
+                    raise Exception("Unsupported normalization method.")
             
-        if num_of_best_features is not None:
-            selected = self.feature_selection(data, labels, method = way_of_selection, num_features = num_of_best_features)
-            data = data[selected]
+            if list_of_feature is not None:
+                data = data[list_of_feature]
+                
+            if num_of_best_features is not None:
+                selected = self.feature_selection(data, labels, method=way_of_selection, num_features=num_of_best_features)
+                data = data[selected]
+            
+            # Drop rows with missing values to generate correlation table
+            data = self.missing_values(data=data, method='drop', verbose=False)
+            labels = pd.DataFrame(self.y).iloc[data.index][0].values
+
+            data['labels'] = labels
+            sns.pairplot(data, hue='labels')
+            plt.show()
         
-        data['labels'] = labels
-        sns.pairplot(data, hue='labels')
-        plt.show()
-        
-    def statistical_difference(self,data=None,labels=None,p_value=0.05,list_of_feature=None, num_of_best_features=None, way_of_selection='mrmr', normalize=False):
+    def statistical_difference(self, data=None, labels=None, p_value=0.05, list_of_feature=None, 
+                               num_of_best_features=None, way_of_selection='mrmr', normalize=False):
         """
         Perform non-parametric statistical tests to identify significant features based on labels,
         and visualize these features' distributions across groups using boxplots.
@@ -123,33 +135,25 @@ class DataExplorer(DataLoader):
         the provided feature selection method and visualizes the results for features where
         the distributions significantly differ across the groups as determined by the specified p-value.
         
-        Parameters:
-        - data (DataFrame, optional): The input data for PCA. If None, the instance's data is used.
-        - labels (Series or array-like, optional): The labels corresponding to the input data. If None, the instance's labels are used.
-        - p_value (float): Significance level for determining statistical significance in tests.
-                        Defaults to 0.05.
-        - list_of_feature (list, optional): List of features to consider for the statistical tests.
-                                            If None, all features in the dataset are used.
-                                            Defaults to None.
-        - num_of_best_features (int, optional): Number of top features to select based on the specified
-                                                feature selection method. If None, no feature selection is applied.
-                                                Defaults to None.
-        - way_of_selection (str): Feature selection method to use when num_of_best_features is specified.
-                                Supported values are 'mrmr' and others as implemented in the feature_selection method.
-                                Defaults to 'mrmr'.
-        - normalize (boolean, optional): Normalization method to apply to the data before performing
-                                                statistical tests. Supported method is 'minmax' .
-                                                If None, no normalization is applied. Defaults to None.
-
-        Returns:
-        - list: A list of feature names that show statistically significant differences across groups,
-                based on the specified p-value threshold. Returns an empty list if no significant features are found.
-                
-        Raises:
-        - Exception: If an unsupported normalization method is specified.
+        :param data: The input data for PCA. If None, the instance's data is used.
+        :type data: pandas.DataFrame, optional
+        :param labels: The labels corresponding to the input data. If None, the instance's labels are used.
+        :type labels: pandas.Series or array-like, optional
+        :param p_value: Significance level for determining statistical significance in tests. Defaults to 0.05.
+        :type p_value: float
+        :param list_of_feature: List of features to consider for the statistical tests. If None, all features in the dataset are used. Defaults to None.
+        :type list_of_feature: list, optional
+        :param num_of_best_features: Number of top features to select based on the specified feature selection method. If None, no feature selection is applied. Defaults to None.
+        :type num_of_best_features: int, optional
+        :param way_of_selection: Feature selection method to use when num_of_best_features is specified. Supported values are 'mrmr' and others as implemented in the feature_selection method. Defaults to 'mrmr'.
+        :type way_of_selection: str
+        :param normalize: Normalization method to apply to the data before performing statistical tests. Supported method is 'minmax'. If None, no normalization is applied. Defaults to None.
+        :type normalize: boolean, optional
         
-        Note:
-        No normalization is required for the statistical tests since the methods used are non-parametric.
+        :return: A list of feature names that show statistically significant differences across groups, based on the specified p-value threshold. Returns an empty list if no significant features are found.
+        :rtype: list
+        
+        :note: No normalization is required for the statistical tests since the methods used are non-parametric.
         """
         if data is None and labels is None:
             data = self.X
