@@ -370,6 +370,7 @@ class MachineLearningEstimator(DataLoader):
             plt.figure(figsize=(6, 6))
             plt.boxplot(scores)
             plt.title('Bootstrap Validation')
+            plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False) 
             plt.xlabel(self.name)
             plt.ylabel('Score')
             plt.show()

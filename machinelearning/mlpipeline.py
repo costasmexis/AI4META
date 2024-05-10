@@ -240,7 +240,7 @@ class MLPipelines(MachineLearningEstimator):
             print(f'Finished with {i+1} round after {(end-start)/3600:.2f} hours.')
             return list_dfs
     
-    def nested_cv(self, optimizer='bayesian_search', n_trials_ncv=25, n_iter=25, 
+    def model_selection(self, optimizer='bayesian_search', n_trials_ncv=25, n_iter=25, 
                     rounds=10, exclude=None, hist_feat=True, N=100, most_imp_feat=10, include=None,
                     num_features=None, feature_selection_type='mrmr', return_csv=True,
                     feature_selection_method='chi2', plot='box', inner_scoring='matthews_corrcoef',
