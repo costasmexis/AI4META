@@ -35,9 +35,9 @@ from tqdm import tqdm
 from xgboost import XGBClassifier
 
 from dataloader import DataLoader
+from src.utils import scoring_check
 
 from .optuna_grid import optuna_grid
-
 
 class MachineLearningEstimator(DataLoader):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
@@ -96,6 +96,7 @@ class MachineLearningEstimator(DataLoader):
         optuna.logging.set_verbosity(level)
         logging.getLogger("optuna").setLevel(level)
 
+    @scoring_check
     def grid_search(
         self,
         X=None,
@@ -139,11 +140,6 @@ class MachineLearningEstimator(DataLoader):
         :rtype: estimator object or None
         """
 
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
-            )
-
         X = X or self.X
         y = y or self.y
 
@@ -165,10 +161,12 @@ class MachineLearningEstimator(DataLoader):
             self.estimator, self.param_grid, scoring=scoring, cv=cv
         )
         grid_search.fit(X, y)
+
         self.best_params = grid_search.best_params_
         self.best_score = grid_search.best_score_
         self.name = self.best_estimator.__class__.__name__
         self.best_estimator = grid_search.best_estimator_
+
         if verbose:
             print(f"Best parameters: {self.best_params}")
             print(f"Best {scoring}: {self.best_score}")
@@ -176,6 +174,7 @@ class MachineLearningEstimator(DataLoader):
         if return_model:
             return self.best_estimator
 
+    @scoring_check
     def random_search(
         self,
         X=None,
@@ -218,10 +217,6 @@ class MachineLearningEstimator(DataLoader):
         :return: The best estimator if return_model is True, otherwise None
         :rtype: estimator object or None
         """
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
-            )
 
         X = X or self.X
         y = y or self.y
@@ -256,6 +251,7 @@ class MachineLearningEstimator(DataLoader):
         if return_model:
             return self.best_estimator
 
+    @scoring_check
     def bayesian_search(
         self,
         X=None,
@@ -304,11 +300,6 @@ class MachineLearningEstimator(DataLoader):
 
         self.set_optuna_verbosity(logging.WARNING)
 
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
-            )
-
         X = X or self.X
         y = y or self.y
 
@@ -346,7 +337,7 @@ class MachineLearningEstimator(DataLoader):
         if return_model:
             return self.best_estimator
 
-    # TODO: Complete the method
+    @scoring_check
     def bootstrap_validation(self, scoring="matthews_corrcoef", n_iter=100, test_size=0.2):
         """
         Perform bootstrap validation on the estimator.
@@ -356,18 +347,22 @@ class MachineLearningEstimator(DataLoader):
         :param test_size: The size of the test set, defaults to 0.2
         :type test_size: float, optional
         """
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
-            )
-        
+
         X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, stratify=self.y, test_size=test_size)
 
         scores = []
+        _estimator = self.best_estimator
         for i in tqdm(range(n_iter)):
             X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
-            self.best_estimator.fit(X_train_res, y_train_res)
-            y_pred = self.best_estimator.predict(X_test)
+            _estimator.fit(X_train_res, y_train_res)
+            y_pred = _estimator.predict(X_test)
             score = metrics.get_scorer(scoring)._score_func(y_test, y_pred)
             scores.append(score)
+
+        # Boxplot of scores
+        plt.figure(figsize=(12, 6))
+        plt.boxplot(scores)
+        plt.title('Bootstrap Validation')
+        plt.show()
+
         return scores
