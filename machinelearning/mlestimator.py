@@ -164,10 +164,11 @@ class MachineLearningEstimator(DataLoader):
 
         self.best_params = grid_search.best_params_
         self.best_score = grid_search.best_score_
-        self.name = self.best_estimator.__class__.__name__
         self.best_estimator = grid_search.best_estimator_
+        self.name = self.best_estimator.__class__.__name__
 
         if verbose:
+            print(f"Estimator: {self.name}")
             print(f"Best parameters: {self.best_params}")
             print(f"Best {scoring}: {self.best_score}")
 
@@ -239,12 +240,14 @@ class MachineLearningEstimator(DataLoader):
             self.estimator, self.param_grid, scoring=scoring, cv=cv, n_iter=n_iter
         )
         random_search.fit(X, y)
+
         self.best_params = random_search.best_params_
         self.best_score = random_search.best_score_
-        self.name = self.best_estimator.__class__.__name__
         self.best_estimator = random_search.best_estimator_
+        self.name = self.best_estimator.__class__.__name__
 
         if verbose:
+            print(f"Estimator: {self.name}")
             print(f"Best parameters: {self.best_params}")
             print(f"Best {scoring}: {self.best_score}")
 
@@ -328,9 +331,11 @@ class MachineLearningEstimator(DataLoader):
         self.best_estimator = self.available_clfs[self.name].set_params(
             **self.best_params
         )
+        self.name = self.best_estimator.__class__.__name__
         self.best_estimator.fit(X, y)
 
         if verbose:
+            print(f"Estimator: {self.name}")
             print(f"Best parameters: {self.best_params}")
             print(f"Best {scoring}: {self.best_score}")
 
@@ -338,7 +343,7 @@ class MachineLearningEstimator(DataLoader):
             return self.best_estimator
 
     @scoring_check
-    def bootstrap_validation(self, scoring="matthews_corrcoef", n_iter=100, test_size=0.2):
+    def bootstrap_validation(self, scoring="matthews_corrcoef", n_iter=100, test_size=0.2, boxplot=True):
         """
         Perform bootstrap validation on the estimator.
 
@@ -346,6 +351,8 @@ class MachineLearningEstimator(DataLoader):
         :type n_iter: int, optional
         :param test_size: The size of the test set, defaults to 0.2
         :type test_size: float, optional
+        :param boxplot: Whether to plot a boxplot of the scores, defaults to True
+        :type boxplot: bool, optional
         """
 
         X_train, X_test, y_train, y_test = train_test_split(self.X, self.y, stratify=self.y, test_size=test_size)
@@ -359,10 +366,12 @@ class MachineLearningEstimator(DataLoader):
             score = metrics.get_scorer(scoring)._score_func(y_test, y_pred)
             scores.append(score)
 
-        # Boxplot of scores
-        plt.figure(figsize=(12, 6))
-        plt.boxplot(scores)
-        plt.title('Bootstrap Validation')
-        plt.show()
+        if boxplot:
+            plt.figure(figsize=(6, 6))
+            plt.boxplot(scores)
+            plt.title('Bootstrap Validation')
+            plt.xlabel(self.name)
+            plt.ylabel('Score')
+            plt.show()
 
         return scores
