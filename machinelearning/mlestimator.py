@@ -35,11 +35,12 @@ import logging
 from sklearn.metrics import make_scorer
 import sklearn.metrics as metrics  
 import shap
-shap.initjs()
+from tqdm import tqdm
+from .mlestimator import FeaturesExplanation
 
 # from logging_levels import add_log_level
 
-class MachineLearningEstimator(DataLoader):
+class MachineLearningEstimator(DataLoader,FeaturesExplanation):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
         ''' Class to hold the machine learning estimator and related data 
             Inherits from DataLoader class
@@ -158,6 +159,30 @@ class MachineLearningEstimator(DataLoader):
         
         if return_model:
            return self.best_estimator
+    
+    # def calc_shap(self,X,model):
+    #     try:
+    #         explainer = shap.Explainer(model, X)
+    #     except TypeError as e:
+    #         if "The passed model is not callable and cannot be analyzed directly with the given masker!" in str(e):
+    #             print("Switching to predict_proba due to compatibility issue with the model.")
+    #             explainer = shap.Explainer(lambda x: model.predict_proba(x), X)
+    #         else:
+    #             raise TypeError(e)
+    #     try:
+    #         shap_values = explainer(X)
+    #     except ValueError:
+    #         num_features = X.shape[1]
+    #         max_evals = 2 * num_features + 1
+    #         shap_values = explainer(X, max_evals=max_evals)    
+        
+    #     if len(shap_values.shape) == 3:
+    #         shap_values = shap_values[:,:,1]
+    #     else:
+    #         pass
+    #     return shap_values
+
+        
 
     def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', features_list=None,rounds=10,
                         cv=5, direction='maximize', n_trials=100, estimator_name=None,evaluation='cv_simple',
@@ -206,14 +231,17 @@ class MachineLearningEstimator(DataLoader):
                               
                               
         if evaluation == 'cv_rounds':     
-            # columns = ['best_hyperparameters','Score','Estimator','SEM']
+            if calculate_shap:
+                shaps_array=np.zeros((X.shape[0],X.shape[1]))
+                
             data_full_outer = pd.DataFrame()  
             def c_v(i):
                 cv_splits = StratifiedKFold(n_splits=cv, shuffle=True, random_state=i)
                 train_test_indices = list(cv_splits.split(X, y))  
                 local_data_full_outer = pd.DataFrame()  
-                
-                shaps=[]
+            
+                if calculate_shap:
+                    x_shap = np.zeros((X.shape[0],X.shape[1]))
                 
                 for train_index, test_index in train_test_indices:
                     X_train, X_test = X.iloc[train_index], X.iloc[test_index]
@@ -234,55 +262,51 @@ class MachineLearningEstimator(DataLoader):
                         best_model = self.available_clfs[estimator_name]
                         best_model.set_params(**best_params)
                         
-                        try:
-                            explainer = shap.Explainer(best_model, X_train)
-                        except TypeError as e:
-                            if "The passed model is not callable and cannot be analyzed directly with the given masker!" in str(e):
-                                print("Switching to predict_proba due to compatibility issue with the model.")
-                                explainer = shap.Explainer(lambda X: best_model.predict_proba(X), X_train)
-                            else:
-                                raise TypeError(e)
-                        try:
-                            shap_values = explainer(X_train)
-                        except ValueError:
-                            num_features = X_train.shape[1]
-                            max_evals = 2 * num_features + 1
-                            shap_values = explainer(X_train, max_evals=max_evals)    
+                        shap_values = self.calc_shap(X_train,best_model)
                         
-                        if len(shap_values.shape) == 3:
-                            shap_values = shap_values[:,:,1]
-                        else:
-                            pass
-
-                        new_row = {
-                            'best_hyperparameters': study.best_params,
-                            'Score': study.best_value,
-                            'Estimator': estimator_name,
-                            'all_scores': trial_scores,
-                            'all_hyperparameters': all_params,
-                            'SEM': np.std(trial_scores) / np.sqrt(len(trial_scores)),
-                            'shap_values': shap_values.values
-                        }
+                        # print(shap_values.values)
+                        # print(shap_values.values.shape)
+                        # print(type(shap_values.values))
+                        x_shap[train_index,:] = np.add(x_shap[train_index,:],shap_values.values)
+                        # x_shap[train_index,:] += shap_values.values
                         
-                    else:
-                        new_row = {
-                            'best_hyperparameters': study.best_params,
-                            'Score': study.best_value,
-                            'Estimator': estimator_name,
-                            'all_scores': trial_scores,
-                            'all_hyperparameters': all_params,
-                            'SEM': np.std(trial_scores) / np.sqrt(len(trial_scores))
-                        }
+                    
+                    new_row = {
+                        'best_hyperparameters': study.best_params,
+                        'Score': study.best_value,
+                        'Estimator': estimator_name,
+                        'all_scores': trial_scores,
+                        'all_hyperparameters': all_params,
+                        'SEM': np.std(trial_scores) / np.sqrt(len(trial_scores))
+                    }
                         
                     
                     new_row = pd.DataFrame([new_row])
                     local_data_full_outer = pd.concat([local_data_full_outer, new_row], ignore_index=True)
-                    return local_data_full_outer
+                    if cv>1:
+                        x_shap = x_shap/(cv-1)
+                    else:
+                        raise ValueError("Cross-validation rounds must be greater than 1")
+                    if calculate_shap:
+                        return local_data_full_outer, x_shap
+                    else:
+                        return local_data_full_outer
                 
-            with threadpool_limits():
-                list_dfs = Parallel(verbose=0)(delayed(c_v)(i) for i in range(rounds))
+            for i in tqdm(range(rounds),total=rounds):
+                if calculate_shap:
+                    df_round, shap = c_v(i)
+                    data_full_outer = pd.concat([data_full_outer, df_round], ignore_index=True)
+                    shaps_array = np.add(shaps_array, shap) 
+                else:
+                    data_full_outer = pd.concat([data_full_outer, c_v(i)], ignore_index=True)
             
-            data_full_outer = pd.concat(list_dfs, ignore_index=True) 
+            if calculate_shap:
+                shaps_array = shaps_array/rounds
+                
+            # with threadpool_limits():
+            #     list_dfs = Parallel(verbose=0)(delayed(c_v)(i) for i in range(rounds))
+            
+            # data_full_outer = pd.concat(list_dfs, ignore_index=True) 
             min_sem_index = data_full_outer['SEM'].idxmin()
             self.best_params = data_full_outer.loc[min_sem_index, 'best_hyperparameters']
             self.best_score = data_full_outer.loc[min_sem_index, 'Score']
@@ -290,14 +314,6 @@ class MachineLearningEstimator(DataLoader):
             best_clf.set_params(**self.best_params)
             best_clf.fit(X, y)
             self.best_estimator = best_clf
-            
-            ##Λαθος, μετραει μονο για 65 ενω θελω για 78. Χρησιμοποιησε τα ινδεχεσ
-            
-            if calculate_shap:
-                all_shap_values = np.stack(data_full_outer['shap_values'].values)
-                mean_shap_values = np.mean(all_shap_values, axis=0)
-                self.shap_values = mean_shap_values
-                data_full_outer.drop('shap_values', axis=1, inplace=True)
         
                                     
         elif evaluation == 'cv_simple':       
@@ -319,7 +335,10 @@ class MachineLearningEstimator(DataLoader):
             #     print(f'For the {self.name} model: \nBest parameters: {self.best_params}\nBest {scoring}: {self.best_score}')
                 
         if evaluation == 'cv_rounds':
-            return  self.best_estimator, data_full_outer
+            if calculate_shap:
+                return  self.best_estimator, data_full_outer, shaps_array
+            else:
+                return  self.best_estimator, data_full_outer
         else:
             return self.best_estimator 
         
