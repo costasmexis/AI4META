@@ -7,13 +7,13 @@ from .mlestimator import MachineLearningEstimator
 # from .mlpipeline import MLPipelines
 
 class FeaturesExplanation(MachineLearningEstimator):
-    def __init__(self, best_estimator, X, y, label_mapping):
+    def __init__(self, best_estimator, X, y, label_mapping,shap_values = None):
         self.best_estimator = best_estimator
         self.explainer = None
         self.name = best_estimator.__class__.__name__
         self.X = X
         self.y = y
-        self.shap_values = None
+        self.shap_values = shap_values
         self.label_mapping = label_mapping
         
     

@@ -389,23 +389,14 @@ optuna_grid = {
         "LogisticRegression": lambda trial: LogisticRegression(
             penalty=trial.suggest_categorical("penalty", ["l1", "l2", None]),
             C=trial.suggest_float("C", 0.1, 10.0),
-            solver = trial.suggest_categorical("solver", ["newton-cg", "lbfgs", "sag", "saga", "liblinear"]),
-            # solver=(
-            #     trial.suggest_categorical("solver_1", ["liblinear", "saga"])
-            #     if trial.params["penalty"] == "l1"
-            #     else (trial.suggest_categorical(
-            #             "solver_2",
-            #             ["newton-cg",
-            #                 "lbfgs",
-            #                 "sag",
-            #                 "saga",
-            #                 "newton-cholesky",
-            #                 "liblinear",],)
-            #         if trial.params["penalty"] == "l2"
-            #         else trial.suggest_categorical(
-            #             "solver_3",
-            #             ["lbfgs", "newton-cg", "sag", "saga", "newton-cholesky"]))),
-            max_iter=trial.suggest_int("max_iter", 100, 1000),
+            solver = trial.suggest_categorical("solver",["newton-cg", "lbfgs", "sag", "saga", "liblinear"]),
+            # solver=trial.suggest_categorical(
+            #     "solver",
+            #     ["liblinear", "saga"] if penalty == "l1" 
+            #     else ["newton-cg", "lbfgs", "sag", "saga", "liblinear"] if penalty == "l2"
+            #     else ["lbfgs", "newton-cg", "sag", "saga"],
+            # ),
+            # max_iter=trial.suggest_int("max_iter", 100, 1000),
             fit_intercept=trial.suggest_categorical("fit_intercept", [True, False]),
             n_jobs=-1,
         ),
