@@ -125,7 +125,7 @@ class DataExplorer(DataLoader):
             plt.show()
         
     def statistical_difference(self, data=None, labels=None, p_value=0.05, list_of_feature=None, 
-                               num_of_best_features=None, way_of_selection='mrmr', normalize=False):
+                               num_of_best_features=None, way_of_selection='mrmr', normalize=False) -> list:
         """
         Perform non-parametric statistical tests to identify significant features based on labels,
         and visualize these features' distributions across groups using boxplots.
@@ -188,10 +188,8 @@ class DataExplorer(DataLoader):
             group_data = [data[feature][labels == group] for group in groups]
             # Perform the appropriate statistical test based on the number of groups
             # Kruskal-Wallis H-test for more than two groups
-            # test_stat, p_value = stats.kruskal(*group_data)
-            
             # Mann-Whitney U test for two groups
-            test_stat, p_value = stats.mannwhitneyu(*group_data, alternative='two-sided')
+            _, p_value = stats.mannwhitneyu(*group_data, alternative='two-sided')
             p_values[feature] = p_value
         
         significant_features = [feature for feature, p in p_values.items() if p < p_value]
@@ -212,29 +210,23 @@ class DataExplorer(DataLoader):
         else:
             print("No significant features found.")
     
-    def pca_plot(self,data=None,labels=None,variance_threshold=None,components_resize=None, components_plot=2, missing_values_method='drop'):
-        """
-        Performs Principal Component Analysis (PCA) and visualizes the results. This function can operate in two main modes:
-        1. Variance Threshold Mode: Finds the number of components required to explain a specified threshold of variance.
-        2. Components Resize Mode: Directly uses a specified number of components for PCA.
+    def pca_plot(self, data=None, labels=None, variance_threshold=None, components_resize=None, components_plot=2, missing_values_method='drop'):
+        """Perform PCA analysis and plot the results.
 
-        Parameters:
-        - data (DataFrame, optional): The input data for PCA. If None, the instance's data is used.
-        - labels (Series or array-like, optional): The labels corresponding to the input data. If None, the instance's labels are used.
-        - variance_threshold (float, optional): The cumulative variance threshold for selecting the optimal number of components. Must be between 0 and 1. If specified, the function will find the minimum number of components that cumulatively explain at least this amount of variance.
-        - components_resize (int, optional): The exact number of principal components to retain. If specified, `variance_threshold` is ignored, and PCA is performed with this number of components.
-        - components_plot (int, default=2): The number of principal components to include in the final scatter plot visualization.
-
-        Returns:
-        - numpy.ndarray: The transformed data, reduced to the optimal number of components found based on the variance threshold or specified directly via `components_resize`.
-
-        Raises:
-        - Exception: If both `variance_threshold` and `components_resize` are None, indicating that the method of component selection is unspecified.
-        - Exception: If `variance_threshold` is specified and is not between 0 and 1.
-
-        Note:
-        - This function visualizes the cumulative explained variance ratio by principal components using a line plot, highlighting the selected variance threshold and the corresponding number of components required.
-        - A scatter matrix plot is also generated to visualize the relationships between the principal components specified by `components_plot`, colored by the provided labels.
+        :param data: The input data for PCA. If None, the instance's data is used. Defaults to None.
+        :type data: pandas.DataFrame, optional
+        :param labels: The labels corresponding to the input data. If None, the instance's labels are used. Defaults to None.
+        :type labels: pandas.Series or array-like, optional
+        :param variance_threshold: The variance threshold used to determine the number of principal components to keep. If None, all components are kept. Defaults to None.
+        :type variance_threshold: float, optional
+        :param components_resize: The number of principal components to resize the data to. If None, no resizing is performed. Defaults to None.
+        :type components_resize: int, optional
+        :param components_plot: The number of principal components to plot. Defaults to 2.
+        :type components_plot: int, optional
+        :param missing_values_method: The method to handle missing values in the data. Defaults to 'drop'.
+        :type missing_values_method: str, optional
+        :return: The transformed data after PCA analysis.
+        :rtype: numpy.ndarray
         """
         
         if data is None and labels is None:
@@ -252,7 +244,7 @@ class DataExplorer(DataLoader):
         data_labels = pd.DataFrame(data['labels'], columns=['labels'])
         data = data.drop(['labels'], axis=1)
                     
-        if variance_threshold != None:
+        if variance_threshold is not None:
             if variance_threshold < 0 or variance_threshold > 1:
                 raise Exception("Variance threshold must be between 0 and 1.")
             else: 
@@ -260,9 +252,8 @@ class DataExplorer(DataLoader):
                     # warnings.warn('By default, PCA plot uses n_components == min(n_samples, n_features). ', UserWarning)                    
                     print(f'Warning: By default PCA plot uses n_components == min(n_samples, n_features)\nThus for the following components search the variance threshold will be applied to {data.shape[0]} components.')
                 pca = PCA()
-                X_pca = pca.fit_transform(data)
+                pca.fit_transform(data)
                 explained_variance_ratio = pca.explained_variance_ratio_
-                total_explained_variance_ratio = explained_variance_ratio.sum()            
                 cumulative_variance_ratio = np.cumsum(explained_variance_ratio)
                 components_found = np.where(cumulative_variance_ratio >= variance_threshold)[0][0] + 1
                 
@@ -290,12 +281,12 @@ class DataExplorer(DataLoader):
                 
                 fig.show()
                 
-        if variance_threshold != None:
+        if variance_threshold is not None:
             components_resize = components_found
             pca_optimal = PCA(n_components=components_resize)
-        elif components_resize == None and variance_threshold == None:
+        elif components_resize is None and variance_threshold == None:
             pca_optimal = PCA()
-        elif components_resize != None and variance_threshold == None:
+        elif components_resize is not None and variance_threshold is None:
             pca_optimal = PCA(n_components=components_resize)
         
         X_pca_optimal = pca_optimal.fit_transform(data)
@@ -328,25 +319,34 @@ class DataExplorer(DataLoader):
                   missing_values_method='drop', n_neighbors=15, min_dist=0.1, n_components=2, metric='euclidean', random_state=0):
         """
         Perform UMAP dimensionality reduction on the input data and create an interactive plot.
-        
-        Parameters:
-        - data: Input data to be transformed (default: None).
-        - labels: Labels corresponding to the data points (default: None).
-        - list_of_feature: List of features to consider (default: None).
-        - num_of_best_features: Number of best features to select (default: None).
-        - way_of_selection: Method for feature selection (default: 'mrmr').
-        - missing_values_method: Method to handle missing values (default: 'drop').
-        - n_neighbors: Number of neighbors for UMAP (default: 15).
-        - min_dist: Minimum distance for UMAP (default: 0.1).
-        - n_components: Number of components for UMAP (default: 2).
-        - metric: Metric to use for UMAP (default: 'euclidean').
-        - random_state: Random state for UMAP (default: 0).
-        
-        Raises:
-        - Exception: If an unsupported normalization method is encountered.
-        
-        Returns:
-        - None
+
+        :param data: Input data to be transformed (default: None).
+        :type data: pandas.DataFrame, optional
+        :param labels: Labels corresponding to the data points (default: None).
+        :type labels: pandas.Series or array-like, optional
+        :param list_of_feature: List of features to consider (default: None).
+        :type list_of_feature: list, optional
+        :param num_of_best_features: Number of best features to select (default: None).
+        :type num_of_best_features: int, optional
+        :param way_of_selection: Method for feature selection (default: 'mrmr').
+        :type way_of_selection: str, optional
+        :param missing_values_method: Method to handle missing values (default: 'drop').
+        :type missing_values_method: str, optional
+        :param n_neighbors: Number of neighbors for UMAP (default: 15).
+        :type n_neighbors: int, optional
+        :param min_dist: Minimum distance for UMAP (default: 0.1).
+        :type min_dist: float, optional
+        :param n_components: Number of components for UMAP (default: 2).
+        :type n_components: int, optional
+        :param metric: Metric to use for UMAP (default: 'euclidean').
+        :type metric: str, optional
+        :param random_state: Random state for UMAP (default: 0).
+        :type random_state: int, optional
+
+        :raises Exception: If an unsupported normalization method is encountered.
+
+        :return: None
+        :rtype: None
         """
         
         if data is None and labels is None:
@@ -431,7 +431,3 @@ class DataExplorer(DataLoader):
                 )
                 fig.update_layout(title=f'UMAP for combo: n_neighbors={n_neighbors}, min_dist={min_dist},n_components={n_components}, metric={metric}, random_state={random_state}', xaxis_title='UMAP 1', yaxis_title='UMAP 2')
                 fig.show()
-        
-        
-        
-
