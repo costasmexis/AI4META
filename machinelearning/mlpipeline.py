@@ -69,24 +69,22 @@ class MLPipelines(MachineLearningEstimator):
         clfs = self.params['clfs']
         feature_selection_type = self.params['feature_selection_type']
         
-        optimizer = self.params['optimizer']
         inner_scoring = self.params['inner_scoring']
         inner_cv = self.params['inner_cv']
-        n_iter = self.params['n_iter']
         n_trials_ncv = self.params['n_trials_ncv']
         outer_scoring = self.params['outer_scoring']
         outer_scorer = get_scorer(outer_scoring)
         parallel = self.params['parallel']
 
-        opt_grid = 'NestedCV_single'
+        opt_grid = 'NestedCV'
         if parallel == 'thread_per_round':
             n_jobs = 1
         elif parallel == 'freely_parallel' or parallel == 'dynamic_parallel' :
             n_jobs = avail_thr
-            # if parallel == 'dynamic_parallel':
-                # opt_grid = 'NestedCV_multi'
-                # n_jobs = 1
-            # opt_grid = 'NestedCV_single'
+        # if parallel == 'dynamic_parallel':
+            # opt_grid = 'NestedCV_multi'
+            # n_jobs = 1
+        # opt_grid = 'NestedCV_single'
             
         results={'Scores': [],
             'Classifiers': [],
@@ -108,20 +106,20 @@ class MLPipelines(MachineLearningEstimator):
                     self.name = self.estimator.__class__.__name__
                     nested_scores = []
                     
-                    if optimizer == 'grid_search':
-                        clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
-                                        param_grid=self.param_grid, cv=inner_cv, n_jobs=1, verbose=0)
-                    elif optimizer == 'random_search':
-                                clf = RandomizedSearchCV(estimator=self.estimator, scoring=inner_scoring,
-                                                        param_distributions=self.param_grid, cv=inner_cv, n_jobs=1, 
-                                                        verbose=0, n_iter=n_iter)
-                    elif optimizer == 'bayesian_search':
-                        self.set_optuna_verbosity(logging.ERROR)
-                        clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
-                                                                param_distributions=optuna_grid[opt_grid][self.name],
-                                                                cv=inner_cv, n_jobs=n_jobs, verbose=0, n_trials=n_trials_ncv)
-                    else:
-                        raise Exception("Unsupported optimizer.")   
+                    # if optimizer == 'grid_search':
+                    #     clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
+                    #                     param_grid=self.param_grid, cv=inner_cv, n_jobs=1, verbose=0)
+                    # elif optimizer == 'random_search':
+                    #             clf = RandomizedSearchCV(estimator=self.estimator, scoring=inner_scoring,
+                    #                                     param_distributions=self.param_grid, cv=inner_cv, n_jobs=1, 
+                    #                                     verbose=0, n_iter=n_iter)
+                    # if optimizer == 'bayesian_search':
+                    self.set_optuna_verbosity(logging.ERROR)
+                    clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
+                                                            param_distributions=optuna_grid[opt_grid][self.name],
+                                                            cv=inner_cv, n_jobs=n_jobs, verbose=0, n_trials=n_trials_ncv)
+                    # else:
+                    #     raise Exception("Unsupported optimizer. For nested CV, use 'bayesian_search'")   
                     
                     clf.fit(X_train_selected, y_train)
                     # y_pred = clf.predict(X_test_selected)
@@ -247,8 +245,7 @@ class MLPipelines(MachineLearningEstimator):
             print(f'Finished with {i+1} round after {(end-start)/3600:.2f} hours.')
             return list_dfs
     
-    def nested_cv(self,optimizer = 'bayesian_search', n_trials_ncv=25, n_iter=25, 
-                    rounds=10, exclude=None,hist_feat=True,N=100,most_imp_feat=10,search_on=None,
+    def nested_cv(self,n_trials_ncv=25,rounds=10, exclude=None,hist_feat=True,N=100,most_imp_feat=10,search_on=None,
                     num_features=None,feature_selection_type='mrmr', return_csv=True, hist_fit=False,
                     feature_selection_method='chi2', plot='box',inner_scoring='matthews_corrcoef',
                     outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5,norm_method='minmax',
@@ -257,10 +254,10 @@ class MLPipelines(MachineLearningEstimator):
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
 
         Parameters:
-            optimizer (str, optional): Optimization method used ('grid_search', 'random_search', 'bayesian_search'). 
-                                       Defaults to 'grid_search'.
+            # optimizer (str, optional): Optimization method used ('grid_search', 'random_search', 'bayesian_search'). 
+            #                            Defaults to 'grid_search'.
             n_trials_ncv (int, optional): Number of trials for nested cross-validation. Defaults to 25.
-            n_iter (int, optional): Number of iterations for random search. Defaults to 25.
+            # n_iter (int, optional): Number of iterations for random search. Defaults to 25.
             rounds (int, optional): Number of cross-validation splits. Defaults to 10.
             exclude (list, optional): List of classifiers to exclude. Defaults to None.
             hist_fit (bool, optional): Whether to display a histogram of feature selection frequency. Defaults to True.
@@ -391,7 +388,7 @@ class MLPipelines(MachineLearningEstimator):
                 print('No features were selected.')
             else:
                 features, counts = zip(*sorted_features_counts[:N])
-                counts = [x / 12 for x in counts]
+                counts = [x / len(clfs) for x in counts]
                 plt.figure(figsize=(max(10, N // 2), 10))
                 bars = plt.bar(range(N), counts, color='skyblue', tick_label=features)
                 if most_imp_feat > N:
