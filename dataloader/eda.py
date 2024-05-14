@@ -230,8 +230,8 @@ class DataExplorer(DataLoader):
         """
         
         if data is None and labels is None:
-            data = self.X_normalized_df
-            labels = self.y
+            data = self.X_normalized_df.copy() # Use .copy() to avoid overwriting the original data
+            labels = self.y.copy()
         else:
             if self.normalization_method in ['minmax', 'standard']:
                 data = self.normalize(data, method=self.normalization_method)
@@ -249,7 +249,6 @@ class DataExplorer(DataLoader):
                 raise Exception("Variance threshold must be between 0 and 1.")
             else: 
                 if data.shape[0] < data.shape[1]:
-                    # warnings.warn('By default, PCA plot uses n_components == min(n_samples, n_features). ', UserWarning)                    
                     print(f'Warning: By default PCA plot uses n_components == min(n_samples, n_features)\nThus for the following components search the variance threshold will be applied to {data.shape[0]} components.')
                 pca = PCA()
                 pca.fit_transform(data)
@@ -303,6 +302,7 @@ class DataExplorer(DataLoader):
             dimensions=range(components_plot),
             labels=lab,
             title=f'Total Explained Variance: {total_var:.2f}%',
+            color_continuous_scale=px.colors.diverging.Portland
         )
         
         fig.update_layout(
@@ -350,13 +350,14 @@ class DataExplorer(DataLoader):
         """
         
         if data is None and labels is None:
-            data = self.X_normalized_df
-            labels = self.y
+            data = self.X_normalized_df.copy() # Use .copy() to avoid overwriting the original data
+            labels = self.y.copy()
         else:
             if self.normalization_method in ['minmax', 'standard']:
                 data = self.normalize(data, method=self.normalization_method)
             else: 
                 raise Exception("Unsupported normalization method.")
+            
         data_all = data.copy()
         data_all['labels'] = labels
         
@@ -390,7 +391,7 @@ class DataExplorer(DataLoader):
             x=data_less[:, 0], 
             y=data_less[:, 1], 
             mode='markers',
-            marker=dict(color=data['labels'], colorscale='Viridis', showscale=True)
+            marker=dict(color=data['labels'], colorscale=px.colors.diverging.Portland, showscale=True)
         )])
             fig.update_layout(
                     width=900,  
