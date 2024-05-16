@@ -85,7 +85,7 @@ class DataLoader:
 
         """
         if data is None:
-            data = self.X
+            data = self.data
 
         if verbose:
             total_missing = data.isnull().sum().sum()
@@ -102,8 +102,9 @@ class DataLoader:
         else:
             raise Exception("Unsupported missing values method. Select one of 'drop', 'mean', 'median', 'zero'")
 
-        if data is self.X:
-            return None
+        if data is self.data:
+            self.X = self.X.iloc[data.index]
+            self.y = self.y[data.index]
         else:
             return data
     
