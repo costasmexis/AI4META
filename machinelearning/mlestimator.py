@@ -24,7 +24,6 @@ from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
 from catboost import CatBoostClassifier
-import progressbar
 from threadpoolctl import threadpool_limits
 from joblib import Parallel, delayed,  parallel_backend
 
@@ -228,109 +227,30 @@ class MachineLearningEstimator(DataLoader):
         else: estimator_name = estimator_name
                               
         if calculate_shap:
-                shaps_array=np.zeros((X.shape[0],X.shape[1]))
+            shaps_array=np.zeros((X.shape[0],X.shape[1]))
                 
-        def c_v(i):
-            cv_splits = StratifiedKFold(n_splits=cv, shuffle=True, random_state=i)
-            train_test_indices = list(cv_splits.split(X, y))  
-            local_data_full_outer = pd.DataFrame()  
-        
-            if calculate_shap:
-                x_shap = np.zeros((X.shape[0],X.shape[1]))
-            
-            for train_index, test_index in train_test_indices:
-                X_train, X_test = X.iloc[train_index], X.iloc[test_index]
-                y_train, y_test = y[train_index], y[test_index]
-                def objective(trial):
-                    try :
-                        clf = grid[estimator_name](trial)
-                        clf.fit(X_train, y_train)
-                        score = scorer(clf, X_test, y_test)
-                        return score
-                    except Exception as e:
-                        print(f'{e}.\nThe None Score and the Hyperparameters of it will not be saved.')
-                        return None 
-                                    
-                study = optuna.create_study(sampler=TPESampler(),direction=direction)
-                study.optimize(objective, n_trials=n_trials, show_progress_bar=True,n_jobs=-1)
-                
-                trial_scores = [trial.value for trial in study.trials]
-                all_params = [trial.params for trial in study.trials]
-                
-                valid_scores = []
-                valid_params = []
-                unvalid_scores = []
-                unvalid_params = []
-
-                for trial, score in zip(study.trials, trial_scores):
-                    if score is not None:
-                        valid_scores.append(score)
-                        valid_params.append(trial.params)
-                    else:
-                        unvalid_scores.append(score)
-                        unvalid_params.append(trial.params)
-                
-                if calculate_shap:
-                    best_params = study.best_params
-                    best_model = self.available_clfs[estimator_name]
-                    best_model.set_params(**best_params)
-                    best_model.fit(X_train, y_train)
-                    
-                    shap_values = self.calc_shap(X_train,best_model)
-                    
-                    x_shap[train_index,:] = np.add(x_shap[train_index,:],shap_values.values)
-                    # x_shap[train_index,:] += shap_values.values
-                    
-                valid_scores = [score for score in trial_scores if score is not None]
-                if valid_scores:  
-                    sem = np.std(valid_scores) / np.sqrt(len(valid_scores))
-                else:
-                    sem = 0                        
-
-                new_row = {
-                    'best_hyperparameters': study.best_params,
-                    'best_score': study.best_value,
-                    'estimator': estimator_name,
-                    'scores': valid_scores,
-                    'valid_hyperparameters': valid_params,
-                    'unvalid_scores': unvalid_scores,
-                    'unvalid_hyperparameters': unvalid_params,
-                    'sem': sem
-                }
-                
-                new_row = pd.DataFrame([new_row])
-                local_data_full_outer = pd.concat([local_data_full_outer, new_row], ignore_index=True)
-                
-                if calculate_shap:
-                    if cv>1:
-                        x_shap = x_shap/(cv-1)
-                    else:
-                        raise ValueError("Cross-validation rounds must be greater than 1")
-                    return local_data_full_outer, x_shap
-                else:
-                    return local_data_full_outer
+        self.params = locals()
+        self.params.pop('self', None)
                         
         data_full_outer = pd.DataFrame() 
-                      
-        if evaluation == 'cv_rounds':     
-            for i in tqdm(range(rounds),total=rounds):
-                if calculate_shap:
-                    df_round, shap = c_v(i)
-                    data_full_outer = pd.concat([data_full_outer, df_round], ignore_index=True)
-                    shaps_array = np.add(shaps_array, shap) 
-                else:
-                    data_full_outer = pd.concat([data_full_outer, c_v(i)], ignore_index=True)
+        # if evaluation == 'cv_rounds':     
+            # for i in tqdm(range(rounds),total=rounds):
+        if calculate_shap:
+            data_full_outer, shaps_array = self.c_v()
+            # data_full_outer = pd.concat([data_full_outer, df_round], ignore_index=True)
+            # shaps_array = np.add(shaps_array, shap) 
+        else:
+            data_full_outer = self.c_v()
+        
             
-            if calculate_shap:
-                shaps_array = shaps_array/rounds
-           
-        elif evaluation == 'cv_simple': 
-            if calculate_shap:
-                df_round, shap = c_v(i=42)
-                data_full_outer = pd.concat([data_full_outer, df_round], ignore_index=True)
-                shaps_array = np.add(shaps_array, shap) 
-            else:
-                data_full_outer = pd.concat([data_full_outer, c_v(i=42)], ignore_index=True)
+        # elif evaluation == 'cv_simple': 
+        #     if calculate_shap:
+        #         data_full_outer, shaps_array = self.c_v()
+        #         # data_full_outer = pd.concat([data_full_outer, df_round], ignore_index=True)
+        #         # shaps_array = np.add(shaps_array, shap) 
+        #     else:
+        #         data_full_outer = self.c_v()
+                # data_full_outer = pd.concat([data_full_outer, self.c_v()], ignore_index=True)
         
         min_sem_index = data_full_outer['sem'].idxmin()
         self.best_params = data_full_outer.loc[min_sem_index, 'best_hyperparameters']
@@ -345,3 +265,134 @@ class MachineLearningEstimator(DataLoader):
             return  self.best_estimator, data_full_outer, shaps_array
         else:
             return  self.best_estimator, data_full_outer
+        
+    def c_v(self):
+        cv = self.params['cv']
+        n_trials = self.params['n_trials']
+        direction = self.params['direction']
+        estimator_name = self.params['estimator_name']
+        calculate_shap = self.params['calculate_shap']
+        X = self.X
+        y = self.y
+        grid = optuna_grid['ManualSearch']
+        scorer = self.params['scorer']
+        evaluation = self.params['evaluation']
+        rounds = self.params['rounds']
+        
+        local_data_full_outer = pd.DataFrame()  
+        
+        if calculate_shap:
+            x_shap = np.zeros((X.shape[0],X.shape[1]))
+        
+        if cv<2:
+            raise ValueError("Cross-validation rounds must be greater than 1")
+        
+        list_train_test_indices = []
+        list_x_train = []
+        list_x_test = []
+        list_y_train = []
+        list_y_test = []
+        scores = []
+        scores_per_cv = []
+        
+        if evaluation == 'cv_simple':
+            rounds = 1
+        elif evaluation == 'cv_rounds':
+            rounds = rounds
+        else:
+            raise ValueError("Evaluation method must be either 'cv_simple' or 'cv_rounds'")
+            
+        for i in range(rounds):
+            cv_splits = StratifiedKFold(n_splits=cv, shuffle=True, random_state=i)
+            temp_train_test_indices = list(cv_splits.split(X, y))
+            list_train_test_indices.append(temp_train_test_indices)
+            for train_index, test_index in temp_train_test_indices:
+                X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+                y_train, y_test = y[train_index], y[test_index]
+                list_x_train.append(X_train)
+                list_x_test.append(X_test)
+                list_y_train.append(y_train)
+                list_y_test.append(y_test)  
+        
+        
+        def objective(trial):
+            try :
+                clf = grid[estimator_name](trial)
+                for set in range(rounds*cv):
+                    clf.fit(list_x_train[set], list_y_train[set])
+                    scores.append(scorer(clf, list_x_test[set], list_y_test[set]))
+                    if ((set+1) % cv == 0) and (set > 0):
+                        scores_per_cv.append(scores[set+1-cv:set+1])
+                
+                score = np.mean(scores)
+                    
+                # if calculate_shap:
+                #     shap_values = clf.predict(X)
+                #     x_shap = np.add(x_shap, shap_values)
+                # local_data_full_outer = pd.concat([local_data_full_outer, pd.DataFrame({'best_hyperparameters': trial.params, 'best_score': score})], ignore_index=True)
+                
+                return score
+            except Exception as e:
+                print(f'{e}.\nThe None Score and the Hyperparameters of it will not be saved.')
+                return None 
+                                
+        study = optuna.create_study(sampler=TPESampler(),direction=direction)
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=True,n_jobs=-1)
+        
+        trial_scores = [trial.value for trial in study.trials]
+        all_params = [trial.params for trial in study.trials]
+        
+        valid_scores = []
+        valid_params = []
+        unvalid_scores = []
+        unvalid_params = []
+
+        for trial, score in zip(study.trials, trial_scores):
+            if score is not None:
+                valid_scores.append(score)
+                valid_params.append(trial.params)
+            else:
+                unvalid_scores.append(score)
+                unvalid_params.append(trial.params)
+        
+        if calculate_shap:
+            for i in range(rounds):
+                for train_index, test_index in list_train_test_indices[i]:
+                    X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+                    y_train, y_test = y[train_index], y[test_index]
+                    best_params = study.best_params
+                    best_model = self.available_clfs[estimator_name]
+                    best_model.set_params(**best_params)
+                    best_model.fit(X_train, y_train)
+                    shap_values = self.calc_shap(X_train,best_model)
+                    x_shap[train_index,:] = np.add(x_shap[train_index,:],shap_values.values)
+            x_shap = x_shap/(rounds*(cv-1))
+                
+                
+        valid_scores = [score for score in trial_scores if score is not None]
+        if valid_scores:  
+            sem = np.std(valid_scores) / np.sqrt(len(valid_scores))
+        else:
+            sem = 0                        
+
+        new_row = {
+            'best_hyperparameters': study.best_params,
+            'best_score': study.best_value,
+            'estimator': estimator_name,
+            'scores': valid_scores,
+            'valid_hyperparameters': valid_params,
+            'unvalid_scores': unvalid_scores,
+            'unvalid_hyperparameters': unvalid_params,
+            'scores_per_cv': scores_per_cv,
+            'sem': sem
+        }
+        
+        new_row = pd.DataFrame([new_row])
+        local_data_full_outer = pd.concat([local_data_full_outer, new_row], ignore_index=True)
+        
+        print(local_data_full_outer)
+        if calculate_shap:
+            return local_data_full_outer, x_shap
+        else:
+            return local_data_full_outer
+            
