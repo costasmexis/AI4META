@@ -181,7 +181,7 @@ class MachineLearningEstimator(DataLoader):
             pass
         return shap_values
 
-    def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', features_list=None,rounds=10,
+    def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', features_list=None,rounds=10,boxplot=True,
                         cv=5, direction='maximize', n_trials=100, estimator_name=None,evaluation='cv_simple',
                         feat_num = None, feat_way = 'mrmr', verbose=True, missing_values='median',calculate_shap=False):#, box=False):
         """ Function to perform a bayesian search
@@ -242,16 +242,6 @@ class MachineLearningEstimator(DataLoader):
         else:
             data_full_outer = self.c_v()
         
-            
-        # elif evaluation == 'cv_simple': 
-        #     if calculate_shap:
-        #         data_full_outer, shaps_array = self.c_v()
-        #         # data_full_outer = pd.concat([data_full_outer, df_round], ignore_index=True)
-        #         # shaps_array = np.add(shaps_array, shap) 
-        #     else:
-        #         data_full_outer = self.c_v()
-                # data_full_outer = pd.concat([data_full_outer, self.c_v()], ignore_index=True)
-        
         min_sem_index = data_full_outer['sem'].idxmin()
         self.best_params = data_full_outer.loc[min_sem_index, 'best_hyperparameters']
         self.best_score = data_full_outer.loc[min_sem_index, 'best_score']
@@ -259,6 +249,15 @@ class MachineLearningEstimator(DataLoader):
         best_clf.set_params(**self.best_params)
         best_clf.fit(X, y)
         self.best_estimator = best_clf
+        
+        if boxplot:
+            plt.figure(figsize=(6, 6))
+            plt.boxplot(data_full_outer.scores)
+            plt.title(f'{evaluation} method for {estimator_name}.')
+            plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False) 
+            plt.xlabel(self.name)
+            plt.ylabel('Score')
+            plt.show()
         
         if calculate_shap:
             self.shap_values = shaps_array
@@ -390,7 +389,6 @@ class MachineLearningEstimator(DataLoader):
         new_row = pd.DataFrame([new_row])
         local_data_full_outer = pd.concat([local_data_full_outer, new_row], ignore_index=True)
         
-        print(local_data_full_outer)
         if calculate_shap:
             return local_data_full_outer, x_shap
         else:
