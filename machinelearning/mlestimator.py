@@ -35,6 +35,7 @@ from sklearn.metrics import make_scorer
 import sklearn.metrics as metrics  
 import shap
 from tqdm import tqdm
+import optuna
 # from .mlestimator import FeaturesExplanation
 
 # from logging_levels import add_log_level
@@ -82,82 +83,219 @@ class MachineLearningEstimator(DataLoader):
         optuna.logging.set_verbosity(level)  
         logging.getLogger("optuna").setLevel(level)
 
-    def grid_search(self, X=None, y=None, scoring='matthews_corrcoef',
-                    features_list=None, feat_num = None, feat_way = 'mrmr', 
-                    cv=5, verbose=True, return_model=False):
-        """ Function to perform a grid search
-        Args:
-            X (array, optional): Features. Defaults to None.
-            y (array, optional): Target. Defaults to None.
-            scoring (str, optional): Scoring metric. Defaults to 'matthews_corrcoef'.
-            cv (int, optional): No. of folds for cross-validation. Defaults to 5.
-            verbose (bool, optional): Whether to print the results. Defaults to True.
+    def grid_search(
+        self,
+        X=None,
+        y=None,
+        estimator=None,
+        parameter_grid=None,
+        scoring="matthews_corrcoef",
+        features_list=None,
+        feat_num=None,
+        feat_way="mrmr",
+        cv=5,
+        verbose=True,
+        return_model=False,
+    ):
         """
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
-        
-        if X is None and y is None:
-            X = self.X 
-            y = self.y
-        if features_list != None:
+        Perform grid search to find the best hyperparameters for the estimator.
+
+        :param X: The input features, defaults to None
+        :type X: array-like, shape (n_samples, n_features), optional
+        :param y: The target values, defaults to None
+        :type y: array-like, shape (n_samples,), optional
+        :param estimator: The estimator object. If None self.estimator is selected, defaults to None.
+        :type estimator: object, optional
+        :param parameter_grid: The parameter grid for hyperparameter tuning, defaults to None
+        :type parameter_grid: dict, optional
+        :param scoring: The scoring metric to optimize, defaults to 'matthews_corrcoef'
+        :type scoring: str, optional
+        :param features_list: List of feature names to use for grid search, defaults to None
+        :type features_list: list, optional
+        :param feat_num: Number of features to select using feature selection method, defaults to None
+        :type feat_num: int, optional
+        :param feat_way: The feature selection method to use, defaults to 'mrmr'
+        :type feat_way: str, optional
+        :param cv: The number of cross-validation folds, defaults to 5
+        :type cv: int, optional
+        :param verbose: Whether to print the best parameters and score, defaults to True
+        :type verbose: bool, optional
+        :param return_model: Whether to return the best estimator, defaults to False
+        :type return_model: bool, optional
+        :return: The best estimator if `return_model` is True, otherwise None
+        :rtype: estimator object or None
+        """
+
+        X = X or self.X
+        y = y or self.y
+
+        if len(X) != len(y):
+            raise ValueError("The length of X and y must be equal.")
+
+        if features_list is not None:
             X = X[features_list]
-        elif feat_num != None:
+        elif feat_num is not None:
             selected = self.feature_selection(X, y, feat_way, feat_num)
             X = X[selected]
-        else: pass
-        
-        grid_search = GridSearchCV(self.estimator, self.param_grid, scoring=scoring, cv=cv)
+
+        if estimator is not None:
+            self.estimator = estimator
+            self.name = self.estimator.__class__.__name__
+            self.param_grid = parameter_grid
+
+        grid_search = GridSearchCV(
+            self.estimator, self.param_grid, scoring=scoring, cv=cv
+        )
         grid_search.fit(X, y)
+
         self.best_params = grid_search.best_params_
         self.best_score = grid_search.best_score_
-        self.name = self.best_estimator.__class__.__name__
         self.best_estimator = grid_search.best_estimator_
+        self.name = self.best_estimator.__class__.__name__
+
         if verbose:
-            print(f'Best parameters: {self.best_params}')
-            print(f'Best {scoring}: {self.best_score}')
+            print(f"Estimator: {self.name}")
+            print(f"Best parameters: {self.best_params}")
+            print(f"Best {scoring}: {self.best_score}")
 
         if return_model:
-           return self.best_estimator
+            return self.best_estimator
 
-    def random_search(self, X=None, y=None, scoring='matthews_corrcoef', 
-                      features_list=None,cv=5, n_iter=100, verbose=True, 
-                      return_model=False, feat_num = None, feat_way = 'mrmr'):
-        """ Function to perform a random search
-        Args:
-            X (array, optional): Features. Defaults to None.
-            y (array, optional): Target. Defaults to None.
-            scoring (str, optional): Scoring metric. Defaults to 'matthews_corrcoef'.
-            cv (int, optional): No. of folds for cross-validation. Defaults to 5.
-            n_iter (int, optional): No. of iterations. Defaults to 100.
-            verbose (bool, optional): Whether to print the results. Defaults to True.
+    def random_search(
+        self, X=None, y=None, scoring='matthews_corrcoef', features_list=None, boxplot=True,
+        cv=5, direction='maximize', n_iter=10, estimator_name=None,calculate_shap=False,
+        feat_num = None, feat_way = 'mrmr', missing_values='median',parameter_grid=None):
         """
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
+        Perform a random search for hyperparameter tuning.
+        :param X: The input features, defaults to None
+        :type X: array-like, shape (n_samples, n_features), optional
+        :param y: The target variable, defaults to None
+        :type y: array-like, shape (n_samples,), optional
+        :param scoring: The scoring metric to optimize, defaults to 'matthews_corrcoef'
+        :type scoring: str, optional
+        :param features_list: A list of feature names to select from X, defaults to None
+        :type features_list: list, optional
+        :param cv: The number of cross-validation folds, defaults to 5
+        :type cv: int, optional
+        :param n_iter: The number of parameter settings that are sampled, defaults to 100
+        :type n_iter: int, optional
+        :param verbose: Whether to print the best parameters and score, defaults to True
+        :type verbose: bool, optional
+        :param return_model: Whether to return the best estimator, defaults to False
+        :type return_model: bool, optional
+        :param feat_num: The number of features to select using feature selection, defaults to None
+        :type feat_num: int, optional
+        :param feat_way: The feature selection method, defaults to 'mrmr'
+        :type feat_way: str, optional
+        :raises ValueError: If an invalid scoring metric is provided
+        :return: The best estimator if return_model is True, otherwise None
+        :rtype: estimator object or None
+        """
 
-        if X is None and y is None:
-            X = self.X 
-            y = self.y
-        if features_list != None:
+        X = X or self.X
+        y = y or self.y
+
+        if len(X) != len(y):
+            raise ValueError("The length of X and y must be equal.")
+
+        if features_list is not None:
             X = X[features_list]
-        elif feat_num != None:
+        elif feat_num is not None:
             selected = self.feature_selection(X, y, feat_way, feat_num)
             X = X[selected]
-        else: pass
 
-        random_search = RandomizedSearchCV(self.estimator, self.param_grid, scoring=scoring, cv=cv, n_iter=n_iter)
+        if estimator_name == None:
+            estimator_name = self.name 
+        else: estimator_name = estimator_name
+        
+        self.estimator = self.available_clfs[estimator_name]
+        
+        if parameter_grid == None:
+            raise ValueError("Please provide a parameter grid.")
+        else: self.param_grid = parameter_grid            
+            
+        cv_splits = StratifiedKFold(n_splits=cv, shuffle=True)
+        temp_train_test_indices = list(cv_splits.split(X, y))            
+
+        random_search = RandomizedSearchCV(
+            self.estimator, self.param_grid, scoring=scoring, cv=temp_train_test_indices, n_iter=n_iter
+        )
         random_search.fit(X, y)
+
         self.best_params = random_search.best_params_
         self.best_score = random_search.best_score_
-        self.name = self.best_estimator.__class__.__name__
         self.best_estimator = random_search.best_estimator_
-        if verbose:
-            print(f'Best parameters: {self.best_params}')
-            print(f'Best {scoring}: {self.best_score}')
+        self.name = self.best_estimator.__class__.__name__
         
-        if return_model:
-           return self.best_estimator
+        print(f"Estimator: {self.name}")
+        print(f"Best parameters: {self.best_params}")
+        print(f"Best {scoring}: {self.best_score}")
+    
+        results_df = pd.DataFrame.from_dict(random_search.cv_results_)
+        results_df = results_df.sort_values(by='rank_test_score')
+        usefull_cols = ['mean_test_score', 'std_test_score', 'rank_test_score', 'params']
+        for i in range(cv):
+            usefull_cols.append(f'split{i}_test_score')
+        data_full_outer = results_df[usefull_cols]
+        
+        # if boxplot:
+        #     scores = []
+        #     for i in range(cv):
+        #         scores = np.append(scores, results_df[f'split{i}_test_score'])
+        #     plt.figure(figsize=(6, 6))
+        #     plt.boxplot(scores)
+        #     plt.title(f'Fold Scores Across Trials for {estimator_name}.')
+        #     plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False) 
+        #     plt.xlabel(self.name)
+        #     plt.ylabel('Score')
+        #     plt.show()
+        if boxplot:
+            plt.figure(figsize=(12, 6))
+            
+            plt.subplot(1, 2, 1)
+            scores = []
+            for i in range(cv):
+                scores = np.append(scores, data_full_outer[f'split{i}_test_score'])
+            plt.boxplot(scores)
+            plt.title('Summary Boxplot')
+            plt.ylabel('Score')
+            plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+            
+            plt.subplot(1, 2, 2)
+            temp_df = data_full_outer[(data_full_outer['rank_test_score'] == 1) | (data_full_outer['rank_test_score'] == data_full_outer.shape[0])]
+            temp_df.reset_index(drop=True, inplace=True)
+            for idx, row in temp_df.iterrows():
+                row_scores = []
+                for i in range(cv):
+                    row_scores = np.append(row_scores, row[f'split{i}_test_score'])
+                plt.boxplot(row_scores, positions=[idx+1])
+                if row['rank_test_score'] == 1:
+                    plt.text(idx+1, row.mean_test_score, f'Best trial\nmean:{row.mean_test_score:.2f}', ha='center', va='bottom', color='red')
+                else: 
+                    plt.text(idx+1, row.mean_test_score, f'Worst trial\nmean:{row.mean_test_score:.2f}', ha='center', va='bottom', color='blue')
+
+            plt.title(f'Best and Worst Trials for {estimator_name}')
+            plt.ylabel('Score')
+            plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+            
+            plt.show()
+        
+        if calculate_shap:
+            x_shap=np.zeros((X.shape[0],X.shape[1]))
+            for train_index, test_index in temp_train_test_indices:
+                X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+                y_train, y_test = y[train_index], y[test_index]
+                best_model = self.available_clfs[estimator_name]
+                best_model.set_params(**self.best_params)
+                best_model.fit(X_train, y_train)
+                shap_values = self.calc_shap(X_train,best_model)
+                x_shap[train_index,:] = np.add(x_shap[train_index,:],shap_values.values)
+            x_shap = x_shap/(cv-1)
+            return self.best_estimator, results_df, x_shap
+        else: 
+            return self.best_estimator, results_df
+        
+
     
     def calc_shap(self,X,model):
         try:
@@ -183,7 +321,8 @@ class MachineLearningEstimator(DataLoader):
 
     def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', features_list=None,rounds=10,boxplot=True,
                         cv=5, direction='maximize', n_trials=100, estimator_name=None,evaluation='cv_simple',
-                        feat_num = None, feat_way = 'mrmr', verbose=True, missing_values='median',calculate_shap=False):#, box=False):
+                        feat_num = None, feat_way = 'mrmr', verbose=True, missing_values='median',
+                        calculate_shap=False, param_grid=None):#, box=False):
         """ Function to perform a bayesian search
 
         Args:
@@ -199,8 +338,7 @@ class MachineLearningEstimator(DataLoader):
             _type_: _description_
         """
         self.set_optuna_verbosity(logging.ERROR)
-
-        grid = optuna_grid['ManualSearch']
+        
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
@@ -225,6 +363,14 @@ class MachineLearningEstimator(DataLoader):
         if estimator_name == None:
             estimator_name = self.name 
         else: estimator_name = estimator_name
+        
+        estimator = self.available_clfs[estimator_name]
+        
+        if param_grid == None:
+            self.param_grid = optuna_grid['ManualSearch']
+        else:         
+            param_grid = {estimator_name: param_grid}   
+            self.param_grid = param_grid
                               
         if calculate_shap:
             shaps_array=np.zeros((X.shape[0],X.shape[1]))
@@ -233,30 +379,48 @@ class MachineLearningEstimator(DataLoader):
         self.params.pop('self', None)
                         
         data_full_outer = pd.DataFrame() 
-        # if evaluation == 'cv_rounds':     
-            # for i in tqdm(range(rounds),total=rounds):
         if calculate_shap:
             data_full_outer, shaps_array = self.c_v()
-            # data_full_outer = pd.concat([data_full_outer, df_round], ignore_index=True)
-            # shaps_array = np.add(shaps_array, shap) 
         else:
             data_full_outer = self.c_v()
         
-        min_sem_index = data_full_outer['sem'].idxmin()
-        self.best_params = data_full_outer.loc[min_sem_index, 'best_hyperparameters']
-        self.best_score = data_full_outer.loc[min_sem_index, 'best_score']
+        raned_min = data_full_outer['ranked'].idxmin()
+        self.best_params = data_full_outer.loc[raned_min, 'params']
+        self.best_score = data_full_outer.loc[raned_min, 'mean_test_score']
         best_clf = self.available_clfs[estimator_name]
         best_clf.set_params(**self.best_params)
         best_clf.fit(X, y)
         self.best_estimator = best_clf
         
         if boxplot:
-            plt.figure(figsize=(6, 6))
-            plt.boxplot(data_full_outer.scores)
-            plt.title(f'{evaluation} method for {estimator_name}.')
-            plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False) 
-            plt.xlabel(self.name)
+            plt.figure(figsize=(12, 6))
+            
+            plt.subplot(1, 2, 1)
+            scores = []
+            for i in range(cv):
+                scores = np.append(scores, data_full_outer[f'split{i}_test_score'])
+            plt.boxplot(scores)
+            plt.title('Summary Boxplot')
             plt.ylabel('Score')
+            plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+            
+            plt.subplot(1, 2, 2)
+            temp_df = data_full_outer[(data_full_outer['ranked'] == 1) | (data_full_outer['ranked'] == data_full_outer.shape[0])]
+            temp_df.reset_index(drop=True, inplace=True)
+            for idx, row in temp_df.iterrows():
+                row_scores = []
+                for i in range(cv):
+                    row_scores = np.append(row_scores, row[f'split{i}_test_score'])
+                plt.boxplot(row_scores, positions=[idx+1])
+                if row['ranked'] == 1:
+                    plt.text(idx+1, row.mean_test_score, f'Best trial\nmean:{row.mean_test_score:.2f}\nsem:{row.sem_test_score:.2f}', ha='center', va='bottom', color='red')
+                else: 
+                    plt.text(idx+1, row.mean_test_score, f'Worst trial\nmean:{row.mean_test_score:.2f}\nsem:{row.sem_test_score:.2f}', ha='center', va='bottom', color='blue')
+
+            plt.title(f'Best and Worst Trials for {estimator_name}')
+            plt.ylabel('Score')
+            plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+            
             plt.show()
         
         if calculate_shap:
@@ -273,11 +437,10 @@ class MachineLearningEstimator(DataLoader):
         calculate_shap = self.params['calculate_shap']
         X = self.X
         y = self.y
-        grid = optuna_grid['ManualSearch']
+        param_grid = self.param_grid
         scorer = self.params['scorer']
         evaluation = self.params['evaluation']
         rounds = self.params['rounds']
-        
         local_data_full_outer = pd.DataFrame()  
         
         if calculate_shap:
@@ -316,20 +479,13 @@ class MachineLearningEstimator(DataLoader):
         
         def objective(trial):
             try :
-                clf = grid[estimator_name](trial)
+                clf = param_grid[estimator_name](trial)
                 for set in range(rounds*cv):
                     clf.fit(list_x_train[set], list_y_train[set])
                     scores.append(scorer(clf, list_x_test[set], list_y_test[set]))
                     if ((set+1) % cv == 0) and (set > 0):
                         scores_per_cv.append(scores[set+1-cv:set+1])
-                
                 score = np.mean(scores)
-                    
-                # if calculate_shap:
-                #     shap_values = clf.predict(X)
-                #     x_shap = np.add(x_shap, shap_values)
-                # local_data_full_outer = pd.concat([local_data_full_outer, pd.DataFrame({'best_hyperparameters': trial.params, 'best_score': score})], ignore_index=True)
-                
                 return score
             except Exception as e:
                 print(f'{e}.\nThe None Score and the Hyperparameters of it will not be saved.')
@@ -337,22 +493,6 @@ class MachineLearningEstimator(DataLoader):
                                 
         study = optuna.create_study(sampler=TPESampler(),direction=direction)
         study.optimize(objective, n_trials=n_trials, show_progress_bar=True,n_jobs=-1)
-        
-        trial_scores = [trial.value for trial in study.trials]
-        all_params = [trial.params for trial in study.trials]
-        
-        valid_scores = []
-        valid_params = []
-        unvalid_scores = []
-        unvalid_params = []
-
-        for trial, score in zip(study.trials, trial_scores):
-            if score is not None:
-                valid_scores.append(score)
-                valid_params.append(trial.params)
-            else:
-                unvalid_scores.append(score)
-                unvalid_params.append(trial.params)
         
         if calculate_shap:
             for i in range(rounds):
@@ -367,28 +507,37 @@ class MachineLearningEstimator(DataLoader):
                     x_shap[train_index,:] = np.add(x_shap[train_index,:],shap_values.values)
             x_shap = x_shap/(rounds*(cv-1))
                 
+         
+        all_params = [trial.params for trial in study.trials]    
+        
+        for params in all_params:
+            for round_num in range(rounds):
+                row = {}
+                for cv_trial in range(cv):
+                    row_key = f'split{cv_trial}_test_score'
+                    row[row_key] = scores_per_cv[round_num][cv_trial]
                 
-        valid_scores = [score for score in trial_scores if score is not None]
-        if valid_scores:  
-            sem = np.std(valid_scores) / np.sqrt(len(valid_scores))
-        else:
-            sem = 0                        
+                row['mean_test_score'] = np.mean(scores_per_cv[round_num])
+                row['std_test_score'] = np.std(scores_per_cv[round_num])
+                
+                valid_scores = [score for score in scores_per_cv[round_num] if score is not None]
+                if valid_scores:  
+                    sem = np.std(valid_scores) / np.sqrt(len(valid_scores))
+                else:
+                    sem = 0
+                    
+                row['sem_test_score'] = sem
+                row['params'] = params
+                
+                row_df = pd.DataFrame([row])
+                local_data_full_outer = pd.concat([local_data_full_outer, row_df], axis=0)
 
-        new_row = {
-            'best_hyperparameters': study.best_params,
-            'best_score': study.best_value,
-            'estimator': estimator_name,
-            'scores': valid_scores,
-            'valid_hyperparameters': valid_params,
-            'unvalid_scores': unvalid_scores,
-            'unvalid_hyperparameters': unvalid_params,
-            'scores_per_cv': scores_per_cv,
-            'sem': sem
-        }
+        local_data_full_outer.reset_index(drop=True, inplace=True)
         
-        new_row = pd.DataFrame([new_row])
-        local_data_full_outer = pd.concat([local_data_full_outer, new_row], ignore_index=True)
-        
+        local_data_full_outer = local_data_full_outer.sort_values('mean_test_score', ascending=False)
+        local_data_full_outer.reset_index(drop=True, inplace=True)
+        local_data_full_outer['ranked'] = local_data_full_outer.index + 1
+
         if calculate_shap:
             return local_data_full_outer, x_shap
         else:
