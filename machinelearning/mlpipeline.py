@@ -1,7 +1,10 @@
 import numpy as np
 import optuna
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import matplotlib.pyplot as plt
+from scipy.stats import bootstrap
 import sklearn
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
@@ -420,25 +423,72 @@ class MLPipelines(MachineLearningEstimator):
         all_N_features_list = [x[0] for x in sorted_features_counts]
         features_list = [x[0] for x in sorted_features_counts[:most_imp_feat]]
         
-        labels = scores_dataframe['Classifier'].unique() 
-        x_coords = range(1, len(labels) + 1)
-        if plot == 'box':
-            plt.boxplot(scores_dataframe['Scores'], bootstrap=1000, notch=True, labels=labels)
-            # x_coords = range(1, len(labels) + 1)
-            plt.title("Model Selection Results")
-            plt.ylabel("Score")
-            plt.xticks(rotation=90)  
-            plt.grid(True)
-            plt.show()
-        elif plot == 'violin':            
-            plt.violinplot(scores_dataframe['Scores'].values)
-            plt.title("Model Selection Results")
-            plt.ylabel("Score")
-            plt.xticks(x_coords, labels, rotation=90)
-            plt.grid(True)
-            plt.show()
-        elif plot == None: pass
-        else: raise ValueError(f'The "{plot}" is not a valid option for plotting. Choose between "box", "violin" or None.')
+        def bootstrap_median_ci(data, num_iterations=1000, ci=0.95):
+            medians = []
+            for _ in range(num_iterations):
+                sample = np.random.choice(data, size=len(data), replace=True)
+                medians.append(np.median(sample))
+            lower_bound = np.percentile(medians, (1-ci)/2 * 100)
+            upper_bound = np.percentile(medians, (1+ci)/2 * 100)
+            return lower_bound, upper_bound
+        
+        
+        if plot != None: 
+        
+            scores_long = scores_dataframe.explode('Scores')
+            scores_long['Scores'] = scores_long['Scores'].astype(float)
+            
+            fig = go.Figure()
+            
+            if plot == 'box':
+            # Add box plots for each classifier
+                for classifier in scores_dataframe['Classifier']:
+                    data = scores_long[scores_long['Classifier'] == classifier]['Scores']
+                    fig.add_trace(go.Box(
+                        y=data,
+                        name=classifier,
+                        boxpoints='all',
+                        jitter=0.3,
+                        pointpos=-1.8
+                    ))
+                    
+                    # Calculate and add 95% CI for the median
+                    lower, upper = bootstrap_median_ci(data)
+                    fig.add_trace(go.Scatter(
+                        x=[classifier, classifier],
+                        y=[lower, upper],
+                        mode='lines',
+                        line=dict(color='black', dash='dash'),
+                        showlegend=False
+                    ))
+
+            elif plot == 'violin':
+                for classifier in scores_dataframe['Classifier']:
+                    data = scores_long[scores_long['Classifier'] == classifier]['Scores']
+                    fig.add_trace(go.Violin(
+                        y=data,
+                        name=classifier,
+                        box_visible=False,
+                        points='all',
+                        jitter=0.3,
+                        pointpos=-1.8
+                    ))
+                            
+                
+            else: raise ValueError(f'The "{plot}" is not a valid option for plotting. Choose between "box" or "violin".')
+
+            # Update layout for better readability
+            fig.update_layout(
+                title="Model Selection Results",
+                yaxis_title="Score",
+                xaxis_title="Classifier",
+                xaxis_tickangle=-45,
+                template="plotly_white"
+            )
+
+            fig.show()
+            
+        else: pass
         
         if return_csv:
             scores_dataframe.to_csv('ncv_results.csv', index=False)
