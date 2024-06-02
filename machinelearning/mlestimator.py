@@ -40,6 +40,7 @@ import shap
 from tqdm import tqdm
 import optuna
 from sklearn.utils import resample
+import copy
 # from .mlestimator import FeaturesExplanation
 
 # from logging_levels import add_log_level
@@ -411,12 +412,27 @@ class MachineLearningEstimator(DataLoader):
             elif evaluation == 'cv_simple':
                 fig = go.Figure()
                 all_scores = []
+                best_cv_scores = []
                 for i in range(cv):
-                    all_scores.append(data_full_outer[f'split{i}_test_score'])
-                    
+                    for row in range(data_full_outer.shape[0]):
+                        all_scores.append(data_full_outer[f'split{i}_test_score'].iloc[row])
+                
                 fig.add_trace(go.Box(
                         y=all_scores,
-                        name=estimator_name,
+                        name='All trials scores',
+                        boxpoints='all',
+                        jitter=0.3,
+                        pointpos=-1.8,
+                        boxmean=True
+                    ))
+                
+                temp_best_cv = data_full_outer[data_full_outer['ranked']==1]
+                for i in range(cv):
+                    best_cv_scores.append(temp_best_cv[f'split{i}_test_score'].iloc[0])
+                
+                fig.add_trace(go.Box(
+                        y=best_cv_scores,
+                        name='Best trial Scores',
                         boxpoints='all',
                         jitter=0.3,
                         pointpos=-1.8,
@@ -429,15 +445,31 @@ class MachineLearningEstimator(DataLoader):
                 template="plotly_white"
                 )
             else:
-                fig = make_subplots(rows=1, cols=2, subplot_titles=('Summary Boxplot', 'Rounds Scores'))
+                fig = make_subplots(rows=1, cols=2, subplot_titles=('Summary Boxplots', 'Rounds Scores'))
                 all_scores = []
+                best_scores_rounds = []
                 best_cv = []
                 for i in range(cv):
-                    all_scores.append(data_full_outer[f'split{i}_test_score'])
+                    for row in range(data_full_outer.shape[0]):
+                        all_scores.append(data_full_outer[f'split{i}_test_score'].iloc[row])
                 
                 fig.add_trace(go.Box(
                     y=all_scores, 
-                    name='Summary Scores', 
+                    name='All trial Scores', 
+                    boxpoints='all',
+                    jitter=0.3,
+                    pointpos=-1.8
+                ), row=1, col=1)
+                
+                for round in data_full_outer['round'].unique():
+                    rounds_df = data_full_outer[data_full_outer['round'] == round]
+                    rounds_df = rounds_df.sort_values(by='mean_test_score', ascending=False)
+                    for i in range(cv):
+                        best_scores_rounds.append(rounds_df[f'split{i}_test_score'].iloc[0])
+                
+                fig.add_trace(go.Box(
+                    y=best_scores_rounds, 
+                    name='Best scores for every round', 
                     boxpoints='all',
                     jitter=0.3,
                     pointpos=-1.8
@@ -455,18 +487,18 @@ class MachineLearningEstimator(DataLoader):
                         
                     fig.add_trace(go.Box(
                         y=round_scores,
-                        name=f'Round {round}',
+                        name=f'Round {round+1}',
                         boxpoints='all',
                         jitter=0.3,
                         pointpos=-1.8
                     ), row=1, col=2)
                     
-                fig.add_trace(go.Scatter(
-                    x=['Best trial'], 
+                fig.add_trace(go.Box(
+                    name='Best trial of all rounds', 
                     y=best_cv,
-                    mode='text',
-                    textposition='top center',
-                    textfont=dict(color='red')
+                    boxpoints='all',
+                    jitter=0.3,
+                    pointpos=-1.8
                 ), row=1, col=2)
                 
                 # Update layout for better readability
@@ -589,9 +621,11 @@ class MachineLearningEstimator(DataLoader):
         for i in range(rounds):
             scores = []
             for train_index, test_index in list_train_test_indices[i]:
+                temp_model = copy.deepcopy(best_model)
                 X_train, X_test = X.iloc[train_index], X.iloc[test_index]
                 y_train, y_test = y[train_index], y[test_index]
-                scores.append(scorer(best_model, X_test, y_test))
+                temp_model.fit(X_train, y_train)
+                scores.append(scorer(temp_model, X_test, y_test))
                 
                 if calculate_shap:
                     shap_values = self.calc_shap(X_train,best_model)
