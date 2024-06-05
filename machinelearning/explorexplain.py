@@ -1,6 +1,9 @@
 import numpy as np
 import pandas as pd
-from dash import Dash, dcc, html, Input, Output
+# from dash import Dash, dcc, html, Input, Output
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 from sklearn.decomposition import PCA
 import plotly.express as px
 import plotly.graph_objects as go
@@ -115,6 +118,17 @@ class ExploreExplain(DataLoader):
             data = data[selected]
         
         data['labels'] = labels
+                
+        # fig = px.scatter_matrix(data, dimensions=data.columns[:-1], color='labels')
+
+        # # Update layout for better readability
+        # fig.update_layout(
+        #     title='Pairplot of Features',
+        #     width=1200,
+        #     height=1200
+        # )
+
+        # fig.show()
         sns.pairplot(data, hue='labels')
         plt.show()
         
@@ -190,7 +204,6 @@ class ExploreExplain(DataLoader):
             # Perform the appropriate statistical test based on the number of groups
             # Kruskal-Wallis H-test for more than two groups
             # test_stat, p_value = stats.kruskal(*group_data)
-            
             # Mann-Whitney U test for two groups
             test_stat, p_value = stats.mannwhitneyu(*group_data, alternative='two-sided')
             p_values[feature] = p_value
@@ -203,31 +216,31 @@ class ExploreExplain(DataLoader):
             melted_data_all = pd.melt(data_all, id_vars='labels', var_name='variable', value_name='value')            
             print(f'Number of significant features: {len(significant_features)} of {len(data.columns)-1} provided.')
             
-            plt.figure(figsize=(max(12, len(significant_features)), 10))            
-            sns.boxplot(x='variable', y='value', hue='labels', data=melted_data_all) 
-            plt.xticks(rotation=90)
-            plt.title('Boxplot of Significant Features')
-            plt.tight_layout()
-            plt.show()
+            fig = go.Figure()
+
+            for variable in significant_features:
+                for label in melted_data_all['labels'].unique():
+                    filtered_data = melted_data_all[(melted_data_all['variable'] == variable) & (melted_data_all['labels'] == label)]
+                    fig.add_trace(go.Box(
+                        y=filtered_data['value'],
+                        name=f'{variable} - {label}',
+                        jitter=0.3,
+                        pointpos=-1.8
+                    ))
+
+            fig.update_layout(
+                title='Boxplot of Significant Features',
+                xaxis_title='Feature',
+                yaxis_title='Value',
+                template='plotly_white',
+                width=max(20, len(significant_features)) * 40,  
+                height=400  
+            )
+            fig.update_xaxes(tickangle=90)
+            fig.show()
             return significant_features
         else:
-            print("No significant features found.")
-    
-    # app = Dash(__name__)
-
-    # app.layout = html.Div([
-    #     html.H4("Visualization of PCA's explained variance"),
-    #     dcc.Graph(id="graph"),
-    #     html.P("Number of components:"),
-    #     dcc.Slider(
-    #         id='slider',
-    #         min=2, max=5, value=2, step=1)
-    # ])
-
-
-    # @app.callback(
-    #     Output("graph", "figure"), 
-    #     Input("slider", "value"))
+            print("No significant features found.")    
     
     def pca_plot(self,data=None,labels=None,variance_threshold=None,components_resize=None, components_plot=2, missing_values_method='drop'):
         """
