@@ -51,6 +51,8 @@ coverage.xml
 .pytest_cache/
 cover/
 .jpeg
+.sav
+.docx
 
 # Catboost
 catboost_info/

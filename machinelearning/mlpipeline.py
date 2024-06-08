@@ -30,7 +30,7 @@ from dataloader import DataLoader
 
 from .mlestimator import MachineLearningEstimator
 from .optuna_grid import optuna_grid
-
+import os
 from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_classif, SelectPercentile
 from mrmr import mrmr_classif
 import logging
@@ -59,6 +59,10 @@ class MLPipelines(MachineLearningEstimator):
         '''
         super().__init__(label, csv_dir, estimator, param_grid)
     
+    def set_result_csv_name(self, csv_dir):
+        data_name = os.path.basename(csv_dir).split('.')[0]
+        return data_name
+
     def inner_loop(self, train_index, test_index, X, y, avail_thr):
         num_features = self.params['num_features']
         if type(num_features) is int:
@@ -432,9 +436,13 @@ class MLPipelines(MachineLearningEstimator):
             upper_bound = np.percentile(medians, (1+ci)/2 * 100)
             return lower_bound, upper_bound
         
-        
+        # creste a results directory
+        results_dir = "Results"
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+
         if plot != None: 
-        
+                    
             scores_long = scores_dataframe.explode('Scores')
             scores_long['Scores'] = scores_long['Scores'].astype(float)
             
@@ -485,13 +493,24 @@ class MLPipelines(MachineLearningEstimator):
                 xaxis_tickangle=-45,
                 template="plotly_white"
             )
+            # Save the figure as an image in the "Results" directory
+            image_path = os.path.join(results_dir, "model_selection_results.png")
+            fig.write_image(image_path)
 
             fig.show()
             
         else: pass
         
         if return_csv:
-            scores_dataframe.to_csv('ncv_results.csv', index=False)
+            try:
+                dataset_name = self.set_result_csv_name(self.csv_dir)
+                csv_path = os.path.join(results_dir, f'{dataset_name}_ncv_results.csv')
+                scores_dataframe.to_csv(csv_path, index=False)
+            except Exception as e:
+                dataset_name = 'results_ncv'
+                csv_path = os.path.join(results_dir, f'{dataset_name}.csv')
+                scores_dataframe.to_csv(csv_path, index=False)
+            print(f"Results saved to {csv_path}")
         if return_all_N_features:
             return scores_dataframe, features_list, all_N_features_list
         else:

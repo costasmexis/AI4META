@@ -24,4 +24,9 @@ dependencies:
       - shap
       - progress
       - ipywidgets
+      - plotly
+      - nbformat
+      - umap-learn
+      - seaborn
+      - kaleido
       
