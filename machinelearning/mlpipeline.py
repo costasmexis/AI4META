@@ -65,6 +65,8 @@ class MLPipelines(MachineLearningEstimator):
 
     def inner_loop(self, train_index, test_index, X, y, avail_thr):
         num_features = self.params['num_features']
+        inner_selection = self.params['inner_selection']
+
         if type(num_features) is int:
             feature_loop = [num_features]
         elif type(num_features) is list:
@@ -111,32 +113,26 @@ class MLPipelines(MachineLearningEstimator):
                 for estimator in clfs:
                     self.estimator = self.available_clfs[estimator]
                     self.name = self.estimator.__class__.__name__
-                    nested_scores = []
                     
-                    # if optimizer == 'grid_search':
-                    #     clf = GridSearchCV(estimator=self.estimator, scoring=inner_scoring, 
-                    #                     param_grid=self.param_grid, cv=inner_cv, n_jobs=1, verbose=0)
-                    # elif optimizer == 'random_search':
-                    #             clf = RandomizedSearchCV(estimator=self.estimator, scoring=inner_scoring,
-                    #                                     param_distributions=self.param_grid, cv=inner_cv, n_jobs=1, 
-                    #                                     verbose=0, n_iter=n_iter)
-                    # if optimizer == 'bayesian_search':
                     self.set_optuna_verbosity(logging.ERROR)
                     clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
                                                             param_distributions=optuna_grid[opt_grid][self.name],
                                                             cv=inner_cv, n_jobs=n_jobs, verbose=0, n_trials=n_trials_ncv)
-                    # else:
-                    #     raise Exception("Unsupported optimizer. For nested CV, use 'bayesian_search'")   
-                    
+                                        
                     clf.fit(X_train_selected, y_train)
-                    # y_pred = clf.predict(X_test_selected)
-                    nested_score = outer_scorer(clf, X_test_selected, y_test)
-                    nested_scores.append(nested_score)    
+                    results['Estimator'].append(self.name)
                     
-                    results['Scores'].append(nested_scores[0])
-                    results['Estimator'].append(self.name)    
-                    results['Hyperparameters'].append(clf.best_params_)        
-                    
+                    if inner_selection == 'validation_score':
+                        results['Scores'].append(outer_scorer(clf, X_test_selected, y_test))
+                        results['Hyperparameters'].append(clf.best_params_)  
+                    else:  
+                        trials = clf.trials_
+                        simple_model_params = self.one_sem_model(trials, self.name)
+                        results['Hyperparameters'].append(simple_model_params) 
+                        new_params_clf = self.create_model_instance(self.name, simple_model_params)
+                        new_params_clf.fit(X_train_selected, y_train)
+                        results['Scores'].append(new_params_clf.score(X_test_selected, y_test))
+
                     if num_feature == 'full' or num_feature is None:
                         results['Selected_Features'].append(None)  
                         results['Number_of_Features'].append(X_test_selected.shape[1])
@@ -149,10 +145,82 @@ class MLPipelines(MachineLearningEstimator):
                         results['Number_of_Features'].append(num_feature)
                         results['Way_of_Selection'].append(feature_selection_type)
 
-                    
         df_results = pd.DataFrame(results)
         time.sleep(1)
         return [results]
+    
+    def create_model_instance(self, model_name, params):
+        if model_name == 'RandomForestClassifier':
+            return RandomForestClassifier(**params)
+        elif model_name == 'LogisticRegression':
+            return LogisticRegression(**params)
+        elif model_name == 'XGBClassifier':
+            return XGBClassifier(**params)
+        elif model_name == 'LGBMClassifier':
+            return LGBMClassifier(**params)
+        elif model_name == 'CatBoostClassifier':
+            return CatBoostClassifier(**params)
+        elif model_name == 'SVC':
+            return SVC(**params)
+        elif model_name == 'KNeighborsClassifier':
+            return KNeighborsClassifier(**params)
+        elif model_name == 'LinearDiscriminantAnalysis':
+            return LinearDiscriminantAnalysis(**params)
+        elif model_name == 'GaussianNB':
+            return GaussianNB(**params)
+        elif model_name == 'GradientBoostingClassifier':
+            return GradientBoostingClassifier(**params)
+        elif model_name == 'GaussianProcessClassifier':
+            return GaussianProcessClassifier(**params)
+        elif model_name == 'DecisionTreeClassifier':
+            return DecisionTreeClassifier(**params)
+        else:
+            raise ValueError(f"Unsupported model: {model_name}")
+
+    
+    def one_sem_model(self, trials, model_name):
+        hyper_compl = {
+            'RandomForestClassifier': {'n_estimators': True, 'max_depth': True, 'min_samples_split': False, 'min_samples_leaf': False},
+            'LogisticRegression': {'C': True, 'max_iter': True},
+            'XGBClassifier': {'max_depth': True, 'n_estimators': True, 'learning_rate': True, 'gamma': False, 'min_child_weight': False, 'colsample_bytree': True, 'subsample': True, 'reg_lambda': False},
+            'LGBMClassifier': {'max_depth': True, 'n_estimators': True, 'learning_rate': True, 'num_leaves': True, 'colsample_bytree': True, 'subsample': True, 'reg_lambda': False},
+            'CatBoostClassifier': {'max_depth': True, 'n_estimators': True, 'learning_rate': True,  'reg_lambda': False},
+            'SVC': {'C': True, 'degree': True},
+            'KNeighborsClassifier': {'n_neighbors': True},
+            'LinearDiscriminantAnalysis': {'shrinkage': True},
+            'GaussianNB': {'var_smoothing': False},
+            'GradientBoostingClassifier': {'n_estimators': True, 'max_depth': True, 'min_samples_split': False, 'min_samples_leaf': False},
+            'GaussianProcessClassifier': {'max_iter_predict': True},
+            'DecisionTreeClassifier': {'max_depth': True, 'min_samples_split': False, 'min_samples_leaf': False}
+        }
+        
+        constraints = hyper_compl[model_name]
+        inner_cv_splits = self.params['inner_splits']  # Number of splits in the inner CV
+        trials_data = [{'params': t.params, 'value': t.values[0], 'sem': t.user_attrs['std_test_score'] / (inner_cv_splits ** 0.5)} for t in trials if t.state == optuna.trial.TrialState.COMPLETE]
+        # trials_data = [{'params': t.params, 'value': t.values[0], 'sem': t.user_attrs['std_test_score']} for t in trials if t.state == optuna.trial.TrialState.COMPLETE]
+        trials_data = sorted(trials_data, key=lambda x: (x['value'], -x['sem']), reverse=True)
+        
+        best_score = trials_data[0]['value']
+        best_score_sem = trials_data[0]['sem']
+        sem_threshold = best_score - best_score_sem
+        
+        filtered_trials = [t for t in trials_data if t['value'] >= sem_threshold]
+        
+        def model_complexity(params):
+            complexity = 0
+            param_ranges = optuna_grid['param_ranges']
+            for p in constraints:
+                range_min, range_max = param_ranges.get(p, (0, 1))  # Default range (0, 1) if not specified
+                normalized_value = (params.get(p, 0) - range_min) / (range_max - range_min)
+                if constraints[p]:
+                    complexity += normalized_value
+                else:
+                    complexity -= normalized_value
+            return complexity
+
+        simplest_model = min(filtered_trials, key=lambda x: model_complexity(x['params']))
+        
+        return simplest_model['params']
     
     def filter_features(self, train_index, test_index, X, y, num_feature2_use):
         X_tr, X_te = X.iloc[train_index], X.iloc[test_index]
@@ -226,16 +294,14 @@ class MLPipelines(MachineLearningEstimator):
                     list_dfs = [item for sublist in temp_list for item in sublist]
                     end = time.time()
                     
-            elif parallel == 'dynamic_parallel':
-                temp_list = []
-                results = Parallel(n_jobs=len(train_test_indices))(delayed(self.inner_loop)(
-                    train_index, test_index, self.X, self.y, avail_thr)
-                    for train_index, test_index in tqdm(train_test_indices,desc='Outer fold of %i round:'%(i+1),total=len(train_test_indices)))
-                temp_list = [item for sublist in results for item in sublist]
-                list_dfs.extend(temp_list) 
-                end = time.time()
-                
-                
+            # elif parallel == 'dynamic_parallel':
+            #     temp_list = []
+            #     results = Parallel(n_jobs=len(train_test_indices))(delayed(self.inner_loop)(
+            #         train_index, test_index, self.X, self.y, avail_thr)
+            #         for train_index, test_index in tqdm(train_test_indices,desc='Outer fold of %i round:'%(i+1),total=len(train_test_indices)))
+            #     temp_list = [item for sublist in results for item in sublist]
+            #     list_dfs.extend(temp_list) 
+            #     end = time.time()
             else:
                 temp_list = []
                 with progressbar.ProgressBar(prefix = f'Outer fold of {i+1} round:',max_value=outer_splits, widgets=widgets) as bar:
@@ -254,7 +320,7 @@ class MLPipelines(MachineLearningEstimator):
     
     def nested_cv(self,n_trials_ncv=25,rounds=10, exclude=None,hist_feat=True,N=100,most_imp_feat=10,search_on=None,
                     num_features=None,feature_selection_type='mrmr', return_csv=True, hist_fit=False,
-                    feature_selection_method='chi2', plot='box',inner_scoring='matthews_corrcoef',
+                    feature_selection_method='chi2', plot='box',inner_scoring='matthews_corrcoef',inner_selection='validation_score',
                     outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5,norm_method='minmax',
                     parallel='thread_per_round', missing_values_method='median',return_all_N_features=True):
         """
@@ -316,7 +382,8 @@ class MLPipelines(MachineLearningEstimator):
             raise ValueError(f'Invalid inner scoring metric: {inner_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
         if outer_scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(f'Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
-        
+        if inner_selection not in ['validation_score', 'one_sem']:
+            raise ValueError(f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem"]')
         trial_indices = range(rounds)
         num_cores = multiprocessing.cpu_count()
         if num_cores < rounds:
@@ -331,13 +398,14 @@ class MLPipelines(MachineLearningEstimator):
             with threadpool_limits(limits=avail_thr):
                 list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
         
-        elif parallel == 'dynamic_parallel': 
-            # avail_thr = 1
-            with Pool() as pool:
-                list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
+        # elif parallel == 'dynamic_parallel': 
+        #     # avail_thr = 1
+        #     with Pool() as pool:
+        #         list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
                 
         elif parallel == 'freely_parallel':
-            with threadpool_limits(limits=avail_thr):
+            # with threadpool_limits(limits=avail_thr):
+            with threadpool_limits():
                 list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
         
         else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round or freely_parallel')
@@ -504,13 +572,13 @@ class MLPipelines(MachineLearningEstimator):
         if return_csv:
             try:
                 dataset_name = self.set_result_csv_name(self.csv_dir)
-                csv_path = os.path.join(results_dir, f'{dataset_name}_ncv_results.csv')
-                scores_dataframe.to_csv(csv_path, index=False)
+                results_path = os.path.join(results_dir, f'{dataset_name}_ncv_results.csv')
+                scores_dataframe.to_csv(results_path, index=False)
             except Exception as e:
                 dataset_name = 'results_ncv'
-                csv_path = os.path.join(results_dir, f'{dataset_name}.csv')
-                scores_dataframe.to_csv(csv_path, index=False)
-            print(f"Results saved to {csv_path}")
+                results_path = os.path.join(results_dir, f'{dataset_name}.csv')
+                scores_dataframe.to_csv(results_path, index=False)
+            print(f"Results saved to {results_path}")
         if return_all_N_features:
             return scores_dataframe, features_list, all_N_features_list
         else:
