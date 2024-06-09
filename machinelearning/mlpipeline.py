@@ -14,8 +14,6 @@ from sklearn.gaussian_process import GaussianProcessClassifier
 from catboost import CatBoostClassifier
 from sklearn.metrics import get_scorer
 from sklearn.model_selection import (
-    GridSearchCV,
-    RandomizedSearchCV,
     StratifiedKFold,
     cross_val_score,
     train_test_split,
@@ -35,7 +33,6 @@ from sklearn.feature_selection import SelectKBest, chi2, f_classif, mutual_info_
 from mrmr import mrmr_classif
 import logging
 from scipy.stats import sem
-# from .Features_explanation import Features_explanation
 from multiprocessing import Pool
 from itertools import chain
 import time
@@ -244,34 +241,38 @@ class MLPipelines(MachineLearningEstimator):
         return simplest_model['params']
     
     def filter_features(self, train_index, test_index, X, y, num_feature2_use):
+        '''
+        This function filters the features using the selected model.
+        '''
+        # Find the train and test sets
         X_tr, X_te = X.iloc[train_index], X.iloc[test_index]
-        norm_method = self.params['norm_method']
-        missing_values_method = self.params['missing_values_method']
-        X_train, X_test = self.normalize(X=X_tr,train_test_set=True,X_test=X_te, method=norm_method)
-        
-        X_train = self.missing_values(data=X_train, method=missing_values_method)
-        X_test = self.missing_values(data=X_test, method=missing_values_method)
-        
         y_train, y_test = y[train_index], y[test_index]
+        # Initiallize parameters
+        norm_method = self.params['norm_method']
         feature_selection_type = self.params['feature_selection_type']
         feature_selection_method = self.params['feature_selection_method']
-        
-        if num_feature2_use is not None and feature_selection_type != 'percentile':
+        missing_values_method = self.params['missing_values_method']
+        X_train, X_test = self.normalize(X=X_tr,train_test_set=True,X_test=X_te, method=norm_method)
+        # Manipulate the missing values for both train and test sets
+        X_train = self.missing_values(data=X_train, method=missing_values_method)
+        X_test = self.missing_values(data=X_test, method=missing_values_method)
+        # Find the feature selection type and apply it to the train and test sets
+        if feature_selection_type != 'percentile':
             if type(num_feature2_use) is int:
                 if num_feature2_use < X_train.shape[1]:
                     self.selected_features=self.feature_selection(X=X_train, y=y_train,method=feature_selection_type, num_features=num_feature2_use, inner_method=feature_selection_method)                            
                     X_train_selected = X_train[self.selected_features]
                     X_test_selected = X_test[self.selected_features]
                     num_feature = num_feature2_use
-                elif type(num_feature2_use) is int and num_feature2_use == X_train.shape[1]:
+                elif num_feature2_use == X_train.shape[1]:
                     X_train_selected = X_train
                     X_test_selected = X_test
                     num_feature='full'
                 else: 
                     raise ValueError('num_features must be an integer less than the number of features in the dataset')
-        elif feature_selection_type == 'percentile' and num_feature2_use is not None:
+        elif feature_selection_type == 'percentile':
             if type(num_feature2_use) is int:
-                if num_feature2_use == 100:
+                if num_feature2_use == 100 or num_feature2_use == self.X.shape[1]: #TODO: check how to write it better
                     X_train_selected = X_train
                     X_test_selected = X_test
                     num_feature='full'
@@ -289,23 +290,28 @@ class MLPipelines(MachineLearningEstimator):
     
 
     def outer_cv_loop(self,i,avail_thr):
-            start = time.time()
+            # Initialize parameters in the function
+            start = time.time() # Count time of outer loops
             inner_splits = self.params['inner_splits']
             outer_splits = self.params['outer_splits']
+            parallel = self.params['parallel']
+            # Split the data into train and test
             inner_cv = StratifiedKFold(n_splits=inner_splits, shuffle=True, random_state=i)
             outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=i)
             self.params['inner_cv'] = inner_cv
             self.params['outer_cv'] = outer_cv 
-            parallel = self.params['parallel']
             train_test_indices = list(outer_cv.split(self.X, self.y))
+            # Store the results in a list od dataframes
             list_dfs=[]
+            # Initiate the progress bar
             widgets = [progressbar.Percentage()," ", progressbar.GranularBar(), " " ,
                         progressbar.Timer(), " ", progressbar.ETA()]
-            
+            # Find the parallelization method
             if parallel == 'freely_parallel':
                 temp_list = []
                 with progressbar.ProgressBar(prefix = f'Outer fold of {i+1} round:',max_value=outer_splits, widgets=widgets) as bar:
                     split_index = 0
+                    # For each outer fold perform the inner loop
                     for train_index, test_index in train_test_indices:
                         results = self.inner_loop(train_index, test_index, self.X, self.y, avail_thr)
                         temp_list.append(results)
@@ -326,6 +332,7 @@ class MLPipelines(MachineLearningEstimator):
                 temp_list = []
                 with progressbar.ProgressBar(prefix = f'Outer fold of {i+1} round:',max_value=outer_splits, widgets=widgets) as bar:
                     split_index = 0
+                    # For each outer fold perform the inner loop
                     for train_index, test_index in train_test_indices:
                         results = self.inner_loop(train_index, test_index, self.X, self.y, avail_thr)
                         temp_list.append(results)
@@ -334,15 +341,15 @@ class MLPipelines(MachineLearningEstimator):
                         time.sleep(1)
                     list_dfs = [item for sublist in temp_list for item in sublist]
                     end = time.time()
-                
+            # Return the list of dataframes and the time of the outer loop
             print(f'Finished with {i+1} round after {(end-start)/3600:.2f} hours.')
             return list_dfs
     
-    def nested_cv(self,n_trials_ncv=25,rounds=10, exclude=None,hist_feat=True,freq_feat=None,search_on=None,
-                    num_features=None,feature_selection_type='mrmr', return_csv=True, hist_fit=False,
-                    feature_selection_method='chi2', plot='box',inner_scoring='matthews_corrcoef',inner_selection='validation_score',
+    def nested_cv(self,n_trials_ncv=25,rounds=10, exclude=None, freq_feat=None, search_on=None,
+                    num_features=None, feature_selection_type='mrmr', return_csv=True, feature_selection_method='chi2', 
+                    plot='box',inner_scoring='matthews_corrcoef',inner_selection='validation_score',
                     outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5,norm_method='minmax',
-                    parallel='thread_per_round', missing_values_method='median',return_all_N_features=True):
+                    parallel='thread_per_round', missing_values_method='median'):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
 
