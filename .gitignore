@@ -53,6 +53,7 @@ cover/
 .jpeg
 .sav
 .docx
+.md
 
 # Catboost
 catboost_info/
