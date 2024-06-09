@@ -180,18 +180,18 @@ class MLPipelines(MachineLearningEstimator):
     
     def one_sem_model(self, trials, model_name):
         hyper_compl = {
-            'RandomForestClassifier': {'n_estimators': True, 'max_depth': True, 'min_samples_split': False, 'min_samples_leaf': False},
+            'RandomForestClassifier': {'n_estimators': True, 'min_samples_split': True, 'min_samples_leaf': True},
             'LogisticRegression': {'C': True, 'max_iter': True},
-            'XGBClassifier': {'max_depth': True, 'n_estimators': True, 'learning_rate': True, 'gamma': False, 'min_child_weight': False, 'colsample_bytree': True, 'subsample': True, 'reg_lambda': False},
-            'LGBMClassifier': {'max_depth': True, 'n_estimators': True, 'learning_rate': True, 'num_leaves': True, 'colsample_bytree': True, 'subsample': True, 'reg_lambda': False},
-            'CatBoostClassifier': {'max_depth': True, 'n_estimators': True, 'learning_rate': True,  'reg_lambda': False},
+            'XGBClassifier': {'n_estimators': True, 'learning_rate': False, 'reg_alpha': False ,'reg_lambda': False},
+            'LGBMClassifier': {'n_estimators': True, 'learning_rate': False, 'num_leaves': True, 'reg_lambda': False, 'reg_alpha': False},
+            'CatBoostClassifier': { 'learning_rate': False,  'l2_leaf_reg': False, 'iterations': True},
             'SVC': {'C': True, 'degree': True},
-            'KNeighborsClassifier': {'n_neighbors': True},
+            'KNeighborsClassifier': {'leaf_size': True},
             'LinearDiscriminantAnalysis': {'shrinkage': True},
-            'GaussianNB': {'var_smoothing': False},
-            'GradientBoostingClassifier': {'n_estimators': True, 'max_depth': True, 'min_samples_split': False, 'min_samples_leaf': False},
+            'GaussianNB': {'var_smoothing': True},
+            'GradientBoostingClassifier': {'n_estimators': True, 'min_samples_split': True, 'min_samples_leaf': True, 'learning_rate':False},
             'GaussianProcessClassifier': {'max_iter_predict': True},
-            'DecisionTreeClassifier': {'max_depth': True, 'min_samples_split': False, 'min_samples_leaf': False}
+            'DecisionTreeClassifier': {'min_samples_split': True, 'min_samples_leaf': True,'min_weight_fraction_leaf':True}
         }
         
         constraints = hyper_compl[model_name]
@@ -201,21 +201,30 @@ class MLPipelines(MachineLearningEstimator):
         trials_data = sorted(trials_data, key=lambda x: (x['value'], -x['sem']), reverse=True)
         
         best_score = trials_data[0]['value']
-        best_score_sem = trials_data[0]['sem']
-        sem_threshold = best_score - best_score_sem
+        best_sem_score = trials_data[0]['sem']
+        sem_threshold = best_score - best_sem_score
         
         filtered_trials = [t for t in trials_data if t['value'] >= sem_threshold]
-        
+  
         def model_complexity(params):
+            # model complexity takes into account the complex parameters of each estimator
+            # normalizes them and finds the smallest complexity level of the filtered trials
+            # this way, the parameters have equal weights and we seak for a generally simpler model
+            # and not a model with the smallest (important) parameter
             complexity = 0
-            param_ranges = optuna_grid['param_ranges']
             for p in constraints:
-                range_min, range_max = param_ranges.get(p, (0, 1))  # Default range (0, 1) if not specified
-                normalized_value = (params.get(p, 0) - range_min) / (range_max - range_min)
-                if constraints[p]:
-                    complexity += normalized_value
-                else:
-                    complexity -= normalized_value
+                if p in params and p in optuna_grid['param_ranges']:
+                    min_val, max_val = optuna_grid['param_ranges'][p]
+                    # normalize the parameter value in order to equally consider each one of them
+                    normalized_value = (params[p] - min_val) / (max_val - min_val)
+                    if constraints[p]:
+                        # increasing with ascending complexity parameters
+                        complexity += normalized_value 
+                    else:
+                        # decreasing with ascending complexity parameters needs mirrored normalization. 
+                        # smallest value -> highest complexity level.
+                        mirrored_value = 1 - params[p] 
+                        complexity += mirrored_value
             return complexity
 
         simplest_model = min(filtered_trials, key=lambda x: model_complexity(x['params']))
