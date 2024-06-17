@@ -435,6 +435,7 @@ class MachineLearningEstimator(DataLoader):
 
         estimator_name = estimator_name or self.name
 
+        # TODO: Delete estimator (not used)
         estimator = self.available_clfs[estimator_name]
 
         if param_grid is None:
