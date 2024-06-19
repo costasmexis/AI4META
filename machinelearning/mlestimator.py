@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import os
 # from sklearn.metrics import matthews_corrcoef
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
@@ -67,10 +68,10 @@ class MachineLearningEstimator(DataLoader):
             'GradientBoostingClassifier': GradientBoostingClassifier(),
             'LinearDiscriminantAnalysis': LinearDiscriminantAnalysis(),
             'LogisticRegression': LogisticRegression(),
+            'ElasticNet': LogisticRegression(penalty='elasticnet', solver='saga'),
             'XGBClassifier': XGBClassifier(),
             'GaussianNB': GaussianNB(),
             'KNeighborsClassifier': KNeighborsClassifier(),
-            'DecisionTreeClassifier': DecisionTreeClassifier(),
             'SVC': SVC(),
             'LGBMClassifier': LGBMClassifier(),
             'GaussianProcessClassifier': GaussianProcessClassifier(),
@@ -79,7 +80,7 @@ class MachineLearningEstimator(DataLoader):
         
         if self.estimator is not None:
             # Check if the estimator is valid
-            if self.name not in self.available_clfs.keys():
+            if (self.name not in self.available_clfs.keys()) and (self.name is not 'ElasticNet'):
                 raise ValueError(f'Invalid estimator: {self.name}. Select one of the following: {list(self.available_clfs.keys())}')
         else: print(f'There is no selected classifier.')
         
@@ -145,16 +146,22 @@ class MachineLearningEstimator(DataLoader):
 
         if estimator is not None:
             self.estimator = estimator
-            self.name = self.estimator.__class__.__name__
+            if (self.estimator.__class__.__name__ == 'LogisticRegression' and
+                hasattr(self.estimator, 'penalty') and self.estimator.penalty == 'elasticnet'):
+                self.name = 'ElasticNet'
+            else:
+                self.name = self.estimator.__class__.__name__
             self.param_grid = parameter_grid
 
         grid_search = GridSearchCV(
             self.estimator, self.param_grid, scoring=scoring, cv=cv
         )
+
         grid_search.fit(X, y)
 
         self.best_params = grid_search.best_params_
         self.best_score = grid_search.best_score_
+
         self.best_estimator = grid_search.best_estimator_
         self.name = self.best_estimator.__class__.__name__
 
@@ -242,18 +249,7 @@ class MachineLearningEstimator(DataLoader):
         for i in range(cv):
             usefull_cols.append(f'split{i}_test_score')
         data_full_outer = results_df[usefull_cols]
-        
-        # if boxplot:
-        #     scores = []
-        #     for i in range(cv):
-        #         scores = np.append(scores, results_df[f'split{i}_test_score'])
-        #     plt.figure(figsize=(6, 6))
-        #     plt.boxplot(scores)
-        #     plt.title(f'Fold Scores Across Trials for {estimator_name}.')
-        #     plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False) 
-        #     plt.xlabel(self.name)
-        #     plt.ylabel('Score')
-        #     plt.show()
+
         if boxplot:
             plt.figure(figsize=(12, 6))
             
@@ -323,11 +319,46 @@ class MachineLearningEstimator(DataLoader):
         else:
             pass
         return shap_values
+    
+    def preprocess(self, X, y, scoring, missing_values, features_list, feat_num, feat_way, estimator_name, normalize_with):
+        if scoring not in sklearn.metrics.get_scorer_names():
+            raise ValueError(
+                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
+        else:
+            scoring_function = getattr(metrics, scoring, None)
+            scorer = make_scorer(scoring_function)
+            
+        self.scoring = scorer  
+            
+        if X is None and y is None:
+            X = self.X
+            y = self.y
+            
+        if missing_values != None:
+            X = self.missing_values(X, method=missing_values)
+        
+        if self.normalize_with in ['minmax', 'standard']:
+            X = self.normalize(X, method=self.normalize_with)
+            
+        if features_list != None:
+            X = X[features_list]
+        elif feat_num != None:
+            selected = self.feature_selection(X, y, feat_way, feat_num)
+            X = X[selected]
+        else: pass
+
+        if estimator_name == None:
+            estimator_name = self.name 
+        else: estimator_name = estimator_name
+        
+        estimator = self.available_clfs[estimator_name]
+
+        return X, y, estimator
 
     def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', features_list=None,rounds=10,boxplot=True,
                         cv=5, direction='maximize', n_trials=100, estimator_name=None,evaluation='cv_simple',
                         feat_num = None, feat_way = 'mrmr', verbose=True, missing_values='median',
-                        calculate_shap=False, param_grid=None):#, box=False):
+                        calculate_shap=False, param_grid=None, normalize_with='minmax'):#, box=False):
         """ Function to perform a bayesian search
 
         Args:
@@ -344,42 +375,52 @@ class MachineLearningEstimator(DataLoader):
         """
         
         self.set_optuna_verbosity(logging.ERROR)
-        
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
-        else:
-            scoring_function = getattr(metrics, scoring, None)
-            scorer = make_scorer(scoring_function)
-            
-        self.scoring = scorer  
-            
-        if X is None and y is None:
-            X = self.X
-            y = self.y
-            
-        if missing_values != None:
-            X = self.missing_values(X, method=missing_values)
-            
-        if features_list != None:
-            X = X[features_list]
-        elif feat_num != None:
-            selected = self.feature_selection(X, y, feat_way, feat_num)
-            X = X[selected]
-        else: pass
 
-        if estimator_name == None:
-            estimator_name = self.name 
-        else: estimator_name = estimator_name
+        # Create a 'Results' directory
+        results_dir = "Results"
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
         
-        estimator = self.available_clfs[estimator_name]
+        X, y, estimator = self.preprocess(X, y, scoring, missing_values, features_list, feat_num, feat_way, estimator_name, normalize_with)
         
         if param_grid == None:
             self.param_grid = optuna_grid['ManualSearch']
         else:         
             param_grid = {estimator_name: param_grid}   
             self.param_grid = param_grid
-                              
+
+        # Function to perform cross-validation and return the average score
+        def objective(trial):
+            clf = param_grid[estimator_name](trial)
+            scores = []
+            
+            # Stratified K-Fold cross-validation
+            cv_splits = StratifiedKFold(n_splits=cv, shuffle=True, random_state=1)
+            
+            for train_index, test_index in cv_splits.split(X, y):
+                X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+                y_train, y_test = y[train_index], y[test_index]
+                
+                # Fit the model
+                clf.fit(X_train, y_train)
+                
+                # Predict and evaluate
+                y_pred = clf.predict(X_test)
+                score = metrics.get_scorer(scoring)._score_func(y_test, y_pred) 
+                scores.append(score)
+            
+            # Return the average score
+            return np.mean(scores)
+                                
+        study = optuna.create_study(sampler=TPESampler(),direction=direction)
+        study.optimize(objective, n_trials=n_trials, show_progress_bar=True,n_jobs=-1)
+        best_params = study.best_params
+        best_model = self.available_clfs[estimator_name]
+        best_model.set_params(**best_params)
+        best_model.fit(X, y)
+        self.best_estimator = best_model
+
+                             
         if calculate_shap:
             shaps_array=np.zeros((X.shape[0],X.shape[1]))
                 
@@ -544,18 +585,7 @@ class MachineLearningEstimator(DataLoader):
             bootstrap_scores.append(score)
         return bootstrap_scores
         
-    def c_v(self):
-        cv = self.params['cv']
-        n_trials = self.params['n_trials']
-        direction = self.params['direction']
-        estimator_name = self.params['estimator_name']
-        calculate_shap = self.params['calculate_shap']
-        X = self.X
-        y = self.y
-        param_grid = self.param_grid
-        scorer = self.params['scorer']
-        evaluation = self.params['evaluation']
-        rounds = self.params['rounds']
+    def evaluate(self, X, y, cv, evaluation, rounds, best_model, best_params, study, scorer, calculate_shap):
         local_data_full_outer = pd.DataFrame()  
         
         if calculate_shap:
@@ -592,31 +622,8 @@ class MachineLearningEstimator(DataLoader):
                 list_x_test.append(X_test)
                 list_y_train.append(y_train)
                 list_y_test.append(y_test)  
-                
-        # train model
-        cv_splits = StratifiedKFold(n_splits=cv, shuffle=True, random_state=1)
-        def objective(trial):
-            try :
-                clf = param_grid[estimator_name](trial)
-                for set in range(cv):
-                    clf.fit(list_x_train[set], list_y_train[set])
-                    scores.append(scorer(clf, list_x_test[set], list_y_test[set]))
-                    # if ((set+1) % cv == 0) and (set > 0):
-                    #     scores_per_cv.append(scores[set+1-cv:set+1])
-                score = np.mean(scores)
-                return score
-            except Exception as e:
-                print(f'{e}.\nThe None Score and the Hyperparameters of it will not be saved.')
-                return None 
-                                
-        study = optuna.create_study(sampler=TPESampler(),direction=direction)
-        study.optimize(objective, n_trials=n_trials, show_progress_bar=True,n_jobs=-1)
-        best_params = study.best_params
-        best_model = self.available_clfs[estimator_name]
-        best_model.set_params(**best_params)
-        best_model.fit(X, y)
-        self.best_estimator = best_model
 
+                
         scores_per_cv = []
         for i in range(rounds):
             scores = []

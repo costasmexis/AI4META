@@ -111,9 +111,10 @@ class MLPipelines(MachineLearningEstimator):
                 raise ValueError("No classifier specified.")
             else:
                 for estimator in clfs:
-                    # for every estimatorfind the best hyperparameteres 
+                    # for every estimator find the best hyperparameteres 
+                    self.name = estimator
                     self.estimator = self.available_clfs[estimator]
-                    self.name = self.estimator.__class__.__name__
+
                     self.set_optuna_verbosity(logging.ERROR)
                     clf = optuna.integration.OptunaSearchCV(estimator=self.estimator, scoring=inner_scoring,
                                                             param_distributions=optuna_grid[opt_grid][self.name],
@@ -175,8 +176,8 @@ class MLPipelines(MachineLearningEstimator):
             return GradientBoostingClassifier(**params)
         elif model_name == 'GaussianProcessClassifier':
             return GaussianProcessClassifier(**params)
-        elif model_name == 'DecisionTreeClassifier':
-            return DecisionTreeClassifier(**params)
+        elif model_name == 'ElasticNet':
+            return LogisticRegression(**params)
         else:
             raise ValueError(f"Unsupported model: {model_name}")
 
@@ -199,7 +200,7 @@ class MLPipelines(MachineLearningEstimator):
             'GaussianNB': {'var_smoothing': True},
             'GradientBoostingClassifier': {'n_estimators': True, 'min_samples_split': True, 'min_samples_leaf': True, 'learning_rate':False},
             'GaussianProcessClassifier': {'max_iter_predict': True},
-            'DecisionTreeClassifier': {'min_samples_split': True, 'min_samples_leaf': True,'min_weight_fraction_leaf':True}
+            'ElasticNet': {'alpha': True, 'l1_ratio': True},
         }
         constraints = hyper_compl[model_name]
         # Find the attributes of the trials that are related to the constraints
@@ -381,20 +382,24 @@ class MLPipelines(MachineLearningEstimator):
             print(f'Values cannot be dropped at ncv because of inconsistent shapes. \nThe missing values with automaticly replaced by the median of each feature.')
             missing_values_method = 'median'
         if self.X.isnull().values.any():
-            print(f'Your Dataset contains NaN values. Some estimators does not work with NaN values.\nThe {missing_values_method} method will be used for the missing values manipulation.')
+            print(f'Your Dataset contains NaN values. Some estimators does not work with NaN values.\nThe {missing_values_method} method will be used for the missing values manipulation.\n')
         # Set parameters for the nested functions of the ncv process
         self.params = locals()
         self.params.pop('self', None)
         
+        if num_features is not None:
+            print(f'WARNING:The num_features parameter is {num_features}.\nThe result will be a Dataframe and a List with the freaq_feat number of the most important features.\nIf the freaq_feat is None, the result will be a List with all features.')
         # Set available classifiers
         if exclude is not None:
-            exclude_classes = [classifier.__class__ for classifier in exclude]
+            exclude_classes = exclude  # 'exclude' is a list of classifier names as strings
         elif search_on is not None:
-            classes = [classifier.__class__ for classifier in search_on]
-            exclude_classes = [classifier.__class__ for classifier in self.available_clfs.values() if classifier.__class__ not in classes]
+            classes = search_on  # 'search_on' is a list of classifier names as strings
+            exclude_classes = [clf for clf in self.available_clfs.keys() if clf not in classes]
         else:
             exclude_classes = []
-        clfs = [clf for clf in self.available_clfs.keys() if self.available_clfs[clf].__class__ not in exclude_classes]      
+
+        # Filter classifiers based on the exclude_classes list
+        clfs = [clf for clf in self.available_clfs.keys() if clf not in exclude_classes]
         self.params['clfs'] = clfs
         
         # Checks for reliability of parameters
@@ -464,33 +469,35 @@ class MLPipelines(MachineLearningEstimator):
                 })
         print(f'Finished with {len(results)} estimators')
         scores_dataframe = pd.DataFrame(results)
-        
-        # Plot histogram of features
-        feature_counts = Counter()
-        for idx, row in scores_dataframe.iterrows():
-            if row['Way_of_Selection'] != 'full': # If no features were selected skip
-                features = list(chain.from_iterable([list(index_obj) for index_obj in row['Selected_Features']]))
-                feature_counts.update(features)
 
-        sorted_features_counts = feature_counts.most_common()
-        if freq_feat > self.X.shape[1]:
-            freq_feat = self.X.shape[1]
-            
+        # Create a 'Results' directory
+        results_dir = "Results"
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+        
         # Manipulate the size of the plot to fit the number of features
-        if freq_feat is not None:
+        if num_features is not None:
+            if freq_feat == None:
+                freq_feat = self.X.shape[1]
+            elif freq_feat > self.X.shape[1]:
+                freq_feat = self.X.shape[1]
+
+            # Plot histogram of features
+            feature_counts = Counter()
+            for idx, row in scores_dataframe.iterrows():
+                if row['Way_of_Selection'] != 'full': # If no features were selected skip
+                    features = list(chain.from_iterable([list(index_obj) for index_obj in row['Selected_Features']]))
+                    feature_counts.update(features)
+
+            sorted_features_counts = feature_counts.most_common()
+
             if len(sorted_features_counts) == 0:
                 print('No features were selected.')
             else:
                 features, counts = zip(*sorted_features_counts[:freq_feat])
                 counts = [x / len(clfs) for x in counts]
                 plt.figure(figsize=(max(10, freq_feat // 2), 10))
-                bars = plt.bar(range(freq_feat), counts, color='skyblue', tick_label=features)
-                # if most_imp_feat > freq_feat:
-                #     most_imp_feat = freq_feat
-                # elif most_imp_feat > 0 and most_imp_feat <= freq_feat and most_imp_feat != None:
-                #     for bar in bars[:most_imp_feat]:
-                #         bar.set_color('red')
-
+                bars = plt.bar(features, counts, color='skyblue', tick_label=features)
                 plt.xlabel('Features')
                 plt.ylabel('Counts')
                 plt.title('Histogram of Selected Features')
@@ -501,17 +508,25 @@ class MLPipelines(MachineLearningEstimator):
                 tl = plt.gca().get_xticklabels()
                 maxsize = max([t.get_window_extent().width for t in tl])
                 m = 0.5
-                s = maxsize/plt.gcf().dpi*N+2*m
+                s = maxsize/plt.gcf().dpi*freq_feat+2*m
                 margin = m/plt.gcf().get_size_inches()[0]
 
                 plt.gcf().subplots_adjust(left=margin, right=1.-margin)
                 plt.gca().set_xticks(plt.gca().get_xticks()[::1]) 
-                plt.gca().set_xlim([-1, N])
+                plt.gca().set_xlim([-1, freq_feat])
 
                 plt.tight_layout()
                 plt.show()
-        # Save the number of features that were most frequently selected
-        features_list = [x[0] for x in sorted_features_counts]
+
+                # Save the plot to 'Results/histogram.png'
+                save_path = os.path.join(results_dir, "histogram.png")
+                plt.savefig(save_path, bbox_inches='tight')
+                
+                # Show the plot
+                plt.show()
+
+            # Save the number of features that were most frequently selected
+            features_list = [x[0] for x in sorted_features_counts]
         
         def bootstrap_median_ci(data, num_iterations=1000, ci=0.95):
             medians = []
@@ -522,10 +537,7 @@ class MLPipelines(MachineLearningEstimator):
             upper_bound = np.percentile(medians, (1+ci)/2 * 100)
             return lower_bound, upper_bound
         
-        # Create a 'Results' directory
-        results_dir = "Results"
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
+
         
         # Plot box or violin plots of the outer cross-validation scores
         if plot != None: 
@@ -595,7 +607,7 @@ class MLPipelines(MachineLearningEstimator):
             print(f"Results saved to {results_path}")
 
         # Return the dataframe and the list of features if feature selection is applied
-        if freq_feat is not None:
+        if num_features is not None:
             return scores_dataframe, features_list
         else:
             return scores_dataframe
