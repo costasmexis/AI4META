@@ -337,8 +337,8 @@ class MachineLearningEstimator(DataLoader):
         if missing_values != None:
             X = self.missing_values(X, method=missing_values)
         
-        if self.normalize_with in ['minmax', 'standard']:
-            X = self.normalize(X, method=self.normalize_with)
+        if normalize_with in ['minmax', 'standard']:
+            X = self.normalize(X, method=normalize_with)
             
         if features_list != None:
             X = X[features_list]
@@ -356,7 +356,7 @@ class MachineLearningEstimator(DataLoader):
         return X, y, estimator
 
     def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', features_list=None,rounds=10,boxplot=True,
-                        cv=5, direction='maximize', n_trials=100, estimator_name=None,evaluation='cv_simple',
+                        cv=5, direction='maximize', n_trials=100, estimator_name=None, evaluation='cv_simple',
                         feat_num = None, feat_way = 'mrmr', verbose=True, missing_values='median',
                         calculate_shap=False, param_grid=None, normalize_with='minmax'):#, box=False):
         """ Function to perform a bayesian search
@@ -375,25 +375,16 @@ class MachineLearningEstimator(DataLoader):
         """
         
         self.set_optuna_verbosity(logging.ERROR)
-
-        # Create a 'Results' directory
-        results_dir = "Results"
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
-        
         X, y, estimator = self.preprocess(X, y, scoring, missing_values, features_list, feat_num, feat_way, estimator_name, normalize_with)
-        
         if param_grid == None:
             self.param_grid = optuna_grid['ManualSearch']
         else:         
             param_grid = {estimator_name: param_grid}   
             self.param_grid = param_grid
-
         # Function to perform cross-validation and return the average score
         def objective(trial):
             clf = param_grid[estimator_name](trial)
             scores = []
-            
             # Stratified K-Fold cross-validation
             cv_splits = StratifiedKFold(n_splits=cv, shuffle=True, random_state=1)
             
@@ -408,7 +399,7 @@ class MachineLearningEstimator(DataLoader):
                 y_pred = clf.predict(X_test)
                 score = metrics.get_scorer(scoring)._score_func(y_test, y_pred) 
                 scores.append(score)
-            
+
             # Return the average score
             return np.mean(scores)
                                 
@@ -420,146 +411,18 @@ class MachineLearningEstimator(DataLoader):
         best_model.fit(X, y)
         self.best_estimator = best_model
 
-                             
         if calculate_shap:
-            shaps_array=np.zeros((X.shape[0],X.shape[1]))
-                
-        self.params = locals()
-        self.params.pop('self', None)
-                        
-        data_full_outer = pd.DataFrame() 
-        if calculate_shap:
-            best_model,data_full_outer, shaps_array = self.c_v()
+            best_model,eval_df, shaps_array = self.evaluate(X, y, cv, evaluation, rounds, best_model, best_params, study, calculate_shap)
         else:
-            best_model,data_full_outer = self.c_v()
+            best_model,eval_df = self.evaluate()
         
-        if boxplot:
-            if evaluation == 'bootstrap':
-                fig = go.Figure()
-                fig.add_trace(go.Box(
-                        y=data_full_outer['Scores'],
-                        name=estimator_name,
-                        boxpoints='all',
-                        jitter=0.3,
-                        pointpos=-1.8,
-                        boxmean=True
-                    ))
-                
-                fig.update_layout(
-                title=f"Model Evaluation Results With {evaluation} Method",
-                yaxis_title="Score",
-                template="plotly_white"
-                )
-            elif evaluation == 'cv_simple':
-                fig = go.Figure()
-                all_scores = []
-                best_cv_scores = []
-                for i in range(cv):
-                    for row in range(data_full_outer.shape[0]):
-                        all_scores.append(data_full_outer[f'split{i}_test_score'].iloc[row])
-                
-                fig.add_trace(go.Box(
-                        y=all_scores,
-                        name='All trials scores',
-                        boxpoints='all',
-                        jitter=0.3,
-                        pointpos=-1.8,
-                        boxmean=True
-                    ))
-                
-                temp_best_cv = data_full_outer[data_full_outer['ranked']==1]
-                for i in range(cv):
-                    best_cv_scores.append(temp_best_cv[f'split{i}_test_score'].iloc[0])
-                
-                fig.add_trace(go.Box(
-                        y=best_cv_scores,
-                        name='Best trial Scores',
-                        boxpoints='all',
-                        jitter=0.3,
-                        pointpos=-1.8,
-                        boxmean=True
-                    ))
-                
-                fig.update_layout(
-                title=f"Model Evaluation Results With {evaluation} Method",
-                yaxis_title="Score",
-                template="plotly_white"
-                )
-            else:
-                fig = make_subplots(rows=1, cols=2, subplot_titles=('Summary Boxplots', 'Rounds Scores'))
-                all_scores = []
-                best_scores_rounds = []
-                best_cv = []
-                for i in range(cv):
-                    for row in range(data_full_outer.shape[0]):
-                        all_scores.append(data_full_outer[f'split{i}_test_score'].iloc[row])
-                
-                fig.add_trace(go.Box(
-                    y=all_scores, 
-                    name='All trial Scores', 
-                    boxpoints='all',
-                    jitter=0.3,
-                    pointpos=-1.8
-                ), row=1, col=1)
-                
-                for round in data_full_outer['round'].unique():
-                    rounds_df = data_full_outer[data_full_outer['round'] == round]
-                    rounds_df = rounds_df.sort_values(by='mean_test_score', ascending=False)
-                    for i in range(cv):
-                        best_scores_rounds.append(rounds_df[f'split{i}_test_score'].iloc[0])
-                
-                fig.add_trace(go.Box(
-                    y=best_scores_rounds, 
-                    name='Best scores for every round', 
-                    boxpoints='all',
-                    jitter=0.3,
-                    pointpos=-1.8
-                ), row=1, col=1)
-                
-                # Second subplot: Best and Worst Trials
-                for round in data_full_outer['round'].unique():
-                    temp_df = data_full_outer[data_full_outer['round'] == round]
-                    round_scores = []
-                    for idx, row in temp_df.iterrows():
-                        for i in range(cv):
-                            round_scores.append(row[f'split{i}_test_score'])
-                            if row['ranked'] == 1:
-                                best_cv.append(row[f'split{i}_test_score'])
-                        
-                    fig.add_trace(go.Box(
-                        y=round_scores,
-                        name=f'Round {round+1}',
-                        boxpoints='all',
-                        jitter=0.3,
-                        pointpos=-1.8
-                    ), row=1, col=2)
-                    
-                fig.add_trace(go.Box(
-                    name='Best trial of all rounds', 
-                    y=best_cv,
-                    boxpoints='all',
-                    jitter=0.3,
-                    pointpos=-1.8
-                ), row=1, col=2)
-                
-                # Update layout for better readability
-                fig.update_layout(
-                    title=f"Model Evaluation Results With {evaluation} Method",
-                    height=600,
-                    width=1200,
-                    showlegend=False
-                )
-
-                fig.update_yaxes(title_text="Score", row=1, col=1)
-                fig.update_yaxes(title_text="Score", row=1, col=2)
-               
-        fig.show()
+        self.eval_boxplot(estimator_name, eval_df, cv, evaluation)
         
         if calculate_shap:
             self.shap_values = shaps_array
-            return  self.best_estimator, data_full_outer, shaps_array
+            return  self.best_estimator, eval_df, shaps_array
         else:
-            return  self.best_estimator, data_full_outer
+            return  self.best_estimator, eval_df
         
     def bootstrap_validation(self, scoring="matthews_corrcoef", n_iter=100, test_size=0.2, boxplot=True):
         """
@@ -584,10 +447,142 @@ class MachineLearningEstimator(DataLoader):
             score = metrics.get_scorer(scoring)._score_func(y_test, y_pred)
             bootstrap_scores.append(score)
         return bootstrap_scores
+    
+    def eval_boxplot(self, estimator_name, eval_df, cv, evaluation):
+        # Create a 'Results' directory
+        results_dir = "Results"
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+
+        if evaluation == 'bootstrap':
+            fig = go.Figure()
+            fig.add_trace(go.Box(
+                    y=eval_df['Scores'],
+                    name=estimator_name,
+                    boxpoints='all',
+                    jitter=0.3,
+                    pointpos=-1.8,
+                    boxmean=True
+                ))
+            
+            fig.update_layout(
+            title=f"Model Evaluation Results With {evaluation} Method",
+            yaxis_title="Score",
+            template="plotly_white"
+            )
+        elif evaluation == 'cv_simple':
+            fig = go.Figure()
+            all_scores = []
+            best_cv_scores = []
+            for i in range(cv):
+                for row in range(eval_df.shape[0]):
+                    all_scores.append(eval_df[f'split{i}_test_score'].iloc[row])
+            
+            fig.add_trace(go.Box(
+                    y=all_scores,
+                    name='All trials scores',
+                    boxpoints='all',
+                    jitter=0.3,
+                    pointpos=-1.8,
+                    boxmean=True
+                ))
+            
+            temp_best_cv = eval_df[eval_df['ranked']==1]
+            for i in range(cv):
+                best_cv_scores.append(temp_best_cv[f'split{i}_test_score'].iloc[0])
+            
+            fig.add_trace(go.Box(
+                    y=best_cv_scores,
+                    name='Best trial Scores',
+                    boxpoints='all',
+                    jitter=0.3,
+                    pointpos=-1.8,
+                    boxmean=True
+                ))
+            
+            fig.update_layout(
+            title=f"Model Evaluation Results With {evaluation} Method",
+            yaxis_title="Score",
+            template="plotly_white"
+            )
+        else:
+            fig = make_subplots(rows=1, cols=2, subplot_titles=('Summary Boxplots', 'Rounds Scores'))
+            all_scores = []
+            best_scores_rounds = []
+            best_cv = []
+            for i in range(cv):
+                for row in range(eval_df.shape[0]):
+                    all_scores.append(eval_df[f'split{i}_test_score'].iloc[row])
+            
+            fig.add_trace(go.Box(
+                y=all_scores, 
+                name='All trial Scores', 
+                boxpoints='all',
+                jitter=0.3,
+                pointpos=-1.8
+            ), row=1, col=1)
+            
+            for round in eval_df['round'].unique():
+                rounds_df = eval_df[eval_df['round'] == round]
+                rounds_df = rounds_df.sort_values(by='mean_test_score', ascending=False)
+                for i in range(cv):
+                    best_scores_rounds.append(rounds_df[f'split{i}_test_score'].iloc[0])
+            
+            fig.add_trace(go.Box(
+                y=best_scores_rounds, 
+                name='Best scores for every round', 
+                boxpoints='all',
+                jitter=0.3,
+                pointpos=-1.8
+            ), row=1, col=1)
+            
+            # Second subplot: Best and Worst Trials
+            for round in eval_df['round'].unique():
+                temp_df = eval_df[eval_df['round'] == round]
+                round_scores = []
+                for idx, row in temp_df.iterrows():
+                    for i in range(cv):
+                        round_scores.append(row[f'split{i}_test_score'])
+                        if row['ranked'] == 1:
+                            best_cv.append(row[f'split{i}_test_score'])
+                    
+                fig.add_trace(go.Box(
+                    y=round_scores,
+                    name=f'Round {round+1}',
+                    boxpoints='all',
+                    jitter=0.3,
+                    pointpos=-1.8
+                ), row=1, col=2)
+                
+            fig.add_trace(go.Box(
+                name='Best trial of all rounds', 
+                y=best_cv,
+                boxpoints='all',
+                jitter=0.3,
+                pointpos=-1.8
+            ), row=1, col=2)
+            
+            # Update layout for better readability
+            fig.update_layout(
+                title=f"Model Evaluation Results With {evaluation} Method",
+                height=600,
+                width=1200,
+                showlegend=False
+            )
+
+            fig.update_yaxes(title_text="Score", row=1, col=1)
+            fig.update_yaxes(title_text="Score", row=1, col=2)
+            
+        fig.show()
+
+
+        # Save the plot to 'Results/final_model_evaluation.png'
+        save_path = os.path.join(results_dir, "final_model_evaluation.png")
+        fig.write_image(save_path)
+
         
-    def evaluate(self, X, y, cv, evaluation, rounds, best_model, best_params, study, scorer, calculate_shap):
+    def evaluate(self, X, y, cv, evaluation, rounds, best_model, best_params, way, calculate_shap):
         local_data_full_outer = pd.DataFrame()  
-        
         if calculate_shap:
             x_shap = np.zeros((X.shape[0],X.shape[1]))
         
@@ -632,7 +627,7 @@ class MachineLearningEstimator(DataLoader):
                 X_train, X_test = X.iloc[train_index], X.iloc[test_index]
                 y_train, y_test = y[train_index], y[test_index]
                 temp_model.fit(X_train, y_train)
-                scores.append(scorer(temp_model, X_test, y_test))
+                scores.append(self.scoring(temp_model, X_test, y_test))
                 
                 if calculate_shap:
                     shap_values = self.calc_shap(X_train,best_model)
@@ -642,8 +637,16 @@ class MachineLearningEstimator(DataLoader):
 
                 
         if evaluation == 'cv_rounds' or evaluation == 'cv_simple':
-            all_params = [trial.params for trial in study.trials] 
-            trial_ids = [trial.number for trial in study.trials]            
+            if self.model_selection_way == 'bayesian_search':
+                all_params = [trial.params for trial in way.trials] 
+                trial_ids = [trial.number for trial in way.trials] 
+            elif self.model_selection_way == 'random_search':
+                all_params = way.cv_results_['params']
+                trial_ids = list(range(len(all_params)))       
+            else:
+                all_params = way.cv_results_['params']
+                trial_ids = list(range(len(all_params)))  
+
             for params, trial in zip(all_params, trial_ids):
                 for round_num in range(rounds):
                     row = {}
