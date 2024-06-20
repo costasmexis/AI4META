@@ -373,7 +373,7 @@ class MachineLearningEstimator(DataLoader):
         Returns:
             _type_: _description_
         """
-        
+        self.model_selection_way = 'bayesian_search'
         self.set_optuna_verbosity(logging.ERROR)
         X, y, estimator = self.preprocess(X, y, scoring, missing_values, features_list, feat_num, feat_way, estimator_name, normalize_with)
         if param_grid == None:
@@ -381,9 +381,10 @@ class MachineLearningEstimator(DataLoader):
         else:         
             param_grid = {estimator_name: param_grid}   
             self.param_grid = param_grid
+
         # Function to perform cross-validation and return the average score
         def objective(trial):
-            clf = param_grid[estimator_name](trial)
+            clf = self.param_grid[estimator_name](trial)
             scores = []
             # Stratified K-Fold cross-validation
             cv_splits = StratifiedKFold(n_splits=cv, shuffle=True, random_state=1)
@@ -414,7 +415,7 @@ class MachineLearningEstimator(DataLoader):
         if calculate_shap:
             best_model,eval_df, shaps_array = self.evaluate(X, y, cv, evaluation, rounds, best_model, best_params, study, calculate_shap)
         else:
-            best_model,eval_df = self.evaluate()
+            best_model,eval_df = self.evaluate(X, y, cv, evaluation, rounds, best_model, best_params, study, calculate_shap)
         
         self.eval_boxplot(estimator_name, eval_df, cv, evaluation)
         
