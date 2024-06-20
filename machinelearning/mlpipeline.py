@@ -474,6 +474,18 @@ class MLPipelines(MachineLearningEstimator):
         results_dir = "Results"
         if not os.path.exists(results_dir):
             os.makedirs(results_dir)
+
+        # Initiate name 
+        if num_features is not None:
+            features = num_features
+        else :
+            features = 'all_features'
+        try:
+            dataset_name = self.set_result_csv_name(self.csv_dir)
+            final_dataset_name = os.path.join(results_dir, f'{dataset_name}_{inner_selection}_{features}')
+        except Exception as e:
+            dataset_name = 'dataset'
+            final_dataset_name = os.path.join(results_dir, f'{dataset_name}_{inner_selection}_{features}')
         
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:
@@ -519,7 +531,7 @@ class MLPipelines(MachineLearningEstimator):
                 plt.show()
 
                 # Save the plot to 'Results/histogram.png'
-                save_path = os.path.join(results_dir, "histogram.png")
+                save_path = f"{final_dataset_name}_histogram.png"
                 plt.savefig(save_path, bbox_inches='tight')
                 
                 # Show the plot
@@ -589,21 +601,15 @@ class MLPipelines(MachineLearningEstimator):
                 template="plotly_white"
             )
             # Save the figure as an image in the "Results" directory
-            image_path = os.path.join(results_dir, "model_selection_results.png")
+            image_path = f"{final_dataset_name}_model_selection_plot.png"
             fig.write_image(image_path)
             fig.show()
         else: pass
         
         # Save the results to a CSV file of the outer scores for each classifier
         if return_csv:
-            try:
-                dataset_name = self.set_result_csv_name(self.csv_dir)
-                results_path = os.path.join(results_dir, f'{dataset_name}_ncv_results.csv')
-                scores_dataframe.to_csv(results_path, index=False)
-            except Exception as e:
-                dataset_name = 'results_ncv'
-                results_path = os.path.join(results_dir, f'{dataset_name}.csv')
-                scores_dataframe.to_csv(results_path, index=False)
+            results_path = f"{final_dataset_name}_outerloops_results.csv"
+            scores_dataframe.to_csv(results_path, index=False)
             print(f"Results saved to {results_path}")
 
         # Return the dataframe and the list of features if feature selection is applied
