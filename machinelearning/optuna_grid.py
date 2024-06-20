@@ -1,15 +1,14 @@
-import optuna
-from catboost import CatBoostClassifier
-from lightgbm import LGBMClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.linear_model import LogisticRegression
+from xgboost import XGBClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
-from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from sklearn.gaussian_process import GaussianProcessClassifier
+from catboost import CatBoostClassifier
+import optuna
 
 optuna_grid = {
     "NestedCV": {
@@ -18,11 +17,9 @@ optuna_grid = {
             "criterion": optuna.distributions.CategoricalDistribution(
                 ["gini", "entropy"]
             ),
-            # "max_depth": optuna.distributions.IntDistribution(1, 80),
             "min_samples_leaf": optuna.distributions.IntDistribution(1, 100),
             "min_samples_split": optuna.distributions.IntDistribution(2, 10),
             "bootstrap": optuna.distributions.CategoricalDistribution([True, False]),
-            # "max_features":optuna.distributions.CategoricalDistribution(["sqrt","log2",None]),
             "n_jobs":optuna.distributions.CategoricalDistribution([1])
         },
         "KNeighborsClassifier": {
@@ -36,20 +33,6 @@ optuna_grid = {
             "p": optuna.distributions.IntDistribution(1, 2),
             "leaf_size": optuna.distributions.IntDistribution(5, 50),
             "n_jobs":optuna.distributions.CategoricalDistribution([1])
-        },
-        "DecisionTreeClassifier": {
-            "criterion": optuna.distributions.CategoricalDistribution(
-                ["gini", "entropy"]
-            ),
-            "splitter": optuna.distributions.CategoricalDistribution(
-                ["best", "random"]
-            ),
-            # "max_depth": optuna.distributions.IntDistribution(1, 80),
-            "min_samples_split": optuna.distributions.IntDistribution(2, 10),
-            "min_weight_fraction_leaf": optuna.distributions.IntDistribution(0.0, 0.5),
-            "min_impurity_decrease": optuna.distributions.FloatDistribution(0.0, 0.8),
-            "min_samples_leaf": optuna.distributions.IntDistribution(1, 100)
-            # 'n_jobs' : optuna.distributions.CategoricalDistribution([1])
         },
         "SVC": {
             "C": optuna.distributions.FloatDistribution(0.01, 1.0),
@@ -79,14 +62,12 @@ optuna_grid = {
         "XGBClassifier": {
             "learning_rate": optuna.distributions.FloatDistribution(0.001, 0.5),
             "n_estimators": optuna.distributions.IntDistribution(2, 300),
-            # "max_depth": optuna.distributions.IntDistribution(1, 80),
             "min_child_weight": optuna.distributions.IntDistribution(1, 10),
-            # "gamma": optuna.distributions.FloatDistribution(0, 10),
             "subsample": optuna.distributions.FloatDistribution(0.001, 1.0),
             'n_jobs': optuna.distributions.CategoricalDistribution([1]),
             "booster": optuna.distributions.CategoricalDistribution(
                 ["gbtree", "dart"]
-            ),  #'gblinear',
+            ),  
             "tree_method": optuna.distributions.CategoricalDistribution(
                 ["auto", "exact", "approx", "hist"]
             ),
@@ -115,6 +96,18 @@ optuna_grid = {
             ),
             "max_iter": optuna.distributions.IntDistribution(100, 1500),
             'n_jobs' : optuna.distributions.CategoricalDistribution([None])
+        },
+        "ElasticNet": {
+            "penalty": optuna.distributions.CategoricalDistribution(
+                ["elasticnet"]
+            ),
+            "C": optuna.distributions.FloatDistribution(0.01, 1.0),
+            "solver": optuna.distributions.CategoricalDistribution(
+                ["saga"]
+            ),
+            "max_iter": optuna.distributions.IntDistribution(100, 1500),
+            'n_jobs' : optuna.distributions.CategoricalDistribution([None]),
+            'l1_ratio': optuna.distributions.FloatDistribution(0.0, 1.0)
         },
         "GaussianNB": {
             "var_smoothing": optuna.distributions.FloatDistribution(1e-10, 1e-5)
@@ -186,11 +179,9 @@ optuna_grid = {
         "RandomForestClassifier": lambda trial: RandomForestClassifier(
             n_estimators=trial.suggest_int("n_estimators", 2, 300),
             criterion=trial.suggest_categorical("criterion", ["gini", "entropy"]),
-            # max_depth=trial.suggest_int("max_depth", 1, 80),
             min_samples_leaf=trial.suggest_int("min_samples_leaf", 1, 100),
             min_samples_split=trial.suggest_int("min_samples_split", 2, 10),
             bootstrap=trial.suggest_categorical("bootstrap", [True, False]),
-            # max_features=trial.suggest_categorical("max_features",["sqrt","log2",None]),
             n_jobs=-1,
         ),
         "KNeighborsClassifier": lambda trial: KNeighborsClassifier(
@@ -202,17 +193,6 @@ optuna_grid = {
             p=trial.suggest_int("p", 1, 2),
             leaf_size=trial.suggest_int("leaf_size", 5, 50),
             n_jobs=-1,
-        ),
-        "DecisionTreeClassifier": lambda trial: DecisionTreeClassifier(
-            criterion=trial.suggest_categorical("criterion", ["gini", "entropy"]),
-            splitter=trial.suggest_categorical("splitter", ["best", "random"]),
-            # max_depth=trial.suggest_int("max_depth", 1, 100),
-            min_samples_split=trial.suggest_int("min_samples_split", 2, 10),
-            min_weight_fraction_leaf=trial.suggest_float(
-                "min_weight_fraction_leaf", 0.0, 0.5
-            ),
-            min_samples_leaf=trial.suggest_int("min_samples_leaf", 1, 100),
-            min_impurity_decrease=trial.suggest_float('min_impurity_decrease',0.0, 0.8)
         ),
         "SVC": lambda trial: SVC(
             C=trial.suggest_float("C", 0.01, 1.0),
@@ -244,18 +224,16 @@ optuna_grid = {
         "XGBClassifier": lambda trial: XGBClassifier(
             learning_rate=trial.suggest_float("learning_rate", 0.001, 0.5),
             n_estimators=trial.suggest_int("n_estimators", 2, 400),
-            # max_depth=trial.suggest_int("max_depth", 1, 80),
             min_child_weight=trial.suggest_int("min_child_weight", 1, 10),
-            # gamma=trial.suggest_float("gamma", 0, 10),
             subsample=trial.suggest_float("subsample", 0.001, 1.0),
             reg_alpha=trial.suggest_float("reg_alpha", 0, 10),
             reg_lambda=trial.suggest_float("reg_lambda", 0.001, 10),
             n_jobs=-1,
             scale_pos_weight=trial.suggest_float("scale_pos_weight", 1, 100, log=True),
-            objective="binary:logistic",  # trial.suggest_categorical('objective', ['binary:logistic', 'multi:softprob'])
+            objective="binary:logistic",  
             booster=trial.suggest_categorical(
                 "booster", ["gbtree", "dart"]
-            ),  #'gblinear'
+            ),  
             tree_method=trial.suggest_categorical(
                 "tree_method", ["auto", "exact", "approx", "hist"]
             ),
@@ -279,6 +257,14 @@ optuna_grid = {
             C=trial.suggest_float("C", 0.01, 1.0),
             solver = trial.suggest_categorical("solver",["newton-cg", "lbfgs", "sag", "saga", "liblinear"]),
             fit_intercept=trial.suggest_categorical("fit_intercept", [True, False]),
+            n_jobs=-1,
+        ),
+        "ElasticNet": lambda trial: LogisticRegression(
+            penalty=trial.suggest_categorical("penalty", ["elasticnet"]),
+            C=trial.suggest_float("C", 0.01, 1.0),
+            solver = trial.suggest_categorical("solver",["saga"]),
+            fit_intercept=trial.suggest_categorical("fit_intercept", [True, False]),
+            l1_ratio=trial.suggest_float("l1_ratio", 0.0, 1.0),
             n_jobs=-1,
         ),
         "GaussianNB": lambda trial: GaussianNB(

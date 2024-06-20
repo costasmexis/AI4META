@@ -4,8 +4,8 @@ import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from itertools import chain
-
 from multiprocessing import Pool
+from typing import Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,6 +14,7 @@ import pandas as pd
 import progressbar
 import sklearn
 from catboost import CatBoostClassifier
+from dataloader import DataLoader
 from joblib import Parallel, delayed, parallel_backend
 from lightgbm import LGBMClassifier
 from mrmr import mrmr_classif
@@ -45,12 +46,21 @@ from threadpoolctl import threadpool_limits
 from tqdm import tqdm
 from xgboost import XGBClassifier
 
-from dataloader import DataLoader
-from src.utils import scoring_check
-
 from .mlestimator import MachineLearningEstimator
 from .optuna_grid import optuna_grid
 
+
+def scoring_check(func: Callable) -> Callable:
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except ValueError:
+            if kwargs["scoring"] not in sklearn.metrics.get_scorer_names():
+                raise ValueError(
+                    f"Invalid scoring metric: {kwargs['scoring']}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
+                )
+
+    return wrapper
 
 class MLPipelines(MachineLearningEstimator):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
