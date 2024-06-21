@@ -49,6 +49,7 @@ class DataLoader:
         
     def missing_values(self, data=None, method='drop'):
         ''' Function to handle missing values in the dataset.'''
+        self.missing_values_method = method
         initial_data=False
         if data is None:
             data = self.X
@@ -95,6 +96,7 @@ class DataLoader:
         - A message indicating the completion of normalization is printed. If the instance's dataset is used, a message specifying the normalization method is also printed.
         """
         initial_data=False
+        self.normalization_method = method
         
         if X is None:
             X = self.X

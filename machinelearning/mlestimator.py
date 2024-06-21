@@ -90,19 +90,11 @@ class MachineLearningEstimator(DataLoader):
         logging.getLogger("optuna").setLevel(level)
 
     def grid_search(
-        self,
-        X=None,
-        y=None,
-        estimator=None,
-        parameter_grid=None,
-        scoring="matthews_corrcoef",
-        features_list=None,
-        feat_num=None,
-        feat_way="mrmr",
-        cv=5,
-        verbose=True,
-        return_model=False,
-    ):
+                    self, X=None, y=None, scoring='matthews_corrcoef', features_names_list=None,
+                    cv=5, estimator_name=None, evaluation='cv_simple',rounds=10,
+                    feat_num = None, feat_way = 'mrmr', missing_values='median',boxplot=True,
+                    calculate_shap=False, param_grid=None, normalization='minmax'
+                ):
         """
         Perform grid search to find the best hyperparameters for the estimator.
 
@@ -132,51 +124,58 @@ class MachineLearningEstimator(DataLoader):
         :rtype: estimator object or None
         """
         
-        X = X or self.X
-        y = y or self.y
+        self.model_selection_way = 'grid_search'
 
-        if len(X) != len(y):
-            raise ValueError("The length of X and y must be equal.")
+        X, y, estimator = self.preprocess(X, y, scoring, missing_values, features_names_list, feat_num, feat_way, estimator_name, normalization)
+        if param_grid == None:
+            self.param_grid = optuna_grid['SklearnParameterGrid']
+            print('Using default parameter grid')
+        else:         
+            param_grid = {estimator_name: param_grid}   
+            self.param_grid = param_grid
+            
+        cv_splits = StratifiedKFold(n_splits=cv, shuffle=True)
+        temp_train_test_indices = list(cv_splits.split(X, y))            
 
-        if features_list is not None:
-            X = X[features_list]
-        elif feat_num is not None:
-            selected = self.feature_selection(X, y, feat_way, feat_num)
-            X = X[selected]
+        random_search = GridSearchCV(
+            estimator, self.param_grid[estimator_name], scoring=scoring, cv=temp_train_test_indices,n_jobs=-1
+            )
+        random_search.fit(X, y)
+        best_params = random_search.best_params_
+        best_score = random_search.best_score_
+        self.best_estimator = random_search.best_estimator_ 
+        
+        print(f"Estimator: {estimator_name}")
+        print(f"Best parameters: {best_params}")
+        print(f"Best {scoring}: {best_score}")
+    
+        results_df = pd.DataFrame.from_dict(random_search.cv_results_)
+        results_df = results_df.sort_values(by='rank_test_score')
+        usefull_cols = ['mean_test_score', 'std_test_score', 'rank_test_score', 'params']
+        
+        for i in range(cv):
+            usefull_cols.append(f'split{i}_test_score')
+        data_full_outer = results_df[usefull_cols]
 
-        if estimator is not None:
-            self.estimator = estimator
-            if (self.estimator.__class__.__name__ == 'LogisticRegression' and
-                hasattr(self.estimator, 'penalty') and self.estimator.penalty == 'elasticnet'):
-                self.name = 'ElasticNet'
-            else:
-                self.name = self.estimator.__class__.__name__
-            self.param_grid = parameter_grid
-
-        grid_search = GridSearchCV(
-            self.estimator, self.param_grid, scoring=scoring, cv=cv
-        )
-
-        grid_search.fit(X, y)
-
-        self.best_params = grid_search.best_params_
-        self.best_score = grid_search.best_score_
-
-        self.best_estimator = grid_search.best_estimator_
-        self.name = self.best_estimator.__class__.__name__
-
-        if verbose:
-            print(f"Estimator: {self.name}")
-            print(f"Best parameters: {self.best_params}")
-            print(f"Best {scoring}: {self.best_score}")
-
-        if return_model:
-            return self.best_estimator
+        if calculate_shap:
+            best_model,eval_df, shaps_array = self.evaluate(X, y, cv, evaluation, rounds, self.best_estimator, best_params, random_search, calculate_shap)
+        else:
+            best_model,eval_df = self.evaluate(X, y, cv, evaluation, rounds, self.best_estimator, best_params, random_search, calculate_shap)
+        
+        self.eval_boxplot(estimator_name, eval_df, cv, evaluation)
+        
+        if calculate_shap:
+            self.shap_values = shaps_array
+            return  self.best_estimator, eval_df, shaps_array
+        else:
+            return  self.best_estimator, eval_df
 
     def random_search(
-        self, X=None, y=None, scoring='matthews_corrcoef', features_list=None, boxplot=True,
-        cv=5, direction='maximize', n_iter=10, estimator_name=None,calculate_shap=False,
-        feat_num = None, feat_way = 'mrmr', missing_values='median',parameter_grid=None):
+                    self, X=None, y=None, scoring='matthews_corrcoef', features_names_list=None,rounds=10,
+                    cv=5, n_iter=100, estimator_name=None, evaluation='cv_simple',
+                    feat_num = None, feat_way = 'mrmr', missing_values='median',boxplot=True,
+                    calculate_shap=False, param_grid=None, normalization='minmax'
+                    ):
         """
         Perform a random search for hyperparameter tuning.
         :param X: The input features, defaults to None
@@ -204,115 +203,68 @@ class MachineLearningEstimator(DataLoader):
         :rtype: estimator object or None
         """
 
-        X = X or self.X
-        y = y or self.y
+        self.model_selection_way = 'random_search'
 
-        if len(X) != len(y):
-            raise ValueError("The length of X and y must be equal.")
-
-        if features_list is not None:
-            X = X[features_list]
-        elif feat_num is not None:
-            selected = self.feature_selection(X, y, feat_way, feat_num)
-            X = X[selected]
-
-        if estimator_name == None:
-            estimator_name = self.name 
-        else: estimator_name = estimator_name
-        
-        self.estimator = self.available_clfs[estimator_name]
-        
-        if parameter_grid == None:
-            raise ValueError("Please provide a parameter grid.")
-        else: self.param_grid = parameter_grid            
+        X, y, estimator = self.preprocess(X, y, scoring, missing_values, features_names_list, feat_num, feat_way, estimator_name, normalization)
+        if param_grid == None:
+            self.param_grid = optuna_grid['SklearnParameterGrid']
+            print('Using default parameter grid')
+        else:         
+            param_grid = {estimator_name: param_grid}   
+            self.param_grid = param_grid
             
         cv_splits = StratifiedKFold(n_splits=cv, shuffle=True)
         temp_train_test_indices = list(cv_splits.split(X, y))            
 
         random_search = RandomizedSearchCV(
-            self.estimator, self.param_grid, scoring=scoring, cv=temp_train_test_indices, n_iter=n_iter
+            estimator, self.param_grid[estimator_name], scoring=scoring, cv=temp_train_test_indices, n_iter=n_iter, n_jobs=-1
         )
         random_search.fit(X, y)
-
-        self.best_params = random_search.best_params_
-        self.best_score = random_search.best_score_
-        self.best_estimator = random_search.best_estimator_
-        self.name = self.best_estimator.__class__.__name__
+        best_params = random_search.best_params_
+        best_score = random_search.best_score_
+        self.best_estimator = random_search.best_estimator_ 
         
-        print(f"Estimator: {self.name}")
-        print(f"Best parameters: {self.best_params}")
-        print(f"Best {scoring}: {self.best_score}")
+        print(f"Estimator: {estimator_name}")
+        print(f"Best parameters: {best_params}")
+        print(f"Best {scoring}: {best_score}")
     
         results_df = pd.DataFrame.from_dict(random_search.cv_results_)
         results_df = results_df.sort_values(by='rank_test_score')
         usefull_cols = ['mean_test_score', 'std_test_score', 'rank_test_score', 'params']
+        
         for i in range(cv):
             usefull_cols.append(f'split{i}_test_score')
         data_full_outer = results_df[usefull_cols]
 
-        if boxplot:
-            plt.figure(figsize=(12, 6))
-            
-            plt.subplot(1, 2, 1)
-            scores = []
-            for i in range(cv):
-                scores = np.append(scores, data_full_outer[f'split{i}_test_score'])
-            plt.boxplot(scores)
-            plt.title('Summary Boxplot')
-            plt.ylabel('Score')
-            plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
-            
-            plt.subplot(1, 2, 2)
-            temp_df = data_full_outer[(data_full_outer['rank_test_score'] == 1) | (data_full_outer['rank_test_score'] == data_full_outer.shape[0])]
-            temp_df.reset_index(drop=True, inplace=True)
-            for idx, row in temp_df.iterrows():
-                row_scores = []
-                for i in range(cv):
-                    row_scores = np.append(row_scores, row[f'split{i}_test_score'])
-                plt.boxplot(row_scores, positions=[idx+1])
-                if row['rank_test_score'] == 1:
-                    plt.text(idx+1, row.mean_test_score, f'Best trial\nmean:{row.mean_test_score:.2f}', ha='center', va='bottom', color='red')
-                else: 
-                    plt.text(idx+1, row.mean_test_score, f'Worst trial\nmean:{row.mean_test_score:.2f}', ha='center', va='bottom', color='blue')
-
-            plt.title(f'Best and Worst Trials for {estimator_name}')
-            plt.ylabel('Score')
-            plt.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
-            
-            plt.show()
+        if calculate_shap:
+            best_model,eval_df, shaps_array = self.evaluate(X, y, cv, evaluation, rounds, self.best_estimator, best_params, random_search, calculate_shap)
+        else:
+            best_model,eval_df = self.evaluate(X, y, cv, evaluation, rounds, self.best_estimator, best_params, random_search, calculate_shap)
+        
+        self.eval_boxplot(estimator_name, eval_df, cv, evaluation)
         
         if calculate_shap:
-            x_shap=np.zeros((X.shape[0],X.shape[1]))
-            for train_index, test_index in temp_train_test_indices:
-                X_train, X_test = X.iloc[train_index], X.iloc[test_index]
-                y_train, y_test = y[train_index], y[test_index]
-                best_model = self.available_clfs[estimator_name]
-                best_model.set_params(**self.best_params)
-                best_model.fit(X_train, y_train)
-                shap_values = self.calc_shap(X_train,best_model)
-                x_shap[train_index,:] = np.add(x_shap[train_index,:],shap_values.values)
-            x_shap = x_shap/(cv-1)
-            return self.best_estimator, results_df, x_shap
-        else: 
-            return self.best_estimator, results_df
-        
+            self.shap_values = shaps_array
+            return  self.best_estimator, eval_df, shaps_array
+        else:
+            return  self.best_estimator, eval_df
 
     
-    def calc_shap(self,X,model):
+    def calc_shap(self,X_train,X_test,model):
         try:
-            explainer = shap.Explainer(model, X)
+            explainer = shap.Explainer(model, X_train)
         except TypeError as e:
             if "The passed model is not callable and cannot be analyzed directly with the given masker!" in str(e):
                 print("Switching to predict_proba due to compatibility issue with the model.")
-                explainer = shap.Explainer(lambda x: model.predict_proba(x), X)
+                explainer = shap.Explainer(lambda x: model.predict_proba(x), X_train)
             else:
                 raise TypeError(e)
         try:
-            shap_values = explainer(X)
+            shap_values = explainer(X_test)
         except ValueError:
-            num_features = X.shape[1]
+            num_features = X_test.shape[1]
             max_evals = 2 * num_features + 1
-            shap_values = explainer(X, max_evals=max_evals)    
+            shap_values = explainer(X_test, max_evals=max_evals)    
         
         if len(shap_values.shape) == 3:
             shap_values = shap_values[:,:,1]
@@ -320,7 +272,7 @@ class MachineLearningEstimator(DataLoader):
             pass
         return shap_values
     
-    def preprocess(self, X, y, scoring, missing_values, features_list, feat_num, feat_way, estimator_name, normalize_with):
+    def preprocess(self, X, y, scoring, missing_values, features_names_list, feat_num, feat_way, estimator_name, normalization):
         if scoring not in sklearn.metrics.get_scorer_names():
             raise ValueError(
                 f'Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}')
@@ -337,11 +289,11 @@ class MachineLearningEstimator(DataLoader):
         if missing_values != None:
             X = self.missing_values(X, method=missing_values)
         
-        if normalize_with in ['minmax', 'standard']:
-            X = self.normalize(X, method=normalize_with)
+        if normalization in ['minmax', 'standard']:
+            X = self.normalize(X, method=normalization)
             
-        if features_list != None:
-            X = X[features_list]
+        if features_names_list != None:
+            X = X[features_names_list]
         elif feat_num != None:
             selected = self.feature_selection(X, y, feat_way, feat_num)
             X = X[selected]
@@ -355,10 +307,10 @@ class MachineLearningEstimator(DataLoader):
 
         return X, y, estimator
 
-    def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', features_list=None,rounds=10,boxplot=True,
+    def bayesian_search(self, X=None, y=None, scoring='matthews_corrcoef', features_names_list=None,rounds=10,
                         cv=5, direction='maximize', n_trials=100, estimator_name=None, evaluation='cv_simple',
-                        feat_num = None, feat_way = 'mrmr', verbose=True, missing_values='median',
-                        calculate_shap=False, param_grid=None, normalize_with='minmax'):#, box=False):
+                        feat_num = None, feat_way = 'mrmr', missing_values='median',boxplot=True,
+                        calculate_shap=False, param_grid=None, normalization='minmax'):#, box=False):
         """ Function to perform a bayesian search
 
         Args:
@@ -368,14 +320,13 @@ class MachineLearningEstimator(DataLoader):
             cv (int, optional): _description_. Defaults to 5.
             direction (str, optional): _description_. Defaults to 'maximize'.
             n_trials (int, optional): _description_. Defaults to 100.
-            verbose (bool, optional): _description_. Defaults to True.
             box (bool, optional): _description_. Defaults to False.
         Returns:
             _type_: _description_
         """
         self.model_selection_way = 'bayesian_search'
         self.set_optuna_verbosity(logging.ERROR)
-        X, y, estimator = self.preprocess(X, y, scoring, missing_values, features_list, feat_num, feat_way, estimator_name, normalize_with)
+        X, y, estimator = self.preprocess(X, y, scoring, missing_values, features_names_list, feat_num, feat_way, estimator_name, normalization)
         if param_grid == None:
             self.param_grid = optuna_grid['ManualSearch']
         else:         
@@ -406,11 +357,16 @@ class MachineLearningEstimator(DataLoader):
                                 
         study = optuna.create_study(sampler=TPESampler(),direction=direction)
         study.optimize(objective, n_trials=n_trials, show_progress_bar=True,n_jobs=-1)
+        best_score = study.best_value
         best_params = study.best_params
         best_model = self.available_clfs[estimator_name]
         best_model.set_params(**best_params)
         best_model.fit(X, y)
         self.best_estimator = best_model
+
+        print(f"Estimator: {estimator_name}")
+        print(f"Best parameters: {best_params}")
+        print(f"Best {scoring}: {best_score}")
 
         if calculate_shap:
             best_model,eval_df, shaps_array = self.evaluate(X, y, cv, evaluation, rounds, best_model, best_params, study, calculate_shap)
@@ -603,7 +559,7 @@ class MachineLearningEstimator(DataLoader):
         elif evaluation == 'cv_rounds':
             rounds = rounds
         else:
-            raise ValueError("Evaluation method must be either 'cv_simple' or 'cv_rounds'")
+            raise ValueError("Evaluation method must be either 'bootstrap, 'cv_simple' or 'cv_rounds'")
             
 
         # split the train and test sets for cv and rounds cv evaluations
@@ -619,7 +575,6 @@ class MachineLearningEstimator(DataLoader):
                 list_y_train.append(y_train)
                 list_y_test.append(y_test)  
 
-                
         scores_per_cv = []
         for i in range(rounds):
             scores = []
@@ -631,8 +586,8 @@ class MachineLearningEstimator(DataLoader):
                 scores.append(self.scoring(temp_model, X_test, y_test))
                 
                 if calculate_shap:
-                    shap_values = self.calc_shap(X_train,best_model)
-                    x_shap[train_index,:] = np.add(x_shap[train_index,:],shap_values.values)
+                    shap_values = self.calc_shap(X_train,X_test,best_model)
+                    x_shap[test_index,:] = np.add(x_shap[test_index,:],shap_values.values)
             
             scores_per_cv.append(scores)
 
@@ -693,9 +648,8 @@ class MachineLearningEstimator(DataLoader):
             local_data_full_outer['round'] = 'bootstrap'
             local_data_full_outer['ranked'] = 1
             
-            
         if calculate_shap:
-            x_shap = x_shap/(rounds*(cv-1))
+            x_shap = x_shap/(rounds)
             return best_model, local_data_full_outer, x_shap
         else:
             return best_model, local_data_full_outer
