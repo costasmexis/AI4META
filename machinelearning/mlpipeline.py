@@ -16,8 +16,7 @@ from sklearn.metrics import get_scorer
 from sklearn.model_selection import (
     StratifiedKFold,
     cross_val_score,
-    train_test_split,
-)
+    train_test_split)
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -61,18 +60,18 @@ class MLPipelines(MachineLearningEstimator):
         data_name = os.path.basename(csv_dir).split('.')[0]
         return data_name
 
-    def inner_loop(self, train_index, test_index, X, y, avail_thr):
+    def inner_loop(self, train_index, test_index, X, y, avail_thr, ):
         # Initialize parameters in the function
-        num_features = self.params['num_features']
-        inner_selection = self.params['inner_selection']
-        clfs = self.params['clfs']
-        feature_selection_type = self.params['feature_selection_type']
-        inner_scoring = self.params['inner_scoring']
-        inner_cv = self.params['inner_cv']
-        n_trials_ncv = self.params['n_trials_ncv']
-        outer_scoring = self.params['outer_scoring']
+        num_features = self.config_rncv['num_features']
+        inner_selection = self.config_rncv['inner_selection']
+        clfs = self.config_rncv['clfs']
+        feature_selection_type = self.config_rncv['feature_selection_type']
+        inner_scoring = self.config_rncv['inner_scoring']
+        inner_cv = self.config_rncv['inner_cv']
+        n_trials_ncv = self.config_rncv['n_trials_ncv']
+        outer_scoring = self.config_rncv['outer_scoring']
         outer_scorer = get_scorer(outer_scoring)
-        parallel = self.params['parallel']
+        parallel = self.config_rncv['parallel']
         opt_grid = 'NestedCV'
 
         # Checks for reliability of parameters
@@ -249,10 +248,10 @@ class MLPipelines(MachineLearningEstimator):
         X_tr, X_te = X.iloc[train_index], X.iloc[test_index]
         y_train, y_test = y[train_index], y[test_index]
         # Initiallize parameters
-        norm_method = self.params['norm_method']
-        feature_selection_type = self.params['feature_selection_type']
-        feature_selection_method = self.params['feature_selection_method']
-        missing_values_method = self.params['missing_values_method']
+        norm_method = self.config_rncv['normalization']
+        feature_selection_type = self.config_rncv['feature_selection_type']
+        feature_selection_method = self.config_rncv['feature_selection_method']
+        missing_values_method = self.config_rncv['missing_values_method']
         X_train, X_test = self.normalize(X=X_tr,train_test_set=True,X_test=X_te, method=norm_method)
         # Manipulate the missing values for both train and test sets
         X_train = self.missing_values(data=X_train, method=missing_values_method)
@@ -293,14 +292,14 @@ class MLPipelines(MachineLearningEstimator):
     def outer_cv_loop(self,i,avail_thr):
             # Initialize parameters in the function
             start = time.time() # Count time of outer loops
-            inner_splits = self.params['inner_splits']
-            outer_splits = self.params['outer_splits']
-            parallel = self.params['parallel']
+            inner_splits = self.config_rncv['inner_splits']
+            outer_splits = self.config_rncv['outer_splits']
+            parallel = self.config_rncv['parallel']
             # Split the data into train and test
             inner_cv = StratifiedKFold(n_splits=inner_splits, shuffle=True, random_state=i)
             outer_cv = StratifiedKFold(n_splits=outer_splits, shuffle=True, random_state=i)
-            self.params['inner_cv'] = inner_cv
-            self.params['outer_cv'] = outer_cv 
+            self.config_rncv['inner_cv'] = inner_cv
+            self.config_rncv['outer_cv'] = outer_cv 
             train_test_indices = list(outer_cv.split(self.X, self.y))
             # Store the results in a list od dataframes
             list_dfs=[]
@@ -321,14 +320,6 @@ class MLPipelines(MachineLearningEstimator):
                         time.sleep(1)
                     list_dfs = [item for sublist in temp_list for item in sublist]
                     end = time.time()
-            # elif parallel == 'dynamic_parallel':
-            #     temp_list = []
-            #     results = Parallel(n_jobs=len(train_test_indices))(delayed(self.inner_loop)(
-            #         train_index, test_index, self.X, self.y, avail_thr)
-            #         for train_index, test_index in tqdm(train_test_indices,desc='Outer fold of %i round:'%(i+1),total=len(train_test_indices)))
-            #     temp_list = [item for sublist in results for item in sublist]
-            #     list_dfs.extend(temp_list) 
-            #     end = time.time()
             else:
                 temp_list = []
                 with progressbar.ProgressBar(prefix = f'Outer fold of {i+1} round:',max_value=outer_splits, widgets=widgets) as bar:
@@ -349,8 +340,8 @@ class MLPipelines(MachineLearningEstimator):
     def nested_cv(self,n_trials_ncv=25,rounds=10, exclude=None, freq_feat=None, search_on=None,
                     num_features=None, feature_selection_type='mrmr', return_csv=True, feature_selection_method='chi2', 
                     plot='box',inner_scoring='matthews_corrcoef',inner_selection='validation_score',
-                    outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5,norm_method='minmax',
-                    parallel='thread_per_round', missing_values_method='median'):
+                    outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5,normalization='minmax',
+                    parallel='thread_per_round', missing_values_method='median',frfs=None):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
 
@@ -384,11 +375,13 @@ class MLPipelines(MachineLearningEstimator):
         if self.X.isnull().values.any():
             print(f'Your Dataset contains NaN values. Some estimators does not work with NaN values.\nThe {missing_values_method} method will be used for the missing values manipulation.\n')
         # Set parameters for the nested functions of the ncv process
-        self.params = locals()
-        self.params.pop('self', None)
+        self.config_rncv = locals()
+        self.config_rncv.pop('self', None)
         
         if num_features is not None:
-            print(f'WARNING:The num_features parameter is {num_features}.\nThe result will be a Dataframe and a List with the freaq_feat number of the most important features.\nIf the freaq_feat is None, the result will be a List with all features.')
+            print(f'The num_features parameter is {num_features}.\nThe result will be a Dataframe and a List with the freq_feat number of the most important features.\nIf the freq_feat is None, the result will be a List with all features.')
+        if (frfs is not None) and (num_features is None):
+            print('You are using the frfs parameter and not the num_features. The results will not contain the most important features.')        
         # Set available classifiers
         if exclude is not None:
             exclude_classes = exclude  # 'exclude' is a list of classifier names as strings
@@ -400,7 +393,7 @@ class MLPipelines(MachineLearningEstimator):
 
         # Filter classifiers based on the exclude_classes list
         clfs = [clf for clf in self.available_clfs.keys() if clf not in exclude_classes]
-        self.params['clfs'] = clfs
+        self.config_rncv['clfs'] = clfs
         
         # Checks for reliability of parameters
         if inner_scoring not in sklearn.metrics.get_scorer_names():
@@ -423,12 +416,7 @@ class MLPipelines(MachineLearningEstimator):
             avail_thr = 1
             with threadpool_limits(limits=avail_thr):
                 list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
-        # elif parallel == 'dynamic_parallel': 
-        #     # avail_thr = 1
-        #     with Pool() as pool:
-        #         list_dfs = pool.starmap(self.outer_cv_loop, [(i, avail_thr) for i in trial_indices])
         elif parallel == 'freely_parallel':
-            # with threadpool_limits(limits=avail_thr):
             with threadpool_limits():
                 list_dfs = Parallel(n_jobs=use_cores,verbose=0)(delayed(self.outer_cv_loop)(i,avail_thr) for i in trial_indices)
         else: raise ValueError(f'Invalid parallel option: {parallel}. Select one of the following: thread_per_round or freely_parallel')
@@ -467,6 +455,7 @@ class MLPipelines(MachineLearningEstimator):
                     'Numbers_of_Features': Numbers_of_Features,
                     'Way_of_Selection': Way_of_Selection 
                 })
+            
         print(f'Finished with {len(results)} estimators')
         scores_dataframe = pd.DataFrame(results)
 
@@ -539,6 +528,9 @@ class MLPipelines(MachineLearningEstimator):
 
             # Save the number of features that were most frequently selected
             features_list = [x[0] for x in sorted_features_counts]
+            if (frfs != None) and (frfs < len(features_list)):
+                features_list = features_list[:frfs]
+                print(f"Top {frfs} most frequently selected features: {features_list}")
         
         def bootstrap_median_ci(data, num_iterations=1000, ci=0.95):
             medians = []
@@ -548,8 +540,6 @@ class MLPipelines(MachineLearningEstimator):
             lower_bound = np.percentile(medians, (1-ci)/2 * 100)
             upper_bound = np.percentile(medians, (1+ci)/2 * 100)
             return lower_bound, upper_bound
-        
-
         
         # Plot box or violin plots of the outer cross-validation scores
         if plot != None: 
