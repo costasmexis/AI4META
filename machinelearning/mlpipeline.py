@@ -85,12 +85,9 @@ class MLPipelines(MachineLearningEstimator):
         
         if parallel == 'thread_per_round':
             n_jobs = 1
-        elif parallel == 'freely_parallel': #or parallel == 'dynamic_parallel' :
+        elif parallel == 'freely_parallel': 
             n_jobs = avail_thr
-        # if parallel == 'dynamic_parallel':
-            # opt_grid = 'NestedCV_multi'
-            # n_jobs = 1
-        # opt_grid = 'NestedCV_single'
+
             
         # Initialize variables
         results={'Scores': [],
@@ -188,19 +185,72 @@ class MLPipelines(MachineLearningEstimator):
         # Select the hyperparameters that we are searching for the simpler model.
         # Add the True or False values in order to specify if lower means simplest or not.
         hyper_compl = {
-            'RandomForestClassifier': {'n_estimators': True, 'min_samples_split': True, 'min_samples_leaf': True},
-            'LogisticRegression': {'C': True, 'max_iter': True},
-            'XGBClassifier': {'n_estimators': True, 'learning_rate': False, 'reg_alpha': False ,'reg_lambda': False},
-            'LGBMClassifier': {'n_estimators': True, 'learning_rate': False, 'num_leaves': True, 'reg_lambda': False, 'reg_alpha': False},
-            'CatBoostClassifier': { 'learning_rate': False,  'l2_leaf_reg': False, 'iterations': True},
-            'SVC': {'C': True, 'degree': True},
-            'KNeighborsClassifier': {'leaf_size': True},
-            'LinearDiscriminantAnalysis': {'shrinkage': True},
-            'GaussianNB': {'var_smoothing': True},
-            'GradientBoostingClassifier': {'n_estimators': True, 'min_samples_split': True, 'min_samples_leaf': True, 'learning_rate':False},
-            'GaussianProcessClassifier': {'max_iter_predict': True},
-            'ElasticNet': {'alpha': True, 'l1_ratio': True},
+            'RandomForestClassifier': {
+                'n_estimators': True,
+                'min_samples_split': True,
+                'min_samples_leaf': True,
+                'max_depth': True,  
+            },
+            'LogisticRegression': {
+                'C': True,
+                'max_iter': True
+            },
+            'XGBClassifier': {
+                'n_estimators': True,
+                'learning_rate': False,
+                'reg_alpha': False,
+                'reg_lambda': False,
+                'max_depth': True,  
+                'min_child_weight': True,  
+                'gamma': True,  
+            },
+            'LGBMClassifier': {
+                'n_estimators': True,
+                'learning_rate': False,
+                'num_leaves': True,
+                'reg_lambda': False,
+                'reg_alpha': False,
+                'max_depth': True,  
+                'min_child_weight': True,  
+            },
+            'CatBoostClassifier': {
+                'learning_rate': False,
+                'l2_leaf_reg': False,
+                'iterations': True,
+                'depth': True,  
+                'border_count': True  
+            },
+            'SVC': {
+                'C': True,
+                'degree': True,
+            },
+            'KNeighborsClassifier': {
+                'leaf_size': True,
+            },
+            'LinearDiscriminantAnalysis': {
+                'shrinkage': True
+            },
+            'GaussianNB': {
+                'var_smoothing': True
+            },
+            'GradientBoostingClassifier': {
+                'n_estimators': True,
+                'min_samples_split': True,
+                'min_samples_leaf': True,
+                'learning_rate': False,
+                'max_depth': True,  
+                'min_child_weight': True, 
+            },
+            'GaussianProcessClassifier': {
+                'max_iter_predict': True,
+                'n_restarts_optimizer': True  
+            },
+            'ElasticNet': {
+                'alpha': True,
+                'l1_ratio': True
+            }
         }
+
         constraints = hyper_compl[model_name]
         # Find the attributes of the trials that are related to the constraints
         inner_cv_splits = self.params['inner_splits']  

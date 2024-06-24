@@ -18,7 +18,7 @@ optuna_grid = {
             "criterion": optuna.distributions.CategoricalDistribution(
                 ["gini", "entropy"]
             ),
-            # "max_depth": optuna.distributions.IntDistribution(1, 80),
+            "max_depth": optuna.distributions.IntDistribution(3, 10),
             "min_samples_leaf": optuna.distributions.IntDistribution(1, 100),
             "min_samples_split": optuna.distributions.IntDistribution(2, 10),
             "bootstrap": optuna.distributions.CategoricalDistribution([True, False]),
@@ -58,21 +58,23 @@ optuna_grid = {
             "criterion": optuna.distributions.CategoricalDistribution(
                 ["friedman_mse", "squared_error"]
             ),
-            "max_depth": optuna.distributions.IntDistribution(1, 100),
+            "min_child_weight": optuna.distributions.IntDistribution(1, 10),
+            "max_depth": optuna.distributions.IntDistribution(3, 10),
             "min_samples_split": optuna.distributions.IntDistribution(2, 10),
             "min_samples_leaf": optuna.distributions.IntDistribution(1, 10),
+
         },
         "XGBClassifier": {
             "learning_rate": optuna.distributions.FloatDistribution(0.001, 0.5),
             "n_estimators": optuna.distributions.IntDistribution(2, 300),
-            # "max_depth": optuna.distributions.IntDistribution(1, 80),
+            "max_depth": optuna.distributions.IntDistribution(3, 10),
             "min_child_weight": optuna.distributions.IntDistribution(1, 10),
-            # "gamma": optuna.distributions.FloatDistribution(0, 10),
+            "gamma": optuna.distributions.FloatDistribution(0, 0.2),
             "subsample": optuna.distributions.FloatDistribution(0.001, 1.0),
             'n_jobs': optuna.distributions.CategoricalDistribution([1]),
             "booster": optuna.distributions.CategoricalDistribution(
                 ["gbtree", "dart"]
-            ),  #'gblinear',
+            ),  
             "tree_method": optuna.distributions.CategoricalDistribution(
                 ["auto", "exact", "approx", "hist"]
             ),
@@ -93,7 +95,7 @@ optuna_grid = {
         },
         "LogisticRegression": {
             "penalty": optuna.distributions.CategoricalDistribution(
-                ["l1", "l2", None]#, "elasticnet"]
+                ["l1", "l2", None]
             ),
             "C": optuna.distributions.FloatDistribution(0.01, 1.0),
             "solver": optuna.distributions.CategoricalDistribution(
@@ -128,14 +130,15 @@ optuna_grid = {
             'n_jobs': optuna.distributions.CategoricalDistribution([1]),
             'verbose': optuna.distributions.CategoricalDistribution([-1]),
             'reg_lambda':optuna.distributions.FloatDistribution(0.001, 10.0),
-            'reg_alpha':optuna.distributions.FloatDistribution(0.001, 10.0)
-
+            'reg_alpha':optuna.distributions.FloatDistribution(0.001, 10.0),
+            "min_child_weight": optuna.distributions.IntDistribution(1, 10),
         },
         'GaussianProcessClassifier':{
             'optimizer': optuna.distributions.CategoricalDistribution(['fmin_l_bfgs_b', None]),
             'max_iter_predict': optuna.distributions.IntDistribution(50, 200),
             'warm_start': optuna.distributions.CategoricalDistribution([True, False]),
-            'n_jobs': optuna.distributions.CategoricalDistribution([1])
+            'n_jobs': optuna.distributions.CategoricalDistribution([1]),
+            'n_restarts_optimizer': optuna.distributions.IntDistribution(0, 10)
         },
         'CatBoostClassifier': {
             'iterations': optuna.distributions.IntDistribution(50, 1000),
@@ -165,7 +168,7 @@ optuna_grid = {
         'shrinkage':(0,1),
         'max_iter': (100, 1500),
         'learning_rate': (0.001, 0.5),
-        'gamma': (0.0, 10.0),
+        'gamma': (0.0, 0.2),
         'min_child_weight': (1, 10),
         'colsample_bytree': (0.1, 1.0),
         'subsample': (0.001, 1.0),
@@ -177,7 +180,11 @@ optuna_grid = {
         'n_neighbors': (1, 15),
         'var_smoothing': (1e-10, 1e-5),
         'depth': (1,50),
-        'l2_leaf_reg': (1e-8, 2)
+        'l2_leaf_reg': (1e-8, 2),
+        'n_restarts_optimizer': (0, 10),
+        'depth': (1,50),
+        'border_count': (1, 255),
+        'max_depth': (3,30),
         },
 
     "ManualSearch": {
