@@ -54,6 +54,11 @@ class MachineLearningEstimator(DataLoader):
         self.best_score = None
         self.best_estimator = None
 
+        # TODO: Define self.scoring ??
+        self.scoring = None
+        # TODO: Define self.model_selection_way ??
+        self.model_selection_way = None
+
         self.available_clfs = {
             "RandomForestClassifier": RandomForestClassifier(),
             "GradientBoostingClassifier": GradientBoostingClassifier(),
@@ -83,99 +88,156 @@ class MachineLearningEstimator(DataLoader):
         optuna.logging.set_verbosity(level)
         logging.getLogger("optuna").setLevel(level)
 
-    # TODO: What about 'missing_values' ? Do we handle it somehow in grid_search?
-    def grid_search(
+    def preprocess(
         self,
         X=None,
         y=None,
-        estimator=None,
-        parameter_grid=None,
         scoring="matthews_corrcoef",
-        features_list=None,
+        features_names_list=None,
         feat_num=None,
-        feat_way="mrmr",
-        cv=5,
-        verbose=True,
-        return_model=False,
+        feat_way=None,
+        estimator_name=None,
+        normalization=None,
+        missing_values=None,
     ):
-        """
-        Perform grid search to find the best hyperparameters for the estimator.
-
-        :param X: The input features, defaults to None
-        :type X: array-like, shape (n_samples, n_features), optional
-        :param y: The target values, defaults to None
-        :type y: array-like, shape (n_samples,), optional
-        :param estimator: The estimator object. If None self.estimator is selected, defaults to None.
-        :type estimator: object, optional
-        :param parameter_grid: The parameter grid for hyperparameter tuning, defaults to None
-        :type parameter_grid: dict, optional
-        :param scoring: The scoring metric to optimize, defaults to 'matthews_corrcoef'
-        :type scoring: str, optional
-        :param features_list: List of feature names to use for grid search, defaults to None
-        :type features_list: list, optional
-        :param feat_num: Number of features to select using feature selection method, defaults to None
-        :type feat_num: int, optional
-        :param feat_way: The feature selection method to use, defaults to 'mrmr'
-        :type feat_way: str, optional
-        :param cv: The number of cross-validation folds, defaults to 5
-        :type cv: int, optional
-        :param verbose: Whether to print the best parameters and score, defaults to True
-        :type verbose: bool, optional
-        :param return_model: Whether to return the best estimator, defaults to False
-        :type return_model: bool, optional
-        :return: The best estimator if `return_model` is True, otherwise None
-        :rtype: estimator object or None
-        """
-
         scoring_check(scoring)
+        scoring_function = getattr(metrics, scoring, None)
+        scorer = make_scorer(scoring_function)
+
+        self.scoring = scorer
 
         X = X or self.X
         y = y or self.y
 
-        if len(X) != len(y):
-            raise ValueError("The length of X and y must be equal.")
+        if missing_values is not None:
+            X = self.missing_values(X, method=missing_values)
 
-        if features_list is not None:
-            X = X[features_list]
+        if normalization is not None:
+            X = self.normalize(X, method=normalization)
+
+        if features_names_list is not None:
+            X = X[features_names_list]
         elif feat_num is not None:
             selected = self.feature_selection(X, y, feat_way, feat_num)
             X = X[selected]
 
-        if estimator is not None:
-            self.estimator = estimator
-            if (
-                self.estimator.__class__.__name__ == "LogisticRegression"
-                and hasattr(self.estimator, "penalty")
-                and self.estimator.penalty == "elasticnet"
-            ):
-                self.name = "ElasticNet"
-            else:
-                self.name = self.estimator.__class__.__name__
-            self.param_grid = parameter_grid
+        if estimator_name is None:
+            estimator_name = self.name
+        else:
+            estimator_name = estimator_name
 
-        grid_search = GridSearchCV(
-            self.estimator, self.param_grid, scoring=scoring, cv=cv
+        estimator = self.available_clfs[estimator_name]
+
+        return X, y, estimator
+
+    def grid_search(
+        self,
+        X=None,
+        y=None,
+        scoring="matthews_corrcoef",
+        features_names_list=None,
+        cv=5,
+        estimator_name=None,
+        evaluation="cv_simple",
+        rounds=10,
+        feat_num=None,
+        feat_way="mrmr",
+        missing_values="median",
+        boxplot=True,
+        calculate_shap=False,
+        param_grid=None,
+        normalization="minmax",
+    ):
+        """
+        Perform grid search to find the best hyperparameters for the estimator.
+        """
+        scoring_check(scoring)
+        self.model_selection_way = "grid_search"
+
+        X, y, estimator = self.preprocess(
+            X,
+            y,
+            scoring,
+            missing_values,
+            features_names_list,
+            feat_num,
+            feat_way,
+            estimator_name,
+            normalization,
         )
 
-        grid_search.fit(X, y)
+        if param_grid is None:
+            self.param_grid = optuna_grid["SklearnParameterGrid"]
+            print("Using default parameter grid")
+        else:
+            param_grid = {estimator_name: param_grid}
+            self.param_grid = param_grid
 
-        self.best_params = grid_search.best_params_
-        self.best_score = grid_search.best_score_
+        cv_splits = StratifiedKFold(n_splits=cv, shuffle=True)
+        temp_train_test_indices = list(cv_splits.split(X, y))
 
-        self.best_estimator = grid_search.best_estimator_
-        
-        ## TODO: self.name is already defined in 151 or 152, right? 
-        ## TODO: Delete below line
-        self.name = self.best_estimator.__class__.__name__
+        random_search = GridSearchCV(
+            estimator,
+            self.param_grid[estimator_name],
+            scoring=scoring,
+            cv=temp_train_test_indices,
+            n_jobs=-1,
+        )
+        random_search.fit(X, y)
+        best_params = random_search.best_params_
+        best_score = random_search.best_score_
+        self.best_estimator = random_search.best_estimator_
 
-        if verbose:
-            print(f"Estimator: {self.name}")
-            print(f"Best parameters: {self.best_params}")
-            print(f"Best {scoring}: {self.best_score}")
+        print(f"Estimator: {estimator_name}")
+        print(f"Best parameters: {best_params}")
+        print(f"Best {scoring}: {best_score}")
 
-        if return_model:
-            return self.best_estimator
- 
+        results_df = pd.DataFrame.from_dict(random_search.cv_results_)
+        results_df = results_df.sort_values(by="rank_test_score")
+        usefull_cols = [
+            "mean_test_score",
+            "std_test_score",
+            "rank_test_score",
+            "params",
+        ]
+
+        for i in range(cv):
+            usefull_cols.append(f"split{i}_test_score")
+        data_full_outer = results_df[usefull_cols]
+
+        if calculate_shap:
+            best_model, eval_df, shaps_array = self.evaluate(
+                X,
+                y,
+                cv,
+                evaluation,
+                rounds,
+                self.best_estimator,
+                best_params,
+                random_search,
+                calculate_shap,
+            )
+        else:
+            best_model, eval_df = self.evaluate(
+                X,
+                y,
+                cv,
+                evaluation,
+                rounds,
+                self.best_estimator,
+                best_params,
+                random_search,
+                calculate_shap,
+            )
+
+        self.eval_boxplot(estimator_name, eval_df, cv, evaluation)
+
+        if calculate_shap:
+            self.shap_values = shaps_array
+            return self.best_estimator, eval_df, shaps_array
+        else:
+            return self.best_estimator, eval_df
+
     # TODO: What about 'missing_values' ? Do we handle it somehow in random_search?
     def random_search(
         self,
@@ -441,7 +503,7 @@ class MachineLearningEstimator(DataLoader):
         calculate_shap=False,
         param_grid=None,
         normalize_with="minmax",
-    ):  
+    ):
         """Function to perform a bayesian search"""
 
         scoring_check(scoring)
