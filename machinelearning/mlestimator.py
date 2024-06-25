@@ -53,10 +53,7 @@ class MachineLearningEstimator(DataLoader):
         self.best_params = None
         self.best_score = None
         self.best_estimator = None
-
-        # TODO: Define self.scoring ??
         self.scoring = None
-        # TODO: Define self.model_selection_way ??
         self.model_selection_way = None
 
         self.available_clfs = {
@@ -83,7 +80,7 @@ class MachineLearningEstimator(DataLoader):
         elif self.estimator is None:
             print("There is no selected classifier.")
 
-    def set_optuna_verbosity(self, level):
+    def _set_optuna_verbosity(self, level):
         """Adjust Optuna's verbosity level."""
         optuna.logging.set_verbosity(level)
         logging.getLogger("optuna").setLevel(level)
@@ -371,7 +368,7 @@ class MachineLearningEstimator(DataLoader):
         """Function to perform a bayesian search"""
         scoring_check(scoring)
         self.model_selection_way = "bayesian_search"
-        self.set_optuna_verbosity(logging.ERROR)
+        self._set_optuna_verbosity(logging.ERROR)
 
         X, y, _ = self._preprocess(
             X,
