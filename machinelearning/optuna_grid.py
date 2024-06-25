@@ -58,7 +58,6 @@ optuna_grid = {
             "criterion": optuna.distributions.CategoricalDistribution(
                 ["friedman_mse", "squared_error"]
             ),
-            "min_child_weight": optuna.distributions.IntDistribution(1, 10),
             "max_depth": optuna.distributions.IntDistribution(3, 10),
             "min_samples_split": optuna.distributions.IntDistribution(2, 10),
             "min_samples_leaf": optuna.distributions.IntDistribution(1, 10),
@@ -68,7 +67,6 @@ optuna_grid = {
             "learning_rate": optuna.distributions.FloatDistribution(0.001, 0.5),
             "n_estimators": optuna.distributions.IntDistribution(2, 300),
             "max_depth": optuna.distributions.IntDistribution(3, 10),
-            "min_child_weight": optuna.distributions.IntDistribution(1, 10),
             "gamma": optuna.distributions.FloatDistribution(0, 0.2),
             "subsample": optuna.distributions.FloatDistribution(0.001, 1.0),
             'n_jobs': optuna.distributions.CategoricalDistribution([1]),
@@ -131,7 +129,6 @@ optuna_grid = {
             'verbose': optuna.distributions.CategoricalDistribution([-1]),
             'reg_lambda':optuna.distributions.FloatDistribution(0.001, 10.0),
             'reg_alpha':optuna.distributions.FloatDistribution(0.001, 10.0),
-            "min_child_weight": optuna.distributions.IntDistribution(1, 10),
         },
         'GaussianProcessClassifier':{
             'optimizer': optuna.distributions.CategoricalDistribution(['fmin_l_bfgs_b', None]),
@@ -169,7 +166,6 @@ optuna_grid = {
         'max_iter': (100, 1500),
         'learning_rate': (0.001, 0.5),
         'gamma': (0.0, 0.2),
-        'min_child_weight': (1, 10),
         'colsample_bytree': (0.1, 1.0),
         'subsample': (0.001, 1.0),
         'reg_lambda': (0.001, 10.0),

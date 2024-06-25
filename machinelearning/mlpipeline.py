@@ -201,7 +201,6 @@ class MLPipelines(MachineLearningEstimator):
                 'reg_alpha': False,
                 'reg_lambda': False,
                 'max_depth': True,  
-                'min_child_weight': True,  
                 'gamma': True,  
             },
             'LGBMClassifier': {
@@ -211,7 +210,6 @@ class MLPipelines(MachineLearningEstimator):
                 'reg_lambda': False,
                 'reg_alpha': False,
                 'max_depth': True,  
-                'min_child_weight': True,  
             },
             'CatBoostClassifier': {
                 'learning_rate': False,
@@ -239,7 +237,6 @@ class MLPipelines(MachineLearningEstimator):
                 'min_samples_leaf': True,
                 'learning_rate': False,
                 'max_depth': True,  
-                'min_child_weight': True, 
             },
             'GaussianProcessClassifier': {
                 'max_iter_predict': True,
@@ -391,7 +388,7 @@ class MLPipelines(MachineLearningEstimator):
                     num_features=None, feature_selection_type='mrmr', return_csv=True, feature_selection_method='chi2', 
                     plot='box',inner_scoring='matthews_corrcoef',inner_selection='validation_score',
                     outer_scoring='matthews_corrcoef',inner_splits=5, outer_splits=5,normalization='minmax',
-                    parallel='thread_per_round', missing_values_method='median',frfs=None):
+                    parallel='thread_per_round', missing_values_method='median',frfs=None, name_add = None):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
 
@@ -519,11 +516,20 @@ class MLPipelines(MachineLearningEstimator):
             features = num_features
         else :
             features = 'all_features'
+
         try:
             dataset_name = self.set_result_csv_name(self.csv_dir)
-            final_dataset_name = os.path.join(results_dir, f'{dataset_name}_{inner_selection}_{features}')
+            if name_add is None:
+                results_name = f'{dataset_name}_{inner_selection}_{features}'
+            else:
+                results_name = f'{dataset_name}_{inner_selection}_{features}_{name_add}'
+            final_dataset_name = os.path.join(results_dir, results_name)
         except Exception as e:
             dataset_name = 'dataset'
+            if name_add is None:
+                results_name = f'{dataset_name}_{inner_selection}_{features}'
+            else:
+                results_name = f'{dataset_name}_{inner_selection}_{features}_{name_add}'
             final_dataset_name = os.path.join(results_dir, f'{dataset_name}_{inner_selection}_{features}')
         
         # Manipulate the size of the plot to fit the number of features
