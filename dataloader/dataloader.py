@@ -47,7 +47,6 @@ class DataLoader:
             index: class_label
             for index, class_label in enumerate(label_encoder.classes_)
         }
-        print("Label mapping:", self.label_mapping)
 
     def missing_values(self, data=None, method="drop"):
         """Function to handle missing values in the dataset"""

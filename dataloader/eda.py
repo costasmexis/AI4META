@@ -12,9 +12,8 @@ from dataloader import DataLoader
 
 
 class DataExplorer(DataLoader):
-    def __init__(self, X, y, normalization_method):
-        self.X = X
-        self.y = y
+    def __init__(self, label, csv_dir, index_col=None, normalization_method="minmax"):
+        super().__init__(label, csv_dir, index_col=index_col)
         self.normalization_method = normalization_method
         self.x_normalized_df = self.normalize(self.X, method=self.normalization_method)
 
@@ -26,6 +25,7 @@ class DataExplorer(DataLoader):
         limit=None,
         num_of_best_features=None,
         way_of_selection="mrmr",
+        return_matrix=False,
     ) -> np.ndarray:
         """Calculates and visualizes the correlation matrix of the dataset, optionally after applying feature selection and normalization.
 
@@ -43,6 +43,8 @@ class DataExplorer(DataLoader):
         :type num_of_best_features: int, optional
         :param way_of_selection: The method to use for feature selection. Defaults to 'mrmr'. The method must be supported by the feature_selection method of the instance.
         :type way_of_selection: str, optional
+        :param return_matrix: A flag indicating whether to return the correlation matrix after visualization. If True, the method returns the correlation matrix. If False, the method only visualizes the matrix.
+        :type return_matrix: bool
 
         :return: The correlation matrix of the selected features with or without the specified limit applied. If feature selection or normalization is applied, the matrix corresponds to the processed dataset.
         :rtype: numpy.ndarray
@@ -83,7 +85,9 @@ class DataExplorer(DataLoader):
         sns.heatmap(df_correl, cmap="coolwarm") 
         plt.show()
 
-        return correl_table
+        # TODO: Instead of return, create an attribute ??
+        if return_matrix:
+            return correl_table
 
     def pairplots_function(
             self,
@@ -249,10 +253,12 @@ class DataExplorer(DataLoader):
                 fig.update_xaxes(tickangle=90)
                 fig.show()
                 
+                # TODO: Instead of return create an attribute??
                 return significant_features
             else:
                 print("No significant features found.")
 
+    # TODO: To return or not to return ??
     def pca_plot(
         self,
         data=None,
