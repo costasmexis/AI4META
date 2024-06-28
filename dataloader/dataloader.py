@@ -13,8 +13,9 @@ from mrmr import mrmr_classif
 
 
 class DataLoader:
-    def __init__(self, label, csv_dir):
+    def __init__(self, label, csv_dir, index_col=None):
         self.csv_dir = csv_dir
+        self.index_col = index_col
         self.label = label
         self.data = None
         self.X = None
@@ -26,12 +27,12 @@ class DataLoader:
         self.__load_data()
         self.__encode_labels()
 
-    def __load_data(self, index_col=0):
+    def __load_data(self):
         """Function to load data from a file"""
         file_extension = self.csv_dir.split(".")[-1]
         if file_extension in self.supported_extensions:
             sep = "," if file_extension == "csv" else "\t"
-            self.data = pd.read_csv(self.csv_dir, sep=sep, index_col=index_col)
+            self.data = pd.read_csv(self.csv_dir, sep=sep, index_col=self.index_col)
         else:
             raise Exception("Unsupported file type.")
 
