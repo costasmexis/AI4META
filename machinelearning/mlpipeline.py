@@ -259,7 +259,7 @@ class MLPipelines(MachineLearningEstimator):
                     self.name = estimator
                     self.estimator = self.available_clfs[estimator]
 
-                    self.set_optuna_verbosity(logging.ERROR)
+                    self._set_optuna_verbosity(logging.ERROR)
                     clf = optuna.integration.OptunaSearchCV(
                         estimator=self.estimator,
                         scoring=self.config_rncv["inner_scoring"],
