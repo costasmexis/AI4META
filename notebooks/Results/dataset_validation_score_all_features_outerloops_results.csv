@@ -1,0 +1,10 @@
+Estimator,Classifier,Scores,Max,Std,SEM,Median,Hyperparameters,Selected_Features,Numbers_of_Features,Way_of_Selection
+RandomForestClassifier,RandomForestClassifier,"[0.0, 0.0, 0.0, 0.7715167498104596, 0.0, 0.6172133998483676, 0.6172133998483676, 0.6923076923076923, 0.0]",0.7715167498104596,0.3378825754422362,0.11945953016999022,0.0,"[{'n_estimators': 105, 'criterion': 'gini', 'max_depth': 7, 'min_samples_leaf': 62, 'min_samples_split': 3, 'bootstrap': True, 'n_jobs': 1}
+ {'n_estimators': 110, 'criterion': 'entropy', 'max_depth': 4, 'min_samples_leaf': 100, 'min_samples_split': 10, 'bootstrap': True, 'n_jobs': 1}
+ {'n_estimators': 93, 'criterion': 'entropy', 'max_depth': 4, 'min_samples_leaf': 57, 'min_samples_split': 4, 'bootstrap': True, 'n_jobs': 1}
+ {'n_estimators': 46, 'criterion': 'entropy', 'max_depth': 6, 'min_samples_leaf': 11, 'min_samples_split': 7, 'bootstrap': False, 'n_jobs': 1}
+ {'n_estimators': 94, 'criterion': 'entropy', 'max_depth': 4, 'min_samples_leaf': 98, 'min_samples_split': 2, 'bootstrap': False, 'n_jobs': 1}
+ {'n_estimators': 152, 'criterion': 'gini', 'max_depth': 8, 'min_samples_leaf': 2, 'min_samples_split': 4, 'bootstrap': True, 'n_jobs': 1}
+ {'n_estimators': 169, 'criterion': 'entropy', 'max_depth': 6, 'min_samples_leaf': 2, 'min_samples_split': 8, 'bootstrap': True, 'n_jobs': 1}
+ {'n_estimators': 43, 'criterion': 'gini', 'max_depth': 6, 'min_samples_leaf': 9, 'min_samples_split': 4, 'bootstrap': False, 'n_jobs': 1}
+ {'n_estimators': 81, 'criterion': 'gini', 'max_depth': 10, 'min_samples_leaf': 79, 'min_samples_split': 6, 'bootstrap': False, 'n_jobs': 1}]",,20,full

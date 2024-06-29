@@ -3,6 +3,14 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Catboost trials
+*.tmp
+*.json
+catboost_info/*
+
+# Notes and mermaid
+Notes/*
+
 # C extensions
 *.so
 
