@@ -17,7 +17,7 @@ optuna_grid = {
             "criterion": optuna.distributions.CategoricalDistribution(
                 ["gini", "entropy"]
             ),
-            "max_depth": optuna.distributions.IntDistribution(3, 10),
+            "max_depth": optuna.distributions.IntDistribution(2, 16),
             "min_samples_leaf": optuna.distributions.IntDistribution(1, 100),
             "min_samples_split": optuna.distributions.IntDistribution(2, 10),
             "bootstrap": optuna.distributions.CategoricalDistribution([True, False]),
@@ -56,14 +56,14 @@ optuna_grid = {
             "criterion": optuna.distributions.CategoricalDistribution(
                 ["friedman_mse", "squared_error"]
             ),
-            "max_depth": optuna.distributions.IntDistribution(3, 10),
+            "max_depth": optuna.distributions.IntDistribution(2, 16),
             "min_samples_split": optuna.distributions.IntDistribution(2, 10),
             "min_samples_leaf": optuna.distributions.IntDistribution(1, 10),
         },
         "XGBClassifier": {
             "learning_rate": optuna.distributions.FloatDistribution(0.001, 0.5),
             "n_estimators": optuna.distributions.IntDistribution(2, 300),
-            "max_depth": optuna.distributions.IntDistribution(3, 10),
+            "max_depth": optuna.distributions.IntDistribution(2, 16),
             "gamma": optuna.distributions.FloatDistribution(0, 0.2),
             "subsample": optuna.distributions.FloatDistribution(0.001, 1.0),
             "n_jobs": optuna.distributions.CategoricalDistribution([1]),
@@ -133,7 +133,7 @@ optuna_grid = {
         "CatBoostClassifier": {
             "iterations": optuna.distributions.IntDistribution(50, 1000),
             "learning_rate": optuna.distributions.FloatDistribution(0.001, 0.5),
-            "depth": optuna.distributions.IntDistribution(1, 50),
+            "depth": optuna.distributions.IntDistribution(2, 16),
             "l2_leaf_reg": optuna.distributions.FloatDistribution(1e-8, 2),
             "border_count": optuna.distributions.IntDistribution(1, 255),
             "bagging_temperature": optuna.distributions.FloatDistribution(0.0, 10.0),
@@ -153,7 +153,7 @@ optuna_grid = {
     "param_ranges": {
         "n_estimators": (2, 300),
         "iterations": (50, 1000),
-        "max_depth": (1, 100),
+        "max_depth": (2, 16),
         "min_impurity_decrease": (0.0, 0.8),
         "leaf_size": (5, 50),
         "min_samples_split": (2, 10),
@@ -172,7 +172,7 @@ optuna_grid = {
         "max_iter_predict": (50, 200),
         "n_neighbors": (1, 15),
         "var_smoothing": (1e-10, 1e-5),
-        "depth": (1, 50),
+        "depth": (2, 16),
         "l2_leaf_reg": (1e-8, 2),
         "n_restarts_optimizer": (0, 10),
         "border_count": (1, 255),
@@ -219,7 +219,7 @@ optuna_grid = {
             criterion=trial.suggest_categorical(
                 "criterion", ["friedman_mse", "squared_error"]
             ),
-            max_depth=trial.suggest_int("max_depth", 1, 100),
+            max_depth=trial.suggest_int("max_depth", 2, 16),
             min_samples_split=trial.suggest_int("min_samples_split", 2, 10),
             min_samples_leaf=trial.suggest_int("min_samples_leaf", 1, 10),
         ),
@@ -305,7 +305,7 @@ optuna_grid = {
         "CatBoostClassifier": lambda trial: CatBoostClassifier(
             iterations=trial.suggest_int("iterations", 50, 1000),
             learning_rate=trial.suggest_float("learning_rate", 0.001, 0.5),
-            depth=trial.suggest_int("depth", 1, 50),
+            depth=trial.suggest_int("depth", 2, 16),
             l2_leaf_reg=trial.suggest_float("l2_leaf_reg", 1e-8, 100.0, log=True),
             border_count=trial.suggest_int("border_count", 1, 255),
             bagging_temperature=trial.suggest_float("bagging_temperature", 0.0, 10.0),
@@ -349,7 +349,7 @@ optuna_grid = {
             "learning_rate": [0.001, 0.01, 0.1, 0.3, 0.5],
             "n_estimators": [2, 50, 100, 200, 400],
             "criterion": ["friedman_mse", "squared_error"],
-            "max_depth": [1, 10, 50, 100],
+            "max_depth": [2, 4, 8, 10, 12, 16],
             "min_samples_split": [2, 5, 10],
             "min_samples_leaf": [1, 5, 10],
         },
@@ -407,7 +407,7 @@ optuna_grid = {
         "CatBoostClassifier": {
             "iterations": [50, 100, 200, 500, 1000],
             "learning_rate": [0.001, 0.01, 0.1, 0.3, 0.5],
-            "depth": [1, 5, 10, 20, 50],
+            "depth": [2, 4, 6, 8, 10,12, 14, 16],
             "l2_leaf_reg": [1e-8, 1e-6, 1e-4, 1e-2, 1.0, 100.0],
             "border_count": [1, 50, 100, 150, 200, 255],
             "bagging_temperature": [0.0, 0.1, 0.5, 1.0, 5.0, 10.0],
@@ -424,18 +424,21 @@ optuna_grid = {
 hyper_compl = {
     "RandomForestClassifier": {
         "n_estimators": True,
-        "min_samples_split": True,
-        "min_samples_leaf": True,
+        "min_samples_split": False,
+        "min_samples_leaf": False,
         "max_depth": True,
     },
-    "LogisticRegression": {"C": True, "max_iter": True},
+    "LogisticRegression": {
+        "C": True,
+        "max_iter": True
+    },
     "XGBClassifier": {
         "n_estimators": True,
         "learning_rate": False,
         "reg_alpha": False,
         "reg_lambda": False,
         "max_depth": True,
-        "gamma": True,
+        "gamma": False,
     },
     "LGBMClassifier": {
         "n_estimators": True,
@@ -463,8 +466,8 @@ hyper_compl = {
     "GaussianNB": {"var_smoothing": True},
     "GradientBoostingClassifier": {
         "n_estimators": True,
-        "min_samples_split": True,
-        "min_samples_leaf": True,
+        "min_samples_split": False,
+        "min_samples_leaf": False,
         "learning_rate": False,
         "max_depth": True,
     },
@@ -472,5 +475,10 @@ hyper_compl = {
         "max_iter_predict": True,
         "n_restarts_optimizer": True,
     },
-    "ElasticNet": {"alpha": True, "l1_ratio": True},
+    "ElasticNet": {
+        "alpha": True, 
+        "l1_ratio": True,
+        "C": True,
+        "max_iter": True
+        },
 }

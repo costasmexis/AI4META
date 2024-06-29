@@ -2,7 +2,7 @@ import optuna
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import sklearn
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
@@ -10,12 +10,12 @@ from sklearn.linear_model import LogisticRegression
 from lightgbm import LGBMClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
 from catboost import CatBoostClassifier
-from sklearn.metrics import get_scorer
 from sklearn.model_selection import StratifiedKFold
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
+from sklearn.metrics import get_scorer
 
 from .mlestimator import MachineLearningEstimator
 from .optuna_grid import optuna_grid, hyper_compl
@@ -211,7 +211,7 @@ class MLPipelines(MachineLearningEstimator):
 
         return X_train_selected, X_test_selected, num_feature
 
-    def inner_loop(self, train_index, test_index, X, y, avail_thr):
+    def _inner_loop(self, train_index, test_index, X, y, avail_thr):
         """This function is used to perform the inner loop of the nested cross-validation
         Note: Return a list because this is the desired output for the parallel loop
         """
@@ -315,7 +315,7 @@ class MLPipelines(MachineLearningEstimator):
 
         return [results]
 
-    def outer_loop(self, i, avail_thr):
+    def _outer_loop(self, i, avail_thr):
         start = time.time()  # Count time of outer loops
 
         # Split the data into train and test
@@ -354,7 +354,7 @@ class MLPipelines(MachineLearningEstimator):
 
                 # For each outer fold perform the inner loop
                 for train_index, test_index in train_test_indices:
-                    results = self.inner_loop(
+                    results = self._inner_loop(
                         train_index, test_index, self.X, self.y, avail_thr
                     )
                     temp_list.append(results)
@@ -374,7 +374,7 @@ class MLPipelines(MachineLearningEstimator):
 
                 # For each outer fold perform the inner loop
                 for train_index, test_index in train_test_indices:
-                    results = self.inner_loop(
+                    results = self._inner_loop(
                         train_index, test_index, self.X, self.y, avail_thr
                     )
                     temp_list.append(results)
@@ -481,12 +481,12 @@ class MLPipelines(MachineLearningEstimator):
             avail_thr = 1
             with threadpool_limits(limits=avail_thr):
                 list_dfs = Parallel(n_jobs=use_cores, verbose=0)(
-                    delayed(self.outer_loop)(i, avail_thr) for i in trial_indices
+                    delayed(self._outer_loop)(i, avail_thr) for i in trial_indices
                 )
         elif parallel == "freely_parallel":
             with threadpool_limits():
                 list_dfs = Parallel(n_jobs=use_cores, verbose=0)(
-                    delayed(self.outer_loop)(i, avail_thr) for i in trial_indices
+                    delayed(self._outer_loop)(i, avail_thr) for i in trial_indices
                 )
         else:
             raise ValueError(
