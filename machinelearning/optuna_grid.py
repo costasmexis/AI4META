@@ -17,7 +17,7 @@ optuna_grid = {
             "criterion": optuna.distributions.CategoricalDistribution(
                 ["gini", "entropy"]
             ),
-            "max_depth": optuna.distributions.IntDistribution(2, 16),
+            "max_depth": optuna.distributions.IntDistribution(2, 100),
             "min_samples_leaf": optuna.distributions.IntDistribution(1, 100),
             "min_samples_split": optuna.distributions.IntDistribution(2, 10),
             "bootstrap": optuna.distributions.CategoricalDistribution([True, False]),
@@ -56,14 +56,14 @@ optuna_grid = {
             "criterion": optuna.distributions.CategoricalDistribution(
                 ["friedman_mse", "squared_error"]
             ),
-            "max_depth": optuna.distributions.IntDistribution(2, 16),
+            "max_depth": optuna.distributions.IntDistribution(2, 100),
             "min_samples_split": optuna.distributions.IntDistribution(2, 10),
             "min_samples_leaf": optuna.distributions.IntDistribution(1, 10),
         },
         "XGBClassifier": {
             "learning_rate": optuna.distributions.FloatDistribution(0.001, 0.5),
             "n_estimators": optuna.distributions.IntDistribution(2, 300),
-            "max_depth": optuna.distributions.IntDistribution(2, 16),
+            "max_depth": optuna.distributions.IntDistribution(2, 100),
             "gamma": optuna.distributions.FloatDistribution(0, 0.2),
             "subsample": optuna.distributions.FloatDistribution(0.001, 1.0),
             "n_jobs": optuna.distributions.CategoricalDistribution([1]),
@@ -153,7 +153,7 @@ optuna_grid = {
     "param_ranges": {
         "n_estimators": (2, 300),
         "iterations": (50, 1000),
-        "max_depth": (2, 16),
+        "max_depth": (2, 100),
         "min_impurity_decrease": (0.0, 0.8),
         "leaf_size": (5, 50),
         "min_samples_split": (2, 10),
@@ -219,7 +219,7 @@ optuna_grid = {
             criterion=trial.suggest_categorical(
                 "criterion", ["friedman_mse", "squared_error"]
             ),
-            max_depth=trial.suggest_int("max_depth", 2, 16),
+            max_depth=trial.suggest_int("max_depth", 2, 100),
             min_samples_split=trial.suggest_int("min_samples_split", 2, 10),
             min_samples_leaf=trial.suggest_int("min_samples_leaf", 1, 10),
         ),
@@ -325,6 +325,7 @@ optuna_grid = {
         "RandomForestClassifier": {
             "n_estimators": [2, 10, 20, 50, 80, 100, 200, 300],
             "criterion": ["gini", "entropy"],
+            "max_depth": [2, 8, 15, 25, 30, 45,55,80,100],
             "min_samples_leaf": [1, 5, 10, 20, 50, 100],
             "min_samples_split": [2, 5, 10],
             "bootstrap": [True, False],
@@ -349,13 +350,14 @@ optuna_grid = {
             "learning_rate": [0.001, 0.01, 0.1, 0.3, 0.5],
             "n_estimators": [2, 50, 100, 200, 400],
             "criterion": ["friedman_mse", "squared_error"],
-            "max_depth": [2, 4, 8, 10, 12, 16],
+            "max_depth": [2, 8, 15, 25, 30, 45,55,80,100],
             "min_samples_split": [2, 5, 10],
             "min_samples_leaf": [1, 5, 10],
         },
         "XGBClassifier": {
             "learning_rate": [0.001, 0.01, 0.1, 0.3, 0.5],
             "n_estimators": [2, 50, 100, 200, 400],
+            "max_depth": [2, 8, 15, 25, 30, 45,55,80,100],
             "min_child_weight": [1, 3, 5, 7, 10],
             "subsample": [0.001, 0.1, 0.3, 0.5, 0.7, 1.0],
             "reg_alpha": [0, 0.1, 1, 3, 10],

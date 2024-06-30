@@ -674,15 +674,17 @@ class MLPipelines(MachineLearningEstimator):
                     data = scores_long[scores_long["Classifier"] == classifier][
                         f"Outer_{self.config_rncv['outer_scoring']}"
                     ]
+                    median = np.median(data)
                     fig.add_trace(
                         go.Box(
                             y=data,
-                            name=classifier,
+                            name=f"{classifier} (Median: {median:.2f})",
                             boxpoints="all",
                             jitter=0.3,
                             pointpos=-1.8,
                         )
                     )
+
                     # Calculate and add 95% CI for the median
                     lower, upper = bootstrap_median_ci(data)
                     fig.add_trace(
@@ -700,10 +702,11 @@ class MLPipelines(MachineLearningEstimator):
                     data = scores_long[scores_long["Classifier"] == classifier][
                         f"Outer_{self.config_rncv['outer_scoring']}"
                     ]
+                    median = np.median(data)
                     fig.add_trace(
                         go.Violin(
                             y=data,
-                            name=classifier,
+                            name=f"{classifier} (Median: {median:.2f})",
                             box_visible=False,
                             points="all",
                             jitter=0.3,
