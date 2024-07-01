@@ -48,7 +48,7 @@ class DataLoader:
             for index, class_label in enumerate(label_encoder.classes_)
         }
 
-    def missing_values(self, data=None, method="drop"):
+    def missing_values(self, data=None, method="median"):
         """Function to handle missing values in the dataset"""
         initial_data = False
         if data is None:

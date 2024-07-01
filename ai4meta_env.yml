@@ -1,0 +1,31 @@
+name: ai4meta
+channels:
+  - defaults
+dependencies:
+  - python=3.11  
+  - numpy
+  - pandas
+  - matplotlib 
+  - catboost=1.2.5
+  - xgboost
+  - scikit-learn
+  - lightgbm
+  - dash
+  - dask
+  - progressbar2
+  - ipykernel
+  - pip  
+  - pip:
+      - streamlit
+      - mrmr-selection
+      - optuna
+      - optuna.integration
+      - joblib
+      - shap
+      - progress
+      - ipywidgets
+      - plotly
+      - nbformat
+      - umap-learn
+      - seaborn
+      - kaleido

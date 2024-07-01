@@ -85,15 +85,15 @@ class MachineLearningEstimator(DataLoader):
 
     def _preprocess(
         self,
-        X=None,
-        y=None,
-        scoring="matthews_corrcoef",
-        features_names_list=None,
-        feat_num=None,
-        feat_way=None,
-        estimator_name=None,
-        normalization=None,
-        missing_values=None,
+        X,
+        y,
+        scoring,
+        features_names_list,
+        feat_num,
+        feat_way,
+        estimator_name,
+        normalization,
+        missing_values,
     ):
         scoring_check(scoring)
         scoring_function = getattr(metrics, scoring, None)
@@ -153,13 +153,15 @@ class MachineLearningEstimator(DataLoader):
             X,
             y,
             scoring,
-            missing_values,
             features_names_list,
             feat_num,
             feat_way,
             estimator_name,
             normalization,
+            missing_values
         )
+
+        
 
         if param_grid is None:
             self.param_grid = optuna_grid["SklearnParameterGrid"]
@@ -262,12 +264,12 @@ class MachineLearningEstimator(DataLoader):
             X,
             y,
             scoring,
-            missing_values,
             features_names_list,
             feat_num,
             feat_way,
             estimator_name,
             normalization,
+            missing_values,
         )
 
         if param_grid is None:
@@ -372,12 +374,12 @@ class MachineLearningEstimator(DataLoader):
             X,
             y,
             scoring,
-            missing_values,
             features_names_list,
             feat_num,
             feat_way,
             estimator_name,
             normalization,
+            missing_values,
         )
 
         if param_grid is None:

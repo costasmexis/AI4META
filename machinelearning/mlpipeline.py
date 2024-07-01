@@ -10,12 +10,12 @@ from sklearn.linear_model import LogisticRegression
 from lightgbm import LGBMClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
 from catboost import CatBoostClassifier
-from sklearn.metrics import get_scorer
 from sklearn.model_selection import StratifiedKFold
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
+from sklearn.metrics import get_scorer
 
 from .mlestimator import MachineLearningEstimator
 from .optuna_grid import optuna_grid, hyper_compl
@@ -211,7 +211,7 @@ class MLPipelines(MachineLearningEstimator):
 
         return X_train_selected, X_test_selected, num_feature
 
-    def inner_loop(self, train_index, test_index, X, y, avail_thr):
+    def _inner_loop(self, train_index, test_index, X, y, avail_thr):
         """This function is used to perform the inner loop of the nested cross-validation
         Note: Return a list because this is the desired output for the parallel loop
         """
@@ -234,7 +234,7 @@ class MLPipelines(MachineLearningEstimator):
 
         # Initialize variables
         results = {
-            "Scores": [],
+            f"Outer_{self.config_rncv['inner_scoring']}": [],
             "Classifiers": [],
             "Selected_Features": [],
             "Number_of_Features": [],
@@ -242,6 +242,8 @@ class MLPipelines(MachineLearningEstimator):
             "Way_of_Selection": [],
             "Estimator": [],
         }
+        if self.config_rncv["extra_metrics"] != None:
+            results.update({f"{metric}": [] for metric in self.config_rncv["extra_metrics"]})
 
         # Loop over the number of features
         for num_feature2_use in feature_loop:
@@ -274,12 +276,18 @@ class MLPipelines(MachineLearningEstimator):
                     # Store the results and apply one_sem method if its selected
                     results["Estimator"].append(self.name)
                     if self.config_rncv["inner_selection"] == "validation_score":
-                        results["Scores"].append(
+                        results[f"Outer_{self.config_rncv['outer_scoring']}"].append(
                             get_scorer(self.config_rncv["outer_scoring"])(
                                 clf, X_test_selected, y_test
                             )
                         )
                         results["Hyperparameters"].append(clf.best_params_)
+                        if self.config_rncv["extra_metrics"] != None:
+                            for metric in self.config_rncv["extra_metrics"]:
+                                results[f"{metric}"].append(
+                                    get_scorer(metric)(clf, X_test_selected, y_test)
+                                )
+
                     else:
                         trials = clf.trials_
                         # Find simpler parameters with the one_sem method if there are any
@@ -290,9 +298,14 @@ class MLPipelines(MachineLearningEstimator):
                             self.name, simple_model_params
                         )
                         new_params_clf.fit(X_train_selected, y_train)
-                        results["Scores"].append(
+                        results[f"Outer_{self.config_rncv['outer_scoring']}"].append(
                             new_params_clf.score(X_test_selected, y_test)
                         )
+                        if self.config_rncv["extra_metrics"] != None:
+                            for metric in self.config_rncv["extra_metrics"]:
+                                results[f"{metric}"].append(
+                                    get_scorer(metric)(new_params_clf, X_test_selected, y_test)
+                                )
                     # Store the results using different names if feature selection is applied
                     if num_feature == "full" or num_feature is None:
                         results["Selected_Features"].append(None)
@@ -310,12 +323,10 @@ class MLPipelines(MachineLearningEstimator):
                         results["Way_of_Selection"].append(
                             self.config_rncv["feature_selection_type"]
                         )
-
         time.sleep(1)
-
         return [results]
 
-    def outer_loop(self, i, avail_thr):
+    def _outer_loop(self, i, avail_thr):
         start = time.time()  # Count time of outer loops
 
         # Split the data into train and test
@@ -354,7 +365,7 @@ class MLPipelines(MachineLearningEstimator):
 
                 # For each outer fold perform the inner loop
                 for train_index, test_index in train_test_indices:
-                    results = self.inner_loop(
+                    results = self._inner_loop(
                         train_index, test_index, self.X, self.y, avail_thr
                     )
                     temp_list.append(results)
@@ -374,7 +385,7 @@ class MLPipelines(MachineLearningEstimator):
 
                 # For each outer fold perform the inner loop
                 for train_index, test_index in train_test_indices:
-                    results = self.inner_loop(
+                    results = self._inner_loop(
                         train_index, test_index, self.X, self.y, avail_thr
                     )
                     temp_list.append(results)
@@ -410,6 +421,7 @@ class MLPipelines(MachineLearningEstimator):
         missing_values_method="median",
         frfs=None,
         name_add=None,
+        extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1'],
     ):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
@@ -424,6 +436,12 @@ class MLPipelines(MachineLearningEstimator):
             print(
                 f"Your Dataset contains NaN values. Some estimators does not work with NaN values.\nThe {missing_values_method} method will be used for the missing values manipulation.\n"
             )
+        if extra_metrics is not None:
+            if type(extra_metrics) is not list:
+                extra_metrics = [extra_metrics]
+            for metric in extra_metrics:
+                scoring_check(metric)
+            print('All the extra metrics are valid.')
 
         # Set parameters for the nested functions of the ncv process
         self.config_rncv = locals()
@@ -481,12 +499,12 @@ class MLPipelines(MachineLearningEstimator):
             avail_thr = 1
             with threadpool_limits(limits=avail_thr):
                 list_dfs = Parallel(n_jobs=use_cores, verbose=0)(
-                    delayed(self.outer_loop)(i, avail_thr) for i in trial_indices
+                    delayed(self._outer_loop)(i, avail_thr) for i in trial_indices
                 )
         elif parallel == "freely_parallel":
             with threadpool_limits():
                 list_dfs = Parallel(n_jobs=use_cores, verbose=0)(
-                    delayed(self.outer_loop)(i, avail_thr) for i in trial_indices
+                    delayed(self._outer_loop)(i, avail_thr) for i in trial_indices
                 )
         else:
             raise ValueError(
@@ -504,7 +522,7 @@ class MLPipelines(MachineLearningEstimator):
 
         for classif in np.unique(df["Classifiers"]):
             indices = df[df["Classifiers"] == classif]
-            filtered_scores = indices["Scores"].values
+            filtered_scores = indices[f"Outer_{self.config_rncv['outer_scoring']}"].values
             if num_features is not None:
                 filtered_features = indices["Selected_Features"].values
             mean_score = np.mean(filtered_scores)
@@ -514,13 +532,14 @@ class MLPipelines(MachineLearningEstimator):
             median_score = np.median(filtered_scores)
             Numbers_of_Features = indices["Number_of_Features"].unique()[0]
             Way_of_Selection = indices["Way_of_Selection"].unique()[0]
+
             results.append(
                 {
                     "Estimator": df[df["Classifiers"] == classif]["Estimator"].unique()[
                         0
                     ],
                     "Classifier": classif,
-                    "Scores": filtered_scores.tolist(),
+                    f"Outer_{self.config_rncv['outer_scoring']}": filtered_scores.tolist(),
                     "Max": max_score,
                     "Std": std_score,
                     "SEM": sem_score,
@@ -535,6 +554,11 @@ class MLPipelines(MachineLearningEstimator):
                     "Way_of_Selection": Way_of_Selection,
                 }
             )
+
+            # Add extra metrics
+            if extra_metrics is not None:
+                for metric in extra_metrics:
+                    results[-1][f"{metric}"] = indices[f"{metric}"].values
 
         print(f"Finished with {len(results)} estimators")
         scores_dataframe = pd.DataFrame(results)
@@ -551,7 +575,7 @@ class MLPipelines(MachineLearningEstimator):
             features = "all_features"
 
         try:
-            dataset_name = self.set_result_csv_name(self.csv_dir)
+            dataset_name = self._set_result_csv_name(self.csv_dir)
             if name_add is None:
                 results_name = f"{dataset_name}_{inner_selection}_{features}"
             else:
@@ -640,25 +664,27 @@ class MLPipelines(MachineLearningEstimator):
 
         # Plot box or violin plots of the outer cross-validation scores
         if plot is not None:
-            scores_long = scores_dataframe.explode("Scores")
-            scores_long["Scores"] = scores_long["Scores"].astype(float)
+            scores_long = scores_dataframe.explode(f"Outer_{self.config_rncv['outer_scoring']}")
+            scores_long[f"Outer_{self.config_rncv['outer_scoring']}"] = scores_long[f"Outer_{self.config_rncv['outer_scoring']}"].astype(float)
 
             fig = go.Figure()
             if plot == "box":
                 # Add box plots for each classifier
                 for classifier in scores_dataframe["Classifier"]:
                     data = scores_long[scores_long["Classifier"] == classifier][
-                        "Scores"
+                        f"Outer_{self.config_rncv['outer_scoring']}"
                     ]
+                    median = np.median(data)
                     fig.add_trace(
                         go.Box(
                             y=data,
-                            name=classifier,
+                            name=f"{classifier} (Median: {median:.2f})",
                             boxpoints="all",
                             jitter=0.3,
                             pointpos=-1.8,
                         )
                     )
+
                     # Calculate and add 95% CI for the median
                     lower, upper = bootstrap_median_ci(data)
                     fig.add_trace(
@@ -674,12 +700,13 @@ class MLPipelines(MachineLearningEstimator):
             elif plot == "violin":
                 for classifier in scores_dataframe["Classifier"]:
                     data = scores_long[scores_long["Classifier"] == classifier][
-                        "Scores"
+                        f"Outer_{self.config_rncv['outer_scoring']}"
                     ]
+                    median = np.median(data)
                     fig.add_trace(
                         go.Violin(
                             y=data,
-                            name=classifier,
+                            name=f"{classifier} (Median: {median:.2f})",
                             box_visible=False,
                             points="all",
                             jitter=0.3,
@@ -695,7 +722,7 @@ class MLPipelines(MachineLearningEstimator):
             # Update layout for better readability
             fig.update_layout(
                 title="Model Selection Results",
-                yaxis_title="Score",
+                yaxis_title=f"Scores {self.config_rncv['outer_scoring']}",
                 xaxis_title="Classifier",
                 xaxis_tickangle=-45,
                 template="plotly_white",
