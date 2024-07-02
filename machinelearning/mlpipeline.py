@@ -241,6 +241,7 @@ class MLPipelines(MachineLearningEstimator):
             "Hyperparameters": [],
             "Way_of_Selection": [],
             "Estimator": [],
+            'Samples_counts': [],
         }
         if self.config_rncv["extra_metrics"] != None:
             results.update({f"{metric}": [] for metric in self.config_rncv["extra_metrics"]})
@@ -327,10 +328,12 @@ class MLPipelines(MachineLearningEstimator):
                         )
 
                     # Track predictions
-                    # for idx in y_test.index:
-                    #     if y_pred[idx] == y_test[idx]:
-                    #         self.sample_correct_counts[idx] += 1
-                    print(y_pred)
+                    samples_counts = np.zeros(len(self.y))
+                    for idx, resu, pred in zip(test_index, y_test, y_pred):
+                        if pred == resu:
+                            samples_counts[idx] += 1
+
+                    results['Samples_counts'].append(samples_counts)
 
         time.sleep(1)
         return [results]
@@ -361,7 +364,7 @@ class MLPipelines(MachineLearningEstimator):
             " ",
             progressbar.ETA(),
         ]
-
+        
         # Find the parallelization method
         if self.config_rncv["parallel"] == "freely_parallel":
             temp_list = []
@@ -431,11 +434,11 @@ class MLPipelines(MachineLearningEstimator):
         frfs=None,
         name_add=None,
         extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1'],
+        show_bad_samples=False
     ):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
         """
-        samples_counts = np.zeros(len(self.y))
 
         # Missing values manipulation
         if missing_values_method == "drop":
@@ -457,7 +460,6 @@ class MLPipelines(MachineLearningEstimator):
         # Set parameters for the nested functions of the ncv process
         self.config_rncv = locals()
         self.config_rncv.pop("self", None)
-        self.config_rncv['samples_counts'] = samples_counts
 
         if num_features is not None:
             print(
@@ -531,16 +533,6 @@ class MLPipelines(MachineLearningEstimator):
         for item in list_dfs_flat:
             dataframe = pd.DataFrame(item)
             df = pd.concat([df, dataframe], axis=0)
-        
-        # Calculate classification rates
-        classification_rates = self.config_rncv['samples_counts'] / rounds
-        # Classify samples as easy or hard
-        easy_samples = np.where(classification_rates > 0.8)[0]
-        hard_samples = np.where(classification_rates < 0.5)[0]
-        
-        print(f"Easy samples: {easy_samples}")
-        print(f"Hard samples: {hard_samples}")
-        print(f"Classification rates: {self.config_rncv['samples_counts']}")
 
         for classif in np.unique(df["Classifiers"]):
             indices = df[df["Classifiers"] == classif]
@@ -554,6 +546,10 @@ class MLPipelines(MachineLearningEstimator):
             median_score = np.median(filtered_scores)
             Numbers_of_Features = indices["Number_of_Features"].unique()[0]
             Way_of_Selection = indices["Way_of_Selection"].unique()[0]
+            samples_classification_rates = np.zeros(len(self.y))
+            for test_part in indices["Samples_counts"]:
+                samples_classification_rates=np.add(samples_classification_rates,test_part)
+            samples_classification_rates /= rounds
             
             results.append(
                 {
@@ -574,6 +570,7 @@ class MLPipelines(MachineLearningEstimator):
                     else None,
                     "Numbers_of_Features": Numbers_of_Features,
                     "Way_of_Selection": Way_of_Selection,
+                    "Samples_classification_rates": samples_classification_rates.tolist(),
                 }
             )
 
@@ -584,6 +581,48 @@ class MLPipelines(MachineLearningEstimator):
 
         print(f"Finished with {len(results)} estimators")
         scores_dataframe = pd.DataFrame(results)
+        
+        # Show bad samples
+        if show_bad_samples:
+            threshold = 0.5
+            classifiers = scores_dataframe['Classifier'].unique()
+    
+            fig = go.Figure()
+            
+            for classifier in classifiers:
+                df_classifier = scores_dataframe[scores_dataframe['Classifier'] == classifier]
+                samples_classification_rates = np.array(df_classifier['Samples_classification_rates'].values[0])
+                
+                bad_samples_indices = np.where(samples_classification_rates < threshold)[0]
+                bad_samples_rates = samples_classification_rates[bad_samples_indices]
+                
+                fig.add_trace(go.Bar(
+                    x=bad_samples_indices,
+                    y=bad_samples_rates,
+                    name=f'Bad Samples for {classifier}',
+                    text=[f'{rate:.2f}' for rate in bad_samples_rates],
+                    textposition='auto'
+                ))
+            
+            # fig.add_trace(go.Scatter(
+            #     x=np.arange(len(samples_classification_rates)),
+            #     y=[threshold] * len(samples_classification_rates),
+            #     mode='lines',
+            #     name='Threshold',
+            #     line=dict(color='red', dash='dash')
+            # ))
+            
+            fig.update_layout(
+                title='Bad Samples Classification Rates for Each Classifier',
+                xaxis_title='Sample Index',
+                yaxis_title='Classification Rate',
+                legend_title='Classifiers',
+                barmode='group',
+                width=self.X.shape[0] * 10,  
+                height=500
+            )
+            
+            fig.show()
 
         # Create a 'Results' directory
         results_dir = "Results"
