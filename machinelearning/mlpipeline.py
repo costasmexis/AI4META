@@ -107,7 +107,7 @@ class MLPipelines(MachineLearningEstimator):
         test_score_threshold = k * best_train_score
 
         # Filter trials by those that are above the test score threshold and have a train score not lower than the test score
-        filtered_trials = [t for t in trials_data if (t["mean_test_score"] >= test_score_threshold) and (t["mean_train_score"] >= t["mean_test_score"])]
+        filtered_trials = [t for t in trials_data if (t["mean_train_score"] >= test_score_threshold)]
 
         # Select the trial with the smallest average gap score
         if filtered_trials:
