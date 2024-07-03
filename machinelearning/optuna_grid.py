@@ -455,7 +455,7 @@ hyper_compl = {
         "l2_leaf_reg": False,
         "iterations": True,
         "depth": True,
-        "border_count": True,
+        "n_estimators": True,
     },
     "SVC": {
         "C": True,

@@ -118,6 +118,7 @@ class MLPipelines(MachineLearningEstimator):
                 return gso_1_trial["params"]
             else:
                 return trials[0].params
+            
         elif self.config_rncv['inner_selection'] == "gso_2":
             # Sort trials by mean test score
             trials_data = sorted(
@@ -166,35 +167,88 @@ class MLPipelines(MachineLearningEstimator):
         # Find the scores that will possibly return simpler models with equally good performance
         sem_threshold = best_score - best_sem_score
         filtered_trials = [t for t in trials_data if t["value"] >= sem_threshold]
-        # print(f'filtered trials {len(filtered_trials)}')
-        def __model_complexity(params):
+        
+        if model_name in ['RandomForestClassifier','XGBClassifier','CatBoostClassifier','GradientBoostingClassifier']:
+            important_params = True
+        else:
+            important_params = False
+            
+        def __model_complexity(params, important_params=False):
             """
-            Model complexity takes into account the complex parameters of each estimator.
-            Normalizes them and finds the smallest complexity level of the filtered trials.
-            This way, the parameters have equal weights and we seak for a generally simpler model and not a model with the smallest (important) parameter.
+            Calculates the complexity of the model based on the provided parameters and important_params flag.
+
+            Parameters:
+                params (dict): A dictionary containing parameters of the model.
+                important_params (bool): A flag indicating whether to calculate complexity for important parameters only.
+
+            Returns:
+                float: The complexity of the model.
             """
             complexity = 0
+            normalized_scores = {}
             for p in constraints:
-                if p in params and p in optuna_grid["param_ranges"]:
+                if (p in params) and (p in optuna_grid["param_ranges"]):
                     min_val, max_val = optuna_grid["param_ranges"][p]
-                    # normalize the parameter value in order to equally consider each one of them
                     normalized_value = (params[p] - min_val) / (max_val - min_val)
-                    if constraints[p]:
-                        # increasing with ascending complexity parameters
-                        complexity += normalized_value
-                    else:
-                        # decreasing with ascending complexity parameters needs mirrored normalization.
-                        # smallest value -> highest complexity level.
-                        mirrored_value = 1 - params[p]
-                        complexity += mirrored_value
-            return complexity
+                    normalized_scores[p] = normalized_value if constraints[p] else 1 - normalized_value
 
-        # Find the parameters that has the minimum complexity score in the filtered trials
-        simplest_model = min(
-            filtered_trials, key=lambda x: __model_complexity(x["params"])
-        )
-        # Return the parameters of the simplest model
-        return simplest_model["params"]
+            # Calculate complexity for important parameters only if requested
+            if important_params:
+                for p in ['n_estimators', 'max_depth', 'depth']:
+                    if p in normalized_scores:
+                        complexity += normalized_scores[p]
+            else:
+                # Calculate complexity using all parameters
+                for p, score in normalized_scores.items():
+                    complexity += score
+
+            return complexity
+        
+        if filtered_trials:
+            if important_params:
+                # Calculate initial complexities for important parameters
+                important_param_complexities = [
+                    (__model_complexity(trial['params'], important_params=True), trial)
+                    for trial in filtered_trials
+                ]
+
+                # Extract complexity scores
+                important_complexity_scores = [score for score, _ in important_param_complexities]
+
+                # Calculate the standard deviation of important complexity scores
+                sigma = np.std(important_complexity_scores)
+                K = sigma / 2  # or sigma
+
+                # Determine the smallest complexity
+                min_important_complexity = min(important_complexity_scores)
+                
+                # Filter trials that are within the range of K from the minimum complexity
+                within_k_trials = [
+                    trial for score, trial in important_param_complexities
+                    if score <= min_important_complexity + K
+                ]
+
+                # Recalculate complexities using all parameters for the filtered trials
+                all_param_complexities = [
+                    (__model_complexity(trial['params'], important_params=False), trial)
+                    for trial in within_k_trials
+                ]
+
+                # Sort trials based on all parameters' complexity
+                all_param_complexities.sort(key=lambda x: x[0])
+
+                # Select the trial with the smallest complexity using all parameters
+                simplest_model = all_param_complexities[0][1]
+
+            else: 
+                # Find the parameters that has the minimum complexity score in the filtered trials
+                simplest_model = min(
+                    filtered_trials, key=lambda x: __model_complexity(x["params"], important_params)
+                )
+                # Return the parameters of the simplest model
+            return simplest_model["params"]
+        
+        else: return trials[0].params
 
     def _filter_features(self, train_index, test_index, X, y, num_feature2_use):
         """
