@@ -81,7 +81,7 @@ class MLPipelines(MachineLearningEstimator):
 
     # TODO: Complete _one_sem_model function
 
-    def _gso_1_model(self, trials, model_name):
+    def _gso_model(self, trials, model_name):
         """This function selects the 'simplest' hyperparameters for the given model."""
         # Find the attributes of the trials that are related to the constraints
         inner_cv_splits = self.config_rncv["inner_splits"]
@@ -97,24 +97,47 @@ class MLPipelines(MachineLearningEstimator):
             for t in trials
             if t.state == optuna.trial.TrialState.COMPLETE
         ]
-        trials_data = sorted(
-            trials_data, key=lambda x: (x["mean_train_score"]), reverse=True
-        )
+        
+        if self.config_rncv['inner_selection'] == "gso_1":
+            # Sort trials by mean train score
+            trials_data = sorted(
+                        trials_data, key=lambda x: (x["mean_train_score"]), reverse=True
+                    )
 
-        # Find the best train score and set a threshold
-        best_train_score = trials_data[0]["mean_train_score"]
-        k = 0.85
-        test_score_threshold = k * best_train_score
+            # Find the best train score and set a threshold
+            best_train_score = trials_data[0]["mean_train_score"]
+            k = 0.85
+            train_score_threshold = k * best_train_score
 
-        # Filter trials by those that are above the test score threshold and have a train score not lower than the test score
-        filtered_trials = [t for t in trials_data if (t["mean_train_score"] >= test_score_threshold)]
+            # Filter trials by those that are above the test score threshold and have a train score not lower than the test score
+            filtered_trials = [t for t in trials_data if (t["mean_train_score"] >= train_score_threshold)]
 
-        # Select the trial with the smallest average gap score
-        if filtered_trials:
-            gso_1_trial = min(filtered_trials, key=lambda x: np.mean(x["gap_scores"]))
-            return gso_1_trial["params"]
-        else:
-            return trials[0].params
+            # Select the trial with the smallest average gap score
+            if filtered_trials:
+                gso_1_trial = min(filtered_trials, key=lambda x: np.mean(x["gap_scores"]))
+                return gso_1_trial["params"]
+            else:
+                return trials[0].params
+        elif self.config_rncv['inner_selection'] == "gso_2":
+            # Sort trials by mean test score
+            trials_data = sorted(
+                trials_data, key=lambda x: (x["mean_test_score"]), reverse=True
+            )
+
+            # Find the best validation score and set a threshold
+            best_test_score = trials_data[0]["mean_test_score"]
+            k = 0.85
+            test_score_threshold = k * best_test_score
+
+            # Filter trials by those that are above the test score threshold and have a train score not lower than the test score
+            filtered_trials = [t for t in trials_data if (t["mean_train_score"] >= test_score_threshold)]
+
+            # Select the trial with the smallest average gap score
+            if filtered_trials:
+                gso_1_trial = min(filtered_trials, key=lambda x: np.mean(x["gap_scores"]))
+                return gso_1_trial["params"]
+            else:
+                return trials[0].params
 
     def _one_sem_model(self, trials, model_name):
         """This function selects the 'simplest' hyperparameters for the given model."""
@@ -331,9 +354,9 @@ class MLPipelines(MachineLearningEstimator):
                         if self.config_rncv["inner_selection"] == "one_sem":
                             # Find simpler parameters with the one_sem method if there are any
                             simple_model_params = self._one_sem_model(trials, self.name)
-                        elif self.config_rncv["inner_selection"] == "gso_1":
+                        elif (self.config_rncv["inner_selection"] == "gso_1") or (self.config_rncv["inner_selection"] == "gso_2"):
                             # Find parameters with the smaller gap score with gso_1 method if there are any
-                            simple_model_params = self._gso_1_model(trials, self.name)
+                            simple_model_params = self._gso_model(trials, self.name)
                         results["Hyperparameters"].append(simple_model_params)
                         # Fit the new model
                         new_params_clf = self._create_model_instance(
@@ -537,9 +560,9 @@ class MLPipelines(MachineLearningEstimator):
             raise ValueError(
                 f"Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
             )
-        if inner_selection not in ["validation_score", "one_sem", "gso_1"]:
+        if inner_selection not in ["validation_score", "one_sem", "gso_1", "gso_2"]:
             raise ValueError(
-                f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem", "gso_1"]'
+                f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem", "gso_1", "gso_2"]'
             )
 
         # Parallelization
