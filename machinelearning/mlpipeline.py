@@ -80,6 +80,42 @@ class MLPipelines(MachineLearningEstimator):
             raise ValueError(f"Unsupported model: {model_name}")
 
     # TODO: Complete _one_sem_model function
+
+    def _gso_1_model(self, trials, model_name):
+        """This function selects the 'simplest' hyperparameters for the given model."""
+        # Find the attributes of the trials that are related to the constraints
+        inner_cv_splits = self.config_rncv["inner_splits"]
+        trials_data = [
+            {
+                "params": t.params,
+                "mean_test_score":  t.user_attrs.get('mean_test_score'),
+                "mean_train_score": t.user_attrs.get('mean_train_score'),
+                "test_scores": [t.user_attrs.get(f"split{i}_test_score") for i in range(inner_cv_splits)],
+                "train_scores": [t.user_attrs.get(f"split{i}_train_score") for i in range(inner_cv_splits)],
+                "gap_scores": [np.abs(t.user_attrs.get(f"split{i}_test_score") - t.user_attrs.get(f"split{i}_train_score")) for i in range(inner_cv_splits)]
+            }
+            for t in trials
+            if t.state == optuna.trial.TrialState.COMPLETE
+        ]
+        trials_data = sorted(
+            trials_data, key=lambda x: (x["mean_train_score"]), reverse=True
+        )
+
+        # Find the best train score and set a threshold
+        best_train_score = trials_data[0]["mean_train_score"]
+        k = 0.85
+        test_score_threshold = k * best_train_score
+
+        # Filter trials by those that are above the test score threshold and have a train score not lower than the test score
+        filtered_trials = [t for t in trials_data if (t["mean_test_score"] >= test_score_threshold) and (t["mean_train_score"] >= t["mean_test_score"])]
+
+        # Select the trial with the smallest average gap score
+        if filtered_trials:
+            gso_1_trial = min(filtered_trials, key=lambda x: np.mean(x["gap_scores"]))
+            return gso_1_trial["params"]
+        else:
+            return trials[0].params
+
     def _one_sem_model(self, trials, model_name):
         """This function selects the 'simplest' hyperparameters for the given model."""
 
@@ -268,6 +304,7 @@ class MLPipelines(MachineLearningEstimator):
                         scoring=self.config_rncv["inner_scoring"],
                         param_distributions=optuna_grid[opt_grid][self.name],
                         cv=self.config_rncv["inner_cv"],
+                        return_train_score=True,
                         n_jobs=n_jobs,
                         verbose=0,
                         n_trials=self.config_rncv["n_trials_ncv"],
@@ -291,8 +328,12 @@ class MLPipelines(MachineLearningEstimator):
                         y_pred = clf.predict(X_test_selected)
                     else:
                         trials = clf.trials_
-                        # Find simpler parameters with the one_sem method if there are any
-                        simple_model_params = self._one_sem_model(trials, self.name)
+                        if self.config_rncv["inner_selection"] == "one_sem":
+                            # Find simpler parameters with the one_sem method if there are any
+                            simple_model_params = self._one_sem_model(trials, self.name)
+                        elif self.config_rncv["inner_selection"] == "gso_1":
+                            # Find parameters with the smaller gap score with gso_1 method if there are any
+                            simple_model_params = self._gso_1_model(trials, self.name)
                         results["Hyperparameters"].append(simple_model_params)
                         # Fit the new model
                         new_params_clf = self._create_model_instance(
@@ -309,6 +350,7 @@ class MLPipelines(MachineLearningEstimator):
                                     get_scorer(metric)(new_params_clf, X_test_selected, y_test)
                                 )
                         y_pred = new_params_clf.predict(X_test_selected)
+
                     # Store the results using different names if feature selection is applied
                     if num_feature == "full" or num_feature is None:
                         results["Selected_Features"].append(None)
@@ -495,9 +537,9 @@ class MLPipelines(MachineLearningEstimator):
             raise ValueError(
                 f"Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
             )
-        if inner_selection not in ["validation_score", "one_sem"]:
+        if inner_selection not in ["validation_score", "one_sem", "gso_1"]:
             raise ValueError(
-                f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem"]'
+                f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem", "gso_1"]'
             )
 
         # Parallelization
@@ -618,7 +660,7 @@ class MLPipelines(MachineLearningEstimator):
                 yaxis_title='Classification Rate',
                 legend_title='Classifiers',
                 barmode='group',
-                width=self.X.shape[0] * 10,  
+                width=self.X.shape[0] * 15,  
                 height=500
             )
             
