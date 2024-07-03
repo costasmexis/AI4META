@@ -79,22 +79,49 @@ class MachineLearningEstimator(DataLoader):
             print("There is no selected classifier.")
 
     def _set_optuna_verbosity(self, level):
-        """Adjust Optuna's verbosity level."""
+        """ Adjust Optuna's verbosity level """
         optuna.logging.set_verbosity(level)
         logging.getLogger("optuna").setLevel(level)
 
     def _preprocess(
-        self,
-        X,
-        y,
-        scoring,
-        features_names_list,
-        feat_num,
-        feat_way,
-        estimator_name,
-        normalization,
-        missing_values,
-    ):
+            self,
+            X,
+            y,
+            scoring,
+            features_names_list,
+            feat_num,
+            feat_way,
+            estimator_name,
+            normalization,
+            missing_values,
+        ):
+        """Preprocess the data before fitting the estimator.
+
+        This method performs various preprocessing steps on the input data
+        based on the provided parameters. It handles missing values, feature
+        selection, normalization, and scoring.
+
+        :param X: The input features.
+        :type X: array-like
+        :param y: The target variable.
+        :type y: array-like
+        :param scoring: The scoring metric to use for evaluation.
+        :type scoring: str
+        :param features_names_list: The list of feature names to select.
+        :type features_names_list: list or None
+        :param feat_num: The number of features to select.
+        :type feat_num: int or None
+        :param feat_way: The feature selection method.
+        :type feat_way: str or None
+        :param estimator_name: The name of the estimator to use.
+        :type estimator_name: str or None
+        :param normalization: The normalization method to use.
+        :type normalization: str or None
+        :param missing_values: The method to handle missing values.
+        :type missing_values: str or None
+        :return: The preprocessed features, target variable, and estimator.
+        :rtype: tuple
+        """
         scoring_check(scoring)
         scoring_function = getattr(metrics, scoring, None)
         scorer = make_scorer(scoring_function)
@@ -144,7 +171,40 @@ class MachineLearningEstimator(DataLoader):
         boxplot=True,
     ):
         """
-        Perform grid search to find the best hyperparameters for the estimator.
+        Perform grid search for hyperparameter tuning.
+
+        :param X: The input features, defaults to None
+        :type X: array-like, optional
+        :param y: The target variable, defaults to None
+        :type y: array-like, optional
+        :param scoring: The scoring metric to optimize, defaults to "matthews_corrcoef"
+        :type scoring: str, optional
+        :param features_names_list: The list of feature names, defaults to None
+        :type features_names_list: list, optional
+        :param cv: The number of cross-validation folds, defaults to 5
+        :type cv: int, optional
+        :param estimator_name: The name of the estimator, defaults to None
+        :type estimator_name: str, optional
+        :param evaluation: The evaluation method, defaults to "cv_simple"
+        :type evaluation: str, optional
+        :param rounds: The number of evaluation rounds, defaults to 10
+        :type rounds: int, optional
+        :param feat_num: The number of features to select, defaults to None
+        :type feat_num: int, optional
+        :param feat_way: The feature selection method, defaults to "mrmr"
+        :type feat_way: str, optional
+        :param missing_values: The method to handle missing values, defaults to "median"
+        :type missing_values: str, optional
+        :param calculate_shap: Whether to calculate SHAP values, defaults to False
+        :type calculate_shap: bool, optional
+        :param param_grid: The grid of hyperparameters to search over, defaults to None
+        :type param_grid: dict, optional
+        :param normalization: The method of feature normalization, defaults to "minmax"
+        :type normalization: str, optional
+        :param boxplot: Whether to plot evaluation results as boxplots, defaults to True
+        :type boxplot: bool, optional
+        :return: The best estimator and evaluation results
+        :rtype: tuple
         """
         scoring_check(scoring)
         self.model_selection_way = "grid_search"
@@ -160,8 +220,6 @@ class MachineLearningEstimator(DataLoader):
             normalization,
             missing_values
         )
-
-        
 
         if param_grid is None:
             self.param_grid = optuna_grid["SklearnParameterGrid"]
@@ -254,7 +312,44 @@ class MachineLearningEstimator(DataLoader):
         normalization="minmax",
         boxplot=True,
     ):
-        """Perform a random search for hyperparameter tuning."""
+        """
+        Perform a random search for hyperparameter optimization.
+
+        :param X: The input features, defaults to None.
+        :type X: array-like, optional
+        :param y: The target variable, defaults to None.
+        :type y: array-like, optional
+        :param scoring: The scoring metric to optimize, defaults to "matthews_corrcoef".
+        :type scoring: str, optional
+        :param features_names_list: The list of feature names, defaults to None.
+        :type features_names_list: list, optional
+        :param rounds: The number of rounds to perform the random search, defaults to 10.
+        :type rounds: int, optional
+        :param cv: The number of cross-validation folds, defaults to 5.
+        :type cv: int, optional
+        :param n_iter: The number of parameter settings that are sampled, defaults to 100.
+        :type n_iter: int, optional
+        :param estimator_name: The name of the estimator, defaults to None.
+        :type estimator_name: str, optional
+        :param evaluation: The evaluation method, defaults to "cv_simple".
+        :type evaluation: str, optional
+        :param feat_num: The number of features to select, defaults to None.
+        :type feat_num: int, optional
+        :param feat_way: The feature selection method, defaults to "mrmr".
+        :type feat_way: str, optional
+        :param missing_values: The method to handle missing values, defaults to "median".
+        :type missing_values: str, optional
+        :param calculate_shap: Whether to calculate SHAP values, defaults to False.
+        :type calculate_shap: bool, optional
+        :param param_grid: The parameter grid for the estimator, defaults to None.
+        :type param_grid: dict, optional
+        :param normalization: The method for feature normalization, defaults to "minmax".
+        :type normalization: str, optional
+        :param boxplot: Whether to plot boxplots of evaluation results, defaults to True.
+        :type boxplot: bool, optional
+        :return: The best estimator and evaluation results and/or shap values.
+        :rtype: tuple
+        """
 
         scoring_check(scoring)
 
@@ -365,7 +460,47 @@ class MachineLearningEstimator(DataLoader):
         param_grid=None,
         normalization="minmax",
     ):
-        """Function to perform a bayesian search"""
+        """
+        Perform a Bayesian search for hyperparameter optimization.
+
+        :param X: The input features, defaults to None.
+        :type X: array-like, optional
+        :param y: The target variable, defaults to None.
+        :type y: array-like, optional
+        :param scoring: The scoring metric to optimize, defaults to "matthews_corrcoef".
+        :type scoring: str, optional
+        :param features_names_list: The list of feature names, defaults to None.
+        :type features_names_list: list, optional
+        :param rounds: The number of rounds for cross-validation, defaults to 10.
+        :type rounds: int, optional
+        :param cv: The number of cross-validation folds, defaults to 5.
+        :type cv: int, optional
+        :param direction: The direction to optimize the scoring metric, defaults to "maximize".
+        :type direction: str, optional
+        :param n_trials: The number of trials for the Bayesian search, defaults to 100.
+        :type n_trials: int, optional
+        :param estimator_name: The name of the estimator, defaults to None.
+        :type estimator_name: str, optional
+        :param evaluation: The evaluation method, defaults to "cv_simple".
+        :type evaluation: str, optional
+        :param feat_num: The number of features to select, defaults to None.
+        :type feat_num: int, optional
+        :param feat_way: The feature selection method, defaults to "mrmr".
+        :type feat_way: str, optional
+        :param missing_values: The method to handle missing values, defaults to "median".
+        :type missing_values: str, optional
+        :param boxplot: Whether to plot the evaluation results as a boxplot, defaults to True.
+        :type boxplot: bool, optional
+        :param calculate_shap: Whether to calculate SHAP values, defaults to False.
+        :type calculate_shap: bool, optional
+        :param param_grid: The hyperparameter grid, defaults to None.
+        :type param_grid: dict, optional
+        :param normalization: The method for feature normalization, defaults to "minmax".
+        :type normalization: str, optional
+        :return: The best estimator and evaluation results and/or shap values.
+        :rtype: tuple
+
+        """
         scoring_check(scoring)
         self.model_selection_way = "bayesian_search"
         self._set_optuna_verbosity(logging.ERROR)
@@ -479,10 +614,21 @@ class MachineLearningEstimator(DataLoader):
         return shap_values
 
     def bootstrap_validation(
-        self, scoring="matthews_corrcoef", n_iter=100, test_size=0.2, boxplot=True
-    ):
-        """Perform bootstrap validation on the estimator."""
+            self, scoring="matthews_corrcoef", n_iter=100, test_size=0.2, boxplot=True
+        ):
+        """Performs bootstrap validation for model evaluation.
 
+        :param scoring: The scoring metric to evaluate the model performance. Defaults to "matthews_corrcoef".
+        :type scoring: str, optional
+        :param n_iter: The number of iterations for bootstrap validation. Defaults to 100.
+        :type n_iter: int, optional
+        :param test_size: The proportion of the dataset to include in the test split. Defaults to 0.2.
+        :type test_size: float, optional
+        :param boxplot: Whether to plot the boxplot of bootstrap scores. Defaults to True.
+        :type boxplot: bool, optional
+        :return: A list of bootstrap scores.
+        :rtype: list
+        """
         scoring_check(scoring)
 
         X_train, X_test, y_train, y_test = train_test_split(
@@ -500,8 +646,20 @@ class MachineLearningEstimator(DataLoader):
         return bootstrap_scores
 
     def _eval_boxplot(self, estimator_name, eval_df, cv, evaluation):
-        # Create a 'Results' directory
-        results_dir = "Results"
+        """
+        Generate a boxplot to visualize the model evaluation results.
+        
+        :param estimator_name: The name of the estimator.
+        :type estimator_name: str
+        :param eval_df: The evaluation dataframe containing the scores.
+        :type eval_df: pandas.DataFrame
+        :param cv: The number of cross-validation folds.
+        :type cv: int
+        :param evaluation: The evaluation method to use ("bootstrap", "cv_simple", or any other custom method).
+        :type evaluation: str
+        """
+        
+        results_dir = "results"
         if not os.path.exists(results_dir):
             os.makedirs(results_dir)
 
@@ -657,6 +815,33 @@ class MachineLearningEstimator(DataLoader):
     def evaluate(
         self, X, y, cv, evaluation, rounds, best_model, best_params, way, calculate_shap
     ):
+        """
+        Evaluate the performance of a machine learning model using cross-validation or bootstrap methods.
+
+        :param X: The input features.
+        :type X: pandas.DataFrame
+        :param y: The target variable.
+        :type y: pandas.Series
+        :param cv: The number of cross-validation folds.
+        :type cv: int
+        :param evaluation: The evaluation method to use. Must be either 'cv_simple', 'bootstrap', or 'cv_rounds'.
+        :type evaluation: str
+        :param rounds: The number of rounds for cross-validation or bootstrap evaluation.
+        :type rounds: int
+        :param best_model: The best model obtained from model selection.
+        :type best_model: object
+        :param best_params: The best hyperparameters obtained from model selection.
+        :type best_params: dict
+        :param way: The model selection method used. Only required if evaluation is 'cv_rounds' or 'cv_simple'.
+        :type way: object
+        :param calculate_shap: Whether to calculate SHAP values or not.
+        :type calculate_shap: bool
+        :raises ValueError: If cv is less than 2.
+        :raises ValueError: If evaluation method is not one of 'cv_simple', 'bootstrap', or 'cv_rounds'.
+        :return: The best model, evaluation results, and SHAP values (if calculate_shap is True).
+        :rtype: tuple
+        """
+        
         local_data_full_outer = pd.DataFrame()
         if calculate_shap:
             x_shap = np.zeros((X.shape[0], X.shape[1]))
