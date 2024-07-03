@@ -107,7 +107,7 @@ class MLPipelines(MachineLearningEstimator):
         # Find the scores that will possibly return simpler models with equally good performance
         sem_threshold = best_score - best_sem_score
         filtered_trials = [t for t in trials_data if t["value"] >= sem_threshold]
-
+        # print(f'filtered trials {len(filtered_trials)}')
         def __model_complexity(params):
             """
             Model complexity takes into account the complex parameters of each estimator.
@@ -241,6 +241,7 @@ class MLPipelines(MachineLearningEstimator):
             "Hyperparameters": [],
             "Way_of_Selection": [],
             "Estimator": [],
+            'Samples_counts': [],
         }
         if self.config_rncv["extra_metrics"] != None:
             results.update({f"{metric}": [] for metric in self.config_rncv["extra_metrics"]})
@@ -287,7 +288,7 @@ class MLPipelines(MachineLearningEstimator):
                                 results[f"{metric}"].append(
                                     get_scorer(metric)(clf, X_test_selected, y_test)
                                 )
-
+                        y_pred = clf.predict(X_test_selected)
                     else:
                         trials = clf.trials_
                         # Find simpler parameters with the one_sem method if there are any
@@ -301,11 +302,13 @@ class MLPipelines(MachineLearningEstimator):
                         results[f"Outer_{self.config_rncv['outer_scoring']}"].append(
                             new_params_clf.score(X_test_selected, y_test)
                         )
+                        
                         if self.config_rncv["extra_metrics"] != None:
                             for metric in self.config_rncv["extra_metrics"]:
                                 results[f"{metric}"].append(
                                     get_scorer(metric)(new_params_clf, X_test_selected, y_test)
                                 )
+                        y_pred = new_params_clf.predict(X_test_selected)
                     # Store the results using different names if feature selection is applied
                     if num_feature == "full" or num_feature is None:
                         results["Selected_Features"].append(None)
@@ -323,6 +326,15 @@ class MLPipelines(MachineLearningEstimator):
                         results["Way_of_Selection"].append(
                             self.config_rncv["feature_selection_type"]
                         )
+
+                    # Track predictions
+                    samples_counts = np.zeros(len(self.y))
+                    for idx, resu, pred in zip(test_index, y_test, y_pred):
+                        if pred == resu:
+                            samples_counts[idx] += 1
+
+                    results['Samples_counts'].append(samples_counts)
+
         time.sleep(1)
         return [results]
 
@@ -352,7 +364,7 @@ class MLPipelines(MachineLearningEstimator):
             " ",
             progressbar.ETA(),
         ]
-
+        
         # Find the parallelization method
         if self.config_rncv["parallel"] == "freely_parallel":
             temp_list = []
@@ -422,10 +434,12 @@ class MLPipelines(MachineLearningEstimator):
         frfs=None,
         name_add=None,
         extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1'],
+        show_bad_samples=False
     ):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
         """
+
         # Missing values manipulation
         if missing_values_method == "drop":
             print(
@@ -532,7 +546,11 @@ class MLPipelines(MachineLearningEstimator):
             median_score = np.median(filtered_scores)
             Numbers_of_Features = indices["Number_of_Features"].unique()[0]
             Way_of_Selection = indices["Way_of_Selection"].unique()[0]
-
+            samples_classification_rates = np.zeros(len(self.y))
+            for test_part in indices["Samples_counts"]:
+                samples_classification_rates=np.add(samples_classification_rates,test_part)
+            samples_classification_rates /= rounds
+            
             results.append(
                 {
                     "Estimator": df[df["Classifiers"] == classif]["Estimator"].unique()[
@@ -552,6 +570,7 @@ class MLPipelines(MachineLearningEstimator):
                     else None,
                     "Numbers_of_Features": Numbers_of_Features,
                     "Way_of_Selection": Way_of_Selection,
+                    "Samples_classification_rates": samples_classification_rates.tolist(),
                 }
             )
 
@@ -562,6 +581,48 @@ class MLPipelines(MachineLearningEstimator):
 
         print(f"Finished with {len(results)} estimators")
         scores_dataframe = pd.DataFrame(results)
+        
+        # Show bad samples
+        if show_bad_samples:
+            threshold = 0.5
+            classifiers = scores_dataframe['Classifier'].unique()
+    
+            fig = go.Figure()
+            
+            for classifier in classifiers:
+                df_classifier = scores_dataframe[scores_dataframe['Classifier'] == classifier]
+                samples_classification_rates = np.array(df_classifier['Samples_classification_rates'].values[0])
+                
+                bad_samples_indices = np.where(samples_classification_rates < threshold)[0]
+                bad_samples_rates = samples_classification_rates[bad_samples_indices]
+                
+                fig.add_trace(go.Bar(
+                    x=bad_samples_indices,
+                    y=bad_samples_rates,
+                    name=f'Bad Samples for {classifier}',
+                    text=[f'{rate:.2f}' for rate in bad_samples_rates],
+                    textposition='auto'
+                ))
+            
+            # fig.add_trace(go.Scatter(
+            #     x=np.arange(len(samples_classification_rates)),
+            #     y=[threshold] * len(samples_classification_rates),
+            #     mode='lines',
+            #     name='Threshold',
+            #     line=dict(color='red', dash='dash')
+            # ))
+            
+            fig.update_layout(
+                title='Bad Samples Classification Rates for Each Classifier',
+                xaxis_title='Sample Index',
+                yaxis_title='Classification Rate',
+                legend_title='Classifiers',
+                barmode='group',
+                width=self.X.shape[0] * 10,  
+                height=500
+            )
+            
+            fig.show()
 
         # Create a 'Results' directory
         results_dir = "Results"
@@ -689,7 +750,7 @@ class MLPipelines(MachineLearningEstimator):
                     lower, upper = bootstrap_median_ci(data)
                     fig.add_trace(
                         go.Scatter(
-                            x=[classifier, classifier],
+                            x=[f"{classifier} (Median: {median:.2f})", f"{classifier} (Median: {median:.2f})"],
                             y=[lower, upper],
                             mode="lines",
                             line=dict(color="black", dash="dash"),
