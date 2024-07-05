@@ -6,7 +6,6 @@ dependencies:
   - numpy
   - pandas
   - matplotlib 
-  - catboost=1.2.5
   - xgboost
   - scikit-learn
   - lightgbm
@@ -16,6 +15,7 @@ dependencies:
   - ipykernel
   - pip  
   - pip:
+      - catboost=1.2.5
       - streamlit
       - mrmr-selection
       - optuna
