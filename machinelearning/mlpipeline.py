@@ -140,7 +140,7 @@ class MLPipelines(MachineLearningEstimator):
             else:
                 return trials[0].params
 
-    def _one_sem_model(self, trials, model_name):
+    def _one_sem_model(self, trials, model_name, samples):
         """This function selects the 'simplest' hyperparameters for the given model."""
 
         constraints = hyper_compl[model_name]
@@ -152,6 +152,7 @@ class MLPipelines(MachineLearningEstimator):
                 "params": t.params,
                 "value": t.values[0],
                 "sem": t.user_attrs["std_test_score"] / (inner_cv_splits**0.5),
+                "train_time": t.user_attrs["mean_fit_time"],
             }
             for t in trials
             if t.state == optuna.trial.TrialState.COMPLETE
@@ -167,88 +168,51 @@ class MLPipelines(MachineLearningEstimator):
         # Find the scores that will possibly return simpler models with equally good performance
         sem_threshold = best_score - best_sem_score
         filtered_trials = [t for t in trials_data if t["value"] >= sem_threshold]
-        
-        if model_name in ['RandomForestClassifier','XGBClassifier','CatBoostClassifier','GradientBoostingClassifier']:
-            important_params = True
-        else:
-            important_params = False
-            
-        def __model_complexity(params, important_params=False):
-            """
-            Calculates the complexity of the model based on the provided parameters and important_params flag.
 
-            Parameters:
-                params (dict): A dictionary containing parameters of the model.
-                important_params (bool): A flag indicating whether to calculate complexity for important parameters only.
-
-            Returns:
-                float: The complexity of the model.
-            """
-            complexity = 0
-            normalized_scores = {}
-            for p in constraints:
-                if (p in params) and (p in optuna_grid["param_ranges"]):
-                    min_val, max_val = optuna_grid["param_ranges"][p]
-                    normalized_value = (params[p] - min_val) / (max_val - min_val)
-                    normalized_scores[p] = normalized_value if constraints[p] else 1 - normalized_value
-
-            # Calculate complexity for important parameters only if requested
-            if important_params:
-                for p in ['n_estimators', 'max_depth', 'depth']:
-                    if p in normalized_scores:
-                        complexity += normalized_scores[p]
+        def calculate_complexity(trial, model_name, samples):
+            params = trial["params"]
+            if model_name in ['RandomForestClassifier', 'XGBClassifier', 'GradientBoostingClassifier', 'LGBMClassifier']:
+                max_depth = params["max_depth"]
+                if model_name == 'RandomForestClassifier' or model_name == 'GradientBoostingClassifier':
+                    actual_depth = min((samples / params["min_samples_leaf"]), max_depth)
+                elif model_name == 'XGBClassifier':
+                    actual_depth = max_depth  # Assuming XGBClassifier does not use min_samples_leaf
+                elif model_name == 'LGBMClassifier':
+                    actual_depth = min((samples / params["min_child_samples"]), max_depth)
+                complexity = params["n_estimators"] * (2 ** (actual_depth - 1))
+            elif model_name == 'CatBoostClassifier':
+                max_depth = params["depth"]
+                actual_depth = min((samples / params["min_data_in_leaf"]), max_depth)
+                complexity = params["n_estimators"] * (2 ** (actual_depth - 1))#*params["iterations"]
+            elif model_name == 'LogisticRegression' or model_name == 'ElasticNet':
+                complexity = params["C"] * params["max_iter"]
+            elif model_name == 'SVC':
+                if params["kernel"] == 'poly':
+                    complexity = params["C"] * params["degree"]
+                else:
+                    complexity = params["C"]
+            elif model_name == 'KNeighborsClassifier':
+                complexity = params["leaf_size"]
+            elif model_name == 'LinearDiscriminantAnalysis':
+                complexity = params["shrinkage"]
+            elif model_name == 'GaussianNB':
+                complexity = params["var_smoothing"]
+            elif model_name == 'GaussianProcessClassifier':
+                complexity = params["max_iter_predict"]*params["n_restarts_optimizer"]
             else:
-                # Calculate complexity using all parameters
-                for p, score in normalized_scores.items():
-                    complexity += score
-
+                complexity = float('inf')  # If model not recognized, set high complexity
             return complexity
-        
-        if filtered_trials:
-            if important_params:
-                # Calculate initial complexities for important parameters
-                important_param_complexities = [
-                    (__model_complexity(trial['params'], important_params=True), trial)
-                    for trial in filtered_trials
-                ]
 
-                # Extract complexity scores
-                important_complexity_scores = [score for score, _ in important_param_complexities]
+        # Calculate complexity for each filtered trial
+        for trial in filtered_trials:
+            trial["complexity"] = calculate_complexity(trial, model_name, samples)
 
-                # Calculate the standard deviation of important complexity scores
-                sigma = np.std(important_complexity_scores)
-                K = sigma / 2  # or sigma
+        # Find the trial with the smallest complexity
+        shorted_trials = sorted(filtered_trials, key=lambda x: (x["complexity"], x["train_time"]))
+        best_trial = shorted_trials[0]
 
-                # Determine the smallest complexity
-                min_important_complexity = min(important_complexity_scores)
+        return best_trial["params"]
                 
-                # Filter trials that are within the range of K from the minimum complexity
-                within_k_trials = [
-                    trial for score, trial in important_param_complexities
-                    if score <= min_important_complexity + K
-                ]
-
-                # Recalculate complexities using all parameters for the filtered trials
-                all_param_complexities = [
-                    (__model_complexity(trial['params'], important_params=False), trial)
-                    for trial in within_k_trials
-                ]
-
-                # Sort trials based on all parameters' complexity
-                all_param_complexities.sort(key=lambda x: x[0])
-
-                # Select the trial with the smallest complexity using all parameters
-                simplest_model = all_param_complexities[0][1]
-
-            else: 
-                # Find the parameters that has the minimum complexity score in the filtered trials
-                simplest_model = min(
-                    filtered_trials, key=lambda x: __model_complexity(x["params"], important_params)
-                )
-                # Return the parameters of the simplest model
-            return simplest_model["params"]
-        
-        else: return trials[0].params
 
     def _filter_features(self, train_index, test_index, X, y, num_feature2_use):
         """
@@ -406,8 +370,9 @@ class MLPipelines(MachineLearningEstimator):
                     else:
                         trials = clf.trials_
                         if self.config_rncv["inner_selection"] == "one_sem":
+                            samples = X_train_selected.shape[0]
                             # Find simpler parameters with the one_sem method if there are any
-                            simple_model_params = self._one_sem_model(trials, self.name)
+                            simple_model_params = self._one_sem_model(trials, self.name, samples)
                         elif (self.config_rncv["inner_selection"] == "gso_1") or (self.config_rncv["inner_selection"] == "gso_2"):
                             # Find parameters with the smaller gap score with gso_1 method if there are any
                             simple_model_params = self._gso_model(trials, self.name)
