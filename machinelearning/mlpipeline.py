@@ -80,7 +80,67 @@ class MLPipelines(MachineLearningEstimator):
             raise ValueError(f"Unsupported model: {model_name}")
 
     # TODO: Complete _one_sem_model function
-    def _one_sem_model(self, trials, model_name):
+
+    def _gso_model(self, trials, model_name):
+        """This function selects the 'simplest' hyperparameters for the given model."""
+        # Find the attributes of the trials that are related to the constraints
+        inner_cv_splits = self.config_rncv["inner_splits"]
+        trials_data = [
+            {
+                "params": t.params,
+                "mean_test_score":  t.user_attrs.get('mean_test_score'),
+                "mean_train_score": t.user_attrs.get('mean_train_score'),
+                "test_scores": [t.user_attrs.get(f"split{i}_test_score") for i in range(inner_cv_splits)],
+                "train_scores": [t.user_attrs.get(f"split{i}_train_score") for i in range(inner_cv_splits)],
+                "gap_scores": [np.abs(t.user_attrs.get(f"split{i}_test_score") - t.user_attrs.get(f"split{i}_train_score")) for i in range(inner_cv_splits)]
+            }
+            for t in trials
+            if t.state == optuna.trial.TrialState.COMPLETE
+        ]
+        
+        if self.config_rncv['inner_selection'] == "gso_1":
+            # Sort trials by mean train score
+            trials_data = sorted(
+                        trials_data, key=lambda x: (x["mean_train_score"]), reverse=True
+                    )
+
+            # Find the best train score and set a threshold
+            best_train_score = trials_data[0]["mean_train_score"]
+            k = 0.85
+            train_score_threshold = k * best_train_score
+
+            # Filter trials by those that are above the test score threshold and have a train score not lower than the test score
+            filtered_trials = [t for t in trials_data if (t["mean_train_score"] >= train_score_threshold)]
+
+            # Select the trial with the smallest average gap score
+            if filtered_trials:
+                gso_1_trial = min(filtered_trials, key=lambda x: np.mean(x["gap_scores"]))
+                return gso_1_trial["params"]
+            else:
+                return trials[0].params
+            
+        elif self.config_rncv['inner_selection'] == "gso_2":
+            # Sort trials by mean test score
+            trials_data = sorted(
+                trials_data, key=lambda x: (x["mean_test_score"]), reverse=True
+            )
+
+            # Find the best validation score and set a threshold
+            best_test_score = trials_data[0]["mean_test_score"]
+            k = 0.85
+            test_score_threshold = k * best_test_score
+
+            # Filter trials by those that are above the test score threshold and have a train score not lower than the test score
+            filtered_trials = [t for t in trials_data if (t["mean_train_score"] >= test_score_threshold)]
+
+            # Select the trial with the smallest average gap score
+            if filtered_trials:
+                gso_1_trial = min(filtered_trials, key=lambda x: np.mean(x["gap_scores"]))
+                return gso_1_trial["params"]
+            else:
+                return trials[0].params
+
+    def _one_sem_model(self, trials, model_name, samples):
         """This function selects the 'simplest' hyperparameters for the given model."""
 
         constraints = hyper_compl[model_name]
@@ -92,6 +152,7 @@ class MLPipelines(MachineLearningEstimator):
                 "params": t.params,
                 "value": t.values[0],
                 "sem": t.user_attrs["std_test_score"] / (inner_cv_splits**0.5),
+                "train_time": t.user_attrs["mean_fit_time"],
             }
             for t in trials
             if t.state == optuna.trial.TrialState.COMPLETE
@@ -107,35 +168,51 @@ class MLPipelines(MachineLearningEstimator):
         # Find the scores that will possibly return simpler models with equally good performance
         sem_threshold = best_score - best_sem_score
         filtered_trials = [t for t in trials_data if t["value"] >= sem_threshold]
-        # print(f'filtered trials {len(filtered_trials)}')
-        def __model_complexity(params):
-            """
-            Model complexity takes into account the complex parameters of each estimator.
-            Normalizes them and finds the smallest complexity level of the filtered trials.
-            This way, the parameters have equal weights and we seak for a generally simpler model and not a model with the smallest (important) parameter.
-            """
-            complexity = 0
-            for p in constraints:
-                if p in params and p in optuna_grid["param_ranges"]:
-                    min_val, max_val = optuna_grid["param_ranges"][p]
-                    # normalize the parameter value in order to equally consider each one of them
-                    normalized_value = (params[p] - min_val) / (max_val - min_val)
-                    if constraints[p]:
-                        # increasing with ascending complexity parameters
-                        complexity += normalized_value
-                    else:
-                        # decreasing with ascending complexity parameters needs mirrored normalization.
-                        # smallest value -> highest complexity level.
-                        mirrored_value = 1 - params[p]
-                        complexity += mirrored_value
+
+        def calculate_complexity(trial, model_name, samples):
+            params = trial["params"]
+            if model_name in ['RandomForestClassifier', 'XGBClassifier', 'GradientBoostingClassifier', 'LGBMClassifier']:
+                max_depth = params["max_depth"]
+                if model_name == 'RandomForestClassifier' or model_name == 'GradientBoostingClassifier':
+                    actual_depth = min((samples / params["min_samples_leaf"]), max_depth)
+                elif model_name == 'XGBClassifier':
+                    actual_depth = max_depth  # Assuming XGBClassifier does not use min_samples_leaf
+                elif model_name == 'LGBMClassifier':
+                    actual_depth = min((samples / params["min_child_samples"]), max_depth)
+                complexity = params["n_estimators"] * (2 ** (actual_depth - 1))
+            elif model_name == 'CatBoostClassifier':
+                max_depth = params["depth"]
+                actual_depth = min((samples / params["min_data_in_leaf"]), max_depth)
+                complexity = params["n_estimators"] * (2 ** (actual_depth - 1))#*params["iterations"]
+            elif model_name == 'LogisticRegression' or model_name == 'ElasticNet':
+                complexity = params["C"] * params["max_iter"]
+            elif model_name == 'SVC':
+                if params["kernel"] == 'poly':
+                    complexity = params["C"] * params["degree"]
+                else:
+                    complexity = params["C"]
+            elif model_name == 'KNeighborsClassifier':
+                complexity = params["leaf_size"]
+            elif model_name == 'LinearDiscriminantAnalysis':
+                complexity = params["shrinkage"]
+            elif model_name == 'GaussianNB':
+                complexity = params["var_smoothing"]
+            elif model_name == 'GaussianProcessClassifier':
+                complexity = params["max_iter_predict"]*params["n_restarts_optimizer"]
+            else:
+                complexity = float('inf')  # If model not recognized, set high complexity
             return complexity
 
-        # Find the parameters that has the minimum complexity score in the filtered trials
-        simplest_model = min(
-            filtered_trials, key=lambda x: __model_complexity(x["params"])
-        )
-        # Return the parameters of the simplest model
-        return simplest_model["params"]
+        # Calculate complexity for each filtered trial
+        for trial in filtered_trials:
+            trial["complexity"] = calculate_complexity(trial, model_name, samples)
+
+        # Find the trial with the smallest complexity
+        shorted_trials = sorted(filtered_trials, key=lambda x: (x["complexity"], x["train_time"]))
+        best_trial = shorted_trials[0]
+
+        return best_trial["params"]
+                
 
     def _filter_features(self, train_index, test_index, X, y, num_feature2_use):
         """
@@ -268,6 +345,7 @@ class MLPipelines(MachineLearningEstimator):
                         scoring=self.config_rncv["inner_scoring"],
                         param_distributions=optuna_grid[opt_grid][self.name],
                         cv=self.config_rncv["inner_cv"],
+                        return_train_score=True,
                         n_jobs=n_jobs,
                         verbose=0,
                         n_trials=self.config_rncv["n_trials_ncv"],
@@ -291,8 +369,13 @@ class MLPipelines(MachineLearningEstimator):
                         y_pred = clf.predict(X_test_selected)
                     else:
                         trials = clf.trials_
-                        # Find simpler parameters with the one_sem method if there are any
-                        simple_model_params = self._one_sem_model(trials, self.name)
+                        if self.config_rncv["inner_selection"] == "one_sem":
+                            samples = X_train_selected.shape[0]
+                            # Find simpler parameters with the one_sem method if there are any
+                            simple_model_params = self._one_sem_model(trials, self.name, samples)
+                        elif (self.config_rncv["inner_selection"] == "gso_1") or (self.config_rncv["inner_selection"] == "gso_2"):
+                            # Find parameters with the smaller gap score with gso_1 method if there are any
+                            simple_model_params = self._gso_model(trials, self.name)
                         results["Hyperparameters"].append(simple_model_params)
                         # Fit the new model
                         new_params_clf = self._create_model_instance(
@@ -309,6 +392,7 @@ class MLPipelines(MachineLearningEstimator):
                                     get_scorer(metric)(new_params_clf, X_test_selected, y_test)
                                 )
                         y_pred = new_params_clf.predict(X_test_selected)
+
                     # Store the results using different names if feature selection is applied
                     if num_feature == "full" or num_feature is None:
                         results["Selected_Features"].append(None)
@@ -495,9 +579,9 @@ class MLPipelines(MachineLearningEstimator):
             raise ValueError(
                 f"Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
             )
-        if inner_selection not in ["validation_score", "one_sem"]:
+        if inner_selection not in ["validation_score", "one_sem", "gso_1", "gso_2"]:
             raise ValueError(
-                f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem"]'
+                f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem", "gso_1", "gso_2"]'
             )
 
         # Parallelization
@@ -618,7 +702,7 @@ class MLPipelines(MachineLearningEstimator):
                 yaxis_title='Classification Rate',
                 legend_title='Classifiers',
                 barmode='group',
-                width=self.X.shape[0] * 10,  
+                width=self.X.shape[0] * 15,  
                 height=500
             )
             
