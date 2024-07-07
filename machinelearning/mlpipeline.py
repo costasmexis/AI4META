@@ -497,7 +497,7 @@ class MLPipelines(MachineLearningEstimator):
 
     def nested_cv(
         self,
-        n_trials_ncv=25,
+        n_trials_ncv=100,
         rounds=10,
         exclude=None,
         freq_feat=None,
