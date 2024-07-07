@@ -736,6 +736,12 @@ class MLPipelines(MachineLearningEstimator):
                 results_dir, f"{dataset_name}_{inner_selection}_{features}"
             )
 
+        # Save the results to a CSV file of the outer scores for each classifier
+        if return_csv:
+            results_path = f"{final_dataset_name}_outerloops_results.csv"
+            scores_dataframe.to_csv(results_path, index=False)
+            print(f"Results saved to {results_path}")
+
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:
             if freq_feat == None:
@@ -878,12 +884,6 @@ class MLPipelines(MachineLearningEstimator):
             fig.show()
         else:
             pass
-
-        # Save the results to a CSV file of the outer scores for each classifier
-        if return_csv:
-            results_path = f"{final_dataset_name}_outerloops_results.csv"
-            scores_dataframe.to_csv(results_path, index=False)
-            print(f"Results saved to {results_path}")
 
         # Return the dataframe and the list of features if feature selection is applied
         if num_features is not None:
