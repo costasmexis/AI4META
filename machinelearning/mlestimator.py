@@ -629,7 +629,6 @@ class MachineLearningEstimator(DataLoader):
         :return: A list of bootstrap scores.
         :rtype: list
         """
-        scoring_check(scoring)
 
         X_train, X_test, y_train, y_test = train_test_split(
             self.X, self.y, stratify=self.y, test_size=test_size
