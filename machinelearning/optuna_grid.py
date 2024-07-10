@@ -223,7 +223,7 @@ optuna_grid = {
         ),
         "LogisticRegression": lambda trial: LogisticRegression(
             penalty=trial.suggest_categorical("penalty", [ "l2", None]),
-            solver=trial.suggest_categorical("solver", ["newton-cg", "lbfgs", "sag", "saga"]),
+            solver=trial.suggest_categorical("solver", ["newton-cg", "lbfgs", "sag", "saga","newton-cholesky"]),
             C=trial.suggest_float("C", 0.01, 1.0),
             fit_intercept=trial.suggest_categorical("fit_intercept", [True, False]),
             n_jobs=-1,
