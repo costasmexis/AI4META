@@ -770,7 +770,7 @@ class MLPipelines(MachineLearningEstimator):
                 features, counts = zip(*sorted_features_counts[:freq_feat])
                 counts = [x / len(clfs) for x in counts]
                 print(f"Selected {freq_feat} features")
-                max_width = 100 #Image size must be less than 2^16 in each direction.
+                max_width = 1000 #Image size must be less than 2^16 in each direction.
                 plt.figure(figsize=(min(max(10, freq_feat // 3), max_width), 10))
                 bars = plt.bar(features, counts, color="skyblue", tick_label=features)
                 plt.xlabel("Features")
