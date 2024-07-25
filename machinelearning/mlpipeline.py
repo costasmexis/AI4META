@@ -53,29 +53,65 @@ class MLPipelines(MachineLearningEstimator):
         It is used in order to prevent fittinf of an already fitted model from previous runs"""
 
         if model_name == "RandomForestClassifier":
-            return RandomForestClassifier(**params)
+            if params == None:
+                return RandomForestClassifier()
+            else:
+                return RandomForestClassifier(**params)
         elif model_name == "LogisticRegression":
-            return LogisticRegression(**params)
+            if params == None:
+                return LogisticRegression()
+            else:
+                return LogisticRegression(**params)
         elif model_name == "XGBClassifier":
-            return XGBClassifier(**params)
+            if params == None:
+                return XGBClassifier()
+            else:
+                return XGBClassifier(**params)
         elif model_name == "LGBMClassifier":
-            return LGBMClassifier(**params)
+            if params == None:
+                return LGBMClassifier(verbose=-1)
+            else:
+                return LGBMClassifier(**params)
         elif model_name == "CatBoostClassifier":
-            return CatBoostClassifier(**params)
+            if params == None:
+                return CatBoostClassifier(verbose=0)
+            else:
+                return CatBoostClassifier(**params)
         elif model_name == "SVC":
-            return SVC(**params)
+            if params == None:
+                return SVC()
+            else:
+                return SVC(**params)
         elif model_name == "KNeighborsClassifier":
-            return KNeighborsClassifier(**params)
+            if params == None:
+                return KNeighborsClassifier()
+            else:
+                return KNeighborsClassifier(**params)
         elif model_name == "LinearDiscriminantAnalysis":
-            return LinearDiscriminantAnalysis(**params)
+            if params == None:
+                return LinearDiscriminantAnalysis()
+            else:
+                return LinearDiscriminantAnalysis(**params)
         elif model_name == "GaussianNB":
-            return GaussianNB(**params)
+            if params == None:
+                return GaussianNB()
+            else:
+                return GaussianNB(**params)
         elif model_name == "GradientBoostingClassifier":
-            return GradientBoostingClassifier(**params)
+            if params == None:
+                return GradientBoostingClassifier()
+            else:
+                return GradientBoostingClassifier(**params)
         elif model_name == "GaussianProcessClassifier":
-            return GaussianProcessClassifier(**params)
+            if params == None:
+                return GaussianProcessClassifier()
+            else:
+                return GaussianProcessClassifier(**params)
         elif model_name == "ElasticNet":
-            return LogisticRegression(**params)
+            if params == None:
+                return LogisticRegression(penalty="elasticnet", solver="saga", l1_ratio=0.5)
+            else:
+                return LogisticRegression(**params)
         else:
             raise ValueError(f"Unsupported model: {model_name}")
 
@@ -242,13 +278,378 @@ class MLPipelines(MachineLearningEstimator):
             simple_model = filtered_trials[0]
 
             return simple_model["params"]
-                
+          
 
-    def _filter_features(self, train_index, test_index, X, y, num_feature2_use):
+    def _cv_loop(self, i, avail_thr):
+        start = time.time()  # Count time of outer loops
+        
+        # Split the data into train and test
+        self.config_rcv["cv_splits"] = StratifiedKFold(
+            n_splits=self.config_rcv["splits"], shuffle=True, random_state=i
+        )
+
+        train_test_indices = list(self.config_rcv["cv_splits"].split(self.X, self.y))
+
+        # Store the results in a list od dataframes
+        list_dfs = []
+
+        # Initiate the progress bar
+        widgets = [
+            progressbar.Percentage(),
+            " ",
+            progressbar.GranularBar(),
+            " ",
+            progressbar.Timer(),
+            " ",
+            progressbar.ETA(),
+        ]
+
+        temp_list = []
+        with progressbar.ProgressBar(
+            prefix=f"Round {i+1} of CV:",
+            max_value=self.config_rcv["splits"],
+            widgets=widgets,
+        ) as bar:
+            split_index = 0
+
+            # For each outer fold perform
+            for train_index, test_index in train_test_indices:
+
+                # Checks for reliability of parameters
+                if isinstance(self.config_rcv["num_features"], int):
+                    feature_loop = [self.config_rcv["num_features"]]
+                elif isinstance(self.config_rcv["num_features"], list):
+                    feature_loop = self.config_rcv["num_features"]
+                elif self.config_rcv["num_features"] is None:
+                    feature_loop = [self.X.shape[1]]
+                else:
+                    raise ValueError("num_features must be an integer or a list or None")
+
+                # Initialize variables
+                results = {
+                    f"Main_{self.config_rcv['scoring']}": [],
+                    "Classifiers": [],
+                    "Selected_Features": [],
+                    "Number_of_Features": [],
+                    "Way_of_Selection": [],
+                    "Estimator": [],
+                    'Samples_counts': [],
+                }
+                if self.config_rcv["extra_metrics"] != None:
+                    results.update({f"{metric}": [] for metric in self.config_rcv["extra_metrics"]})
+
+                # Fold over the number of features
+                for num_feature2_use in feature_loop:
+                    X_train_selected, X_test_selected, num_feature = self._filter_features(
+                        train_index, test_index, self.X, self.y, num_feature2_use, cvncvsel='rcv'
+                    )
+                    y_train, y_test = self.y[train_index], self.y[test_index]
+
+                    # Check of the classifiers given list
+                    if self.config_rcv["clfs"] is None:
+                        raise ValueError("No classifier specified.")
+                    else:
+                        for estimator in self.config_rcv["clfs"]:
+                            # For every estimator find the best hyperparameteres
+                            self.name = estimator
+                            self.estimator = self.available_clfs[estimator]
+                            clf = self._create_model_instance(
+                                    self.name, params=None
+                                )
+                            clf.fit(X_train_selected, y_train)
+                            
+                            # Store the results and apply one_sem method if its selected
+                            results["Estimator"].append(self.name)
+                            results[f"Main_{self.config_rcv['scoring']}"].append(
+                                clf.score(X_test_selected, y_test)
+                            )
+                            if self.config_rcv["extra_metrics"] != None:
+                                for metric in self.config_rcv["extra_metrics"]:
+                                    results[f"{metric}"].append(
+                                        get_scorer(metric)(clf, X_test_selected, y_test)
+                                    )
+                            y_pred = clf.predict(X_test_selected)
+
+                            # Store the results using different names if feature selection is applied
+                            if num_feature == "full" or num_feature is None:
+                                results["Selected_Features"].append(None)
+                                results["Number_of_Features"].append(X_test_selected.shape[1])
+                                results["Way_of_Selection"].append("full")
+                                results["Classifiers"].append(f"{self.name}")
+                            else:
+                                results["Classifiers"].append(
+                                    f"{self.name}_{self.config_rncv['feature_selection_type']}_{num_feature}"
+                                )
+                                results["Selected_Features"].append(
+                                    X_train_selected.columns.tolist()
+                                )
+                                results["Number_of_Features"].append(num_feature)
+                                results["Way_of_Selection"].append(
+                                    self.config_rcv["feature_selection_type"]
+                                )
+
+                            # Track predictions
+                            samples_counts = np.zeros(len(self.y))
+                            for idx, resu, pred in zip(test_index, y_test, y_pred):
+                                if pred == resu:
+                                    samples_counts[idx] += 1
+
+                            results['Samples_counts'].append(samples_counts)
+
+                temp_list.append([results])
+                bar.update(split_index)
+                split_index += 1
+                time.sleep(1)
+
+            list_dfs = [item for sublist in temp_list for item in sublist]
+            end = time.time()
+
+        # Return the list of dataframes and the time fold
+        print(f"Finished with {i+1} round after {(end-start)/3600:.2f} hours.")
+        return list_dfs 
+
+    def rcv_accel(        
+        self,
+        rounds=10,
+        exclude=None,
+        search_on=None,
+        num_features=None,
+        feature_selection_type="mrmr",
+        return_csv=True,
+        feature_selection_method="chi2",
+        plot="box",
+        scoring="matthews_corrcoef",
+        splits=5,
+        normalization="minmax",
+        missing_values_method="median",
+        name_add=None,
+        extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1'],
+    ):
+        # Missing values manipulation
+        if missing_values_method == "drop":
+            print(
+                "Values cannot be dropped at ncv because of inconsistent shapes. \nThe missing values with automaticly replaced by the median of each feature."
+            )
+            missing_values_method = "median"
+        if self.X.isnull().values.any():
+            print(
+                f"Your Dataset contains NaN values. Some estimators does not work with NaN values.\nThe {missing_values_method} method will be used for the missing values manipulation.\n"
+            )
+        if extra_metrics is not None:
+            if type(extra_metrics) is not list:
+                extra_metrics = [extra_metrics]
+            for metric in extra_metrics:
+                scoring_check(metric)
+            print('All the extra metrics are valid.')
+
+        # Set parameters for the nested functions of the cv process
+        self.config_rcv = locals()
+        self.config_rcv.pop("self", None)
+
+        if num_features is not None:
+            print(
+                f"The num_features parameter is {num_features}.\nThe result will be a Dataframe and a List with the freq_feat number of the most important features.\nIf the freq_feat is None, the result will be a List with all features."
+            )
+
+        # Set available classifiers
+        if exclude is not None:
+            exclude_classes = (
+                exclude  # 'exclude' is a list of classifier names as strings
+            )
+        elif search_on is not None:
+            classes = search_on  # 'search_on' is a list of classifier names as strings
+            exclude_classes = [
+                clf for clf in self.available_clfs.keys() if clf not in classes
+            ]
+        else:
+            exclude_classes = []
+
+        # Filter classifiers based on the exclude_classes list
+        clfs = [clf for clf in self.available_clfs.keys() if clf not in exclude_classes]
+        self.config_rcv["clfs"] = clfs
+
+        # Checks for reliability of parameters
+        if scoring not in sklearn.metrics.get_scorer_names():
+            raise ValueError(
+                f"Invalid outer scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
+            )
+        
+        # Parallelization
+        trial_indices = range(rounds)
+        num_cores = multiprocessing.cpu_count()
+        if num_cores < rounds:
+            use_cores = num_cores
+        else:
+            use_cores = rounds
+        avail_thr = max(1, num_cores // rounds)
+
+        with threadpool_limits():
+            list_dfs = Parallel(n_jobs=use_cores,verbose=0)(
+                delayed(self._cv_loop)(i,avail_thr) for i in trial_indices
+            )
+
+        list_dfs_flat = list(chain.from_iterable(list_dfs))
+
+        # Create results dataframe
+        results = []
+        df = pd.DataFrame()
+
+        for item in list_dfs_flat:
+            dataframe = pd.DataFrame(item)
+            df = pd.concat([df, dataframe], axis=0)
+
+        for classif in np.unique(df["Classifiers"]):
+            indices = df[df["Classifiers"] == classif]
+            filtered_scores = indices[f"Main_{self.config_rcv['scoring']}"].values
+            if num_features is not None:
+                filtered_features = indices["Selected_Features"].values
+            mean_score = np.mean(filtered_scores)
+            max_score = np.max(filtered_scores)
+            std_score = np.std(filtered_scores)
+            sem_score = sem(filtered_scores)
+            median_score = np.median(filtered_scores)
+            Numbers_of_Features = indices["Number_of_Features"].unique()[0]
+            Way_of_Selection = indices["Way_of_Selection"].unique()[0]
+            samples_classification_rates = np.zeros(len(self.y))
+            for test_part in indices["Samples_counts"]:
+                samples_classification_rates=np.add(samples_classification_rates,test_part)
+            samples_classification_rates /= rounds
+            
+            results.append(
+                {
+                    "Estimator": df[df["Classifiers"] == classif]["Estimator"].unique()[
+                        0
+                    ],
+                    "Classifier": classif,
+                    f"Main_{self.config_rcv['scoring']}": filtered_scores.tolist(),
+                    "Max": max_score,
+                    "Std": std_score,
+                    "SEM": sem_score,
+                    "Median": median_score,
+                    "Hyperparameters": "Default",
+                    "Selected_Features": filtered_features
+                    if num_features is not None
+                    else None,
+                    "Numbers_of_Features": Numbers_of_Features,
+                    "Way_of_Selection": Way_of_Selection,
+                    "Samples_classification_rates": samples_classification_rates.tolist(),
+                }
+            )
+
+            # Add extra metrics
+            if extra_metrics is not None:
+                for metric in extra_metrics:
+                    results[-1][f"{metric}"] = indices[f"{metric}"].values
+
+        print(f"Finished with {len(results)} estimators")
+        scores_dataframe = pd.DataFrame(results)
+
+        # Create a 'Results' directory
+        results_dir = "Results"
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+
+        # Initiate name
+        if num_features is not None:
+            features = num_features
+        else:
+            features = "all_features"
+
+        try:
+            dataset_name = self._set_result_csv_name(self.csv_dir)
+            if name_add is None:
+                results_name = f"{dataset_name}_{'validation_score'}_{features}"
+            else:
+                results_name = f"{dataset_name}_{'validation_score'}_{features}_{name_add}"
+            final_dataset_name = os.path.join(results_dir, results_name)
+        except Exception as e:
+            dataset_name = "dataset"
+            if name_add is None:
+                results_name = f"{dataset_name}_{'validation_score'}_{features}"
+            else:
+                results_name = f"{dataset_name}_{'validation_score'}_{features}_{name_add}"
+            final_dataset_name = os.path.join(
+                results_dir, f"{dataset_name}_{'validation_score'}_{features}"
+            )
+
+        # Save the results to a CSV file of the outer scores for each classifier
+        if return_csv:
+            results_path = f"{final_dataset_name}_outerloops_results.csv"
+            scores_dataframe.to_csv(results_path, index=False)
+            print(f"Results saved to {results_path}")
+
+        # Plot box or violin plots of the outer cross-validation scores
+        if plot is not None:
+            scores_long = scores_dataframe.explode(f"Main_{self.config_rcv['scoring']}")
+            scores_long[f"Main_{self.config_rcv['scoring']}"] = scores_long[f"Main_{self.config_rcv['scoring']}"].astype(float)
+
+            fig = go.Figure()
+            if plot == "box":
+                # Add box plots for each classifier
+                for classifier in scores_dataframe["Classifier"]:
+                    data = scores_long[scores_long["Classifier"] == classifier][
+                        f"Main_{self.config_rcv['scoring']}"
+                    ]
+                    median = np.median(data)
+                    fig.add_trace(
+                        go.Box(
+                            y=data,
+                            name=f"{classifier} (Median: {median:.2f})",
+                            boxpoints="all",
+                            jitter=0.3,
+                            pointpos=-1.8,
+                        )
+                    )
+
+            elif plot == "violin":
+                for classifier in scores_dataframe["Classifier"]:
+                    data = scores_long[scores_long["Classifier"] == classifier][
+                        f"Main_{self.config_rcv['scoring']}"
+                    ]
+                    median = np.median(data)
+                    fig.add_trace(
+                        go.Violin(
+                            y=data,
+                            name=f"{classifier} (Median: {median:.2f})",
+                            box_visible=False,
+                            points="all",
+                            jitter=0.3,
+                            pointpos=-1.8,
+                        )
+                    )
+
+            else:
+                raise ValueError(
+                    f'The "{plot}" is not a valid option for plotting. Choose between "box" or "violin".'
+                )
+
+            # Update layout for better readability
+            fig.update_layout(
+                title="Model Selection Results",
+                yaxis_title=f"Scores {self.config_rcv['scoring']}",
+                xaxis_title="Classifier",
+                xaxis_tickangle=-45,
+                template="plotly_white",
+            )
+            # Save the figure as an image in the "Results" directory
+            image_path = f"{final_dataset_name}_model_selection_plot.png"
+            fig.write_image(image_path)
+            fig.show()
+        else:
+            pass
+
+        return scores_dataframe
+
+
+    def _filter_features(self, train_index, test_index, X, y, num_feature2_use, cvncvsel):
         """
         This function filters the features using the selected model.
         """
-
+        if cvncvsel == "rcv":
+            config = self.config_rcv
+        else:
+            config = self.config_rncv
+        
         # Find the train and test sets
         X_tr, X_te = X.iloc[train_index], X.iloc[test_index]
         y_train, _ = y[train_index], y[test_index]
@@ -257,27 +658,27 @@ class MLPipelines(MachineLearningEstimator):
             X=X_tr,
             train_test_set=True,
             X_test=X_te,
-            method=self.config_rncv["normalization"],
+            method=config["normalization"],
         )
 
         # Manipulate the missing values for both train and test sets
         X_train = self.missing_values(
-            data=X_train, method=self.config_rncv["missing_values_method"]
+            data=X_train, method=config["missing_values_method"]
         )
         X_test = self.missing_values(
-            data=X_test, method=self.config_rncv["missing_values_method"]
+            data=X_test, method=config["missing_values_method"]
         )
 
         # Find the feature selection type and apply it to the train and test sets
-        if self.config_rncv["feature_selection_type"] != "percentile":
+        if config["feature_selection_type"] != "percentile":
             if isinstance(num_feature2_use, int):
                 if num_feature2_use < X_train.shape[1]:
                     self.selected_features = self.feature_selection(
                         X=X_train,
                         y=y_train,
-                        method=self.config_rncv["feature_selection_type"],
+                        method=config["feature_selection_type"],
                         num_features=num_feature2_use,
-                        inner_method=self.config_rncv["feature_selection_method"],
+                        inner_method=config["feature_selection_method"],
                     )
                     X_train_selected = X_train[self.selected_features]
                     X_test_selected = X_test[self.selected_features]
@@ -290,7 +691,7 @@ class MLPipelines(MachineLearningEstimator):
                     raise ValueError(
                         "num_features must be an integer less than the number of features in the dataset"
                     )
-        elif self.config_rncv["feature_selection_type"] == "percentile":
+        elif config["feature_selection_type"] == "percentile":
             if isinstance(num_feature2_use, int):
                 if (
                     num_feature2_use == 100 or num_feature2_use == self.X.shape[1]
@@ -302,8 +703,8 @@ class MLPipelines(MachineLearningEstimator):
                     self.selected_features = self.feature_selection(
                         X=X_train,
                         y=y_train,
-                        method=self.config_rncv["feature_selection_type"],
-                        inner_method=self.config_rncv["feature_selection_method"],
+                        method=config["feature_selection_type"],
+                        inner_method=config["feature_selection_method"],
                         num_features=num_feature2_use,
                     )
                     X_train_selected = X_train[self.selected_features]
@@ -356,7 +757,7 @@ class MLPipelines(MachineLearningEstimator):
         # Loop over the number of features
         for num_feature2_use in feature_loop:
             X_train_selected, X_test_selected, num_feature = self._filter_features(
-                train_index, test_index, X, y, num_feature2_use
+                train_index, test_index, X, y, num_feature2_use, cvncvsel='rncv'
             )
             y_train, y_test = y[train_index], y[test_index]
 
