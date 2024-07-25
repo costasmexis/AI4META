@@ -368,6 +368,12 @@ class MLPipelines(MachineLearningEstimator):
                     # For every estimator find the best hyperparameteres
                     self.name = estimator
                     self.estimator = self.available_clfs[estimator]
+                    
+                    if "n_jobs" in optuna_grid["NestedCV"][self.name]:
+                        if (self.config_rncv["parallel"] == "freely_parallel") and (avail_thr > 1):
+                            optuna_grid["NestedCV"][self.name]["n_jobs"] = optuna.distributions.CategoricalDistribution([avail_thr])
+                        else:
+                            optuna_grid["NestedCV"][self.name]["n_jobs"] = optuna.distributions.CategoricalDistribution([1])
 
                     self._set_optuna_verbosity(logging.ERROR)
                     clf = optuna.integration.OptunaSearchCV(
