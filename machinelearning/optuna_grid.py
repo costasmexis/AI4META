@@ -387,48 +387,53 @@ optuna_grid = {
 # hyper_coml will be used for one-sem calculations
 hyper_compl = {
     "RandomForestClassifier": {
+        "max_depth": True,
         "n_estimators": True,
         "min_samples_leaf": False,
-        "max_depth": True,
     },
     "LogisticRegression": {
         "C": True,
         "max_iter": True
     },
     "XGBClassifier": {
-        "n_estimators": True,
         "max_depth": True,
+        "n_estimators": True,
+        "learning_rate": False
     },
     "LGBMClassifier": {
-        "n_estimators": True,
-        "min_child_samples": False,
         "max_depth": True,
+        "n_estimators": True,
+        'min_child_samples': False,
+        'learning_rate': True,
     },
     "CatBoostClassifier": {
+        'depth': True,
+        'n_estimators': True,
         "min_data_in_leaf": False,
-        "depth": True,
-        "n_estimators": True,
+        'learning_rate': False,
     },
     "SVC": {
         "C": True,
-        "degree": True, # if kernel == 'poly'
     },
     "KNeighborsClassifier": {
         "leaf_size": True,
+        'n_neighbors': True,
     },
-    "LinearDiscriminantAnalysis": {"shrinkage": True},
+    "LinearDiscriminantAnalysis": {"shrinkage": True,
+                                   'tol': False},
     "GaussianNB": {"var_smoothing": True},
     "GradientBoostingClassifier": {
+        "max_depth": True,
         "n_estimators": True,
         "min_samples_leaf": False,
-        "max_depth": True,
+        
     },
     "GaussianProcessClassifier": {
-        "max_iter_predict": True,
         "n_restarts_optimizer": True,
+        "max_iter_predict": True,
     },
     "ElasticNet": {
         "C": True,
         "max_iter": True
-        },
+        }
 }

@@ -168,50 +168,80 @@ class MLPipelines(MachineLearningEstimator):
         # Find the scores that will possibly return simpler models with equally good performance
         sem_threshold = best_score - best_sem_score
         filtered_trials = [t for t in trials_data if t["value"] >= sem_threshold]
-
-        def calculate_complexity(trial, model_name, samples):
-            params = trial["params"]
-            if model_name in ['RandomForestClassifier', 'XGBClassifier', 'GradientBoostingClassifier', 'LGBMClassifier']:
-                max_depth = params["max_depth"]
-                if model_name == 'RandomForestClassifier' or model_name == 'GradientBoostingClassifier':
-                    actual_depth = min((samples / params["min_samples_leaf"]), max_depth)
-                elif model_name == 'XGBClassifier':
-                    actual_depth = max_depth  # Assuming XGBClassifier does not use min_samples_leaf
-                elif model_name == 'LGBMClassifier':
-                    actual_depth = min((samples / params["min_child_samples"]), max_depth)
-                complexity = params["n_estimators"] * (2 ** (actual_depth - 1))
-            elif model_name == 'CatBoostClassifier':
-                max_depth = params["depth"]
-                actual_depth = min((samples / params["min_data_in_leaf"]), max_depth)
-                complexity = params["n_estimators"] * (2 ** (actual_depth - 1))#*params["iterations"]
-            elif model_name == 'LogisticRegression' or model_name == 'ElasticNet':
-                complexity = params["C"] * params["max_iter"]
-            elif model_name == 'SVC':
-                if params["kernel"] == 'poly':
-                    complexity = params["C"] * params["degree"]
+        if self.config_rncv['inner_selection'] == "one_sem":
+            def calculate_complexity(trial, model_name, samples):
+                params = trial["params"]
+                if model_name in ['RandomForestClassifier', 'XGBClassifier', 'GradientBoostingClassifier', 'LGBMClassifier']:
+                    max_depth = params["max_depth"]
+                    if model_name == 'RandomForestClassifier' or model_name == 'GradientBoostingClassifier':
+                        actual_depth = min((samples / params["min_samples_leaf"]), max_depth)
+                    elif model_name == 'XGBClassifier':
+                        actual_depth = max_depth  # Assuming XGBClassifier does not use min_samples_leaf
+                    elif model_name == 'LGBMClassifier':
+                        actual_depth = min((samples / params["min_child_samples"]), max_depth)
+                    complexity = params["n_estimators"] * (2 ** (actual_depth - 1))
+                elif model_name == 'CatBoostClassifier':
+                    max_depth = params["depth"]
+                    actual_depth = min((samples / params["min_data_in_leaf"]), max_depth)
+                    complexity = params["n_estimators"] * (2 ** (actual_depth - 1))#*params["iterations"]
+                elif model_name == 'LogisticRegression' or model_name == 'ElasticNet':
+                    complexity = params["C"] * params["max_iter"]
+                elif model_name == 'SVC':
+                    if params["kernel"] == 'poly':
+                        complexity = params["C"] * params["degree"]
+                    else:
+                        complexity = params["C"]
+                elif model_name == 'KNeighborsClassifier':
+                    complexity = params["leaf_size"]
+                elif model_name == 'LinearDiscriminantAnalysis':
+                    complexity = params["shrinkage"]
+                elif model_name == 'GaussianNB':
+                    complexity = params["var_smoothing"]
+                elif model_name == 'GaussianProcessClassifier':
+                    complexity = params["max_iter_predict"]*params["n_restarts_optimizer"]
                 else:
-                    complexity = params["C"]
-            elif model_name == 'KNeighborsClassifier':
-                complexity = params["leaf_size"]
-            elif model_name == 'LinearDiscriminantAnalysis':
-                complexity = params["shrinkage"]
-            elif model_name == 'GaussianNB':
-                complexity = params["var_smoothing"]
-            elif model_name == 'GaussianProcessClassifier':
-                complexity = params["max_iter_predict"]*params["n_restarts_optimizer"]
-            else:
-                complexity = float('inf')  # If model not recognized, set high complexity
-            return complexity
+                    complexity = float('inf')  # If model not recognized, set high complexity
+                return complexity
 
-        # Calculate complexity for each filtered trial
-        for trial in filtered_trials:
-            trial["complexity"] = calculate_complexity(trial, model_name, samples)
+            # Calculate complexity for each filtered trial
+            for trial in filtered_trials:
+                trial["complexity"] = calculate_complexity(trial, model_name, samples)
 
-        # Find the trial with the smallest complexity
-        shorted_trials = sorted(filtered_trials, key=lambda x: (x["complexity"], x["train_time"]))
-        best_trial = shorted_trials[0]
+            # Find the trial with the smallest complexity
+            shorted_trials = sorted(filtered_trials, key=lambda x: (x["complexity"], x["train_time"]))
+            best_trial = shorted_trials[0]
 
-        return best_trial["params"]
+            return best_trial["params"]
+        else:
+            # Retrieve the hyperparameter priorities for the given model type
+            hyperparams = hyper_compl[model_name]
+
+            # Iterate over the hyperparameters and their sorting orders
+            for hyper, order in hyperparams.items():
+                # Sort the models based on the current hyperparameter
+                sorted_dict = sorted(filtered_trials, key=lambda x: x['params'][hyper], reverse=not order)
+
+                # Get the best value for the current hyperparameter from the sorted list
+                best_value = sorted_dict[0]['params'][hyper]
+
+                # Find all models with the best value for the current hyperparameter
+                models_with_same_hyper = []
+                for model in sorted_dict:
+                    if model['params'][hyper] == best_value:
+                        models_with_same_hyper.append(model)
+
+                # If there is only one model with the best hyperparameter value, return it
+                if len(models_with_same_hyper) == 1:
+                    filtered_trials = [models_with_same_hyper[0]].copy()
+                    break
+                else:
+                    # Otherwise, update all_models to only include models with the best hyperparameter value
+                    filtered_trials = models_with_same_hyper.copy()
+
+            # If multiple models have the same best hyperparameter values, return the first one
+            simple_model = filtered_trials[0]
+
+            return simple_model["params"]
                 
 
     def _filter_features(self, train_index, test_index, X, y, num_feature2_use):
@@ -369,7 +399,7 @@ class MLPipelines(MachineLearningEstimator):
                         y_pred = clf.predict(X_test_selected)
                     else:
                         trials = clf.trials_
-                        if self.config_rncv["inner_selection"] == "one_sem":
+                        if (self.config_rncv["inner_selection"] == "one_sem") or (self.config_rncv["inner_selection"] == "one_sem_grd"):
                             samples = X_train_selected.shape[0]
                             # Find simpler parameters with the one_sem method if there are any
                             simple_model_params = self._one_sem_model(trials, self.name, samples)
@@ -579,7 +609,7 @@ class MLPipelines(MachineLearningEstimator):
             raise ValueError(
                 f"Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
             )
-        if inner_selection not in ["validation_score", "one_sem", "gso_1", "gso_2"]:
+        if inner_selection not in ["validation_score", "one_sem", "gso_1", "gso_2","one_sem_grd"]:
             raise ValueError(
                 f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem", "gso_1", "gso_2"]'
             )
