@@ -558,19 +558,18 @@ class MLPipelines(MachineLearningEstimator):
         try:
             dataset_name = self._set_result_csv_name(self.csv_dir)
             if name_add is None:
-                results_name = f"{dataset_name}_{'validation_score'}_{features}"
+                results_name = f"{dataset_name}_{'validation_score'}_{features}_RCV"
             else:
-                results_name = f"{dataset_name}_{'validation_score'}_{features}_{name_add}"
+                results_name = f"{dataset_name}_{'validation_score'}_{features}_{name_add}_RCV"
             final_dataset_name = os.path.join(results_dir, results_name)
         except Exception as e:
             dataset_name = "dataset"
             if name_add is None:
-                results_name = f"{dataset_name}_{'validation_score'}_{features}"
+                results_name = f"{dataset_name}_{'validation_score'}_{features}_RCV"
             else:
-                results_name = f"{dataset_name}_{'validation_score'}_{features}_{name_add}"
+                results_name = f"{dataset_name}_{'validation_score'}_{features}_{name_add}_RCV"
             final_dataset_name = os.path.join(
-                results_dir, f"{dataset_name}_{'validation_score'}_{features}"
-            )
+                results_dir, results_name)
 
         # Save the results to a CSV file of the outer scores for each classifier
         if return_csv:
@@ -1089,6 +1088,7 @@ class MLPipelines(MachineLearningEstimator):
                     "Selected_Features": filtered_features
                     if num_features is not None
                     else None,
+                    "Inner_Selection":inner_selection,
                     "Numbers_of_Features": Numbers_of_Features,
                     "Way_of_Selection": Way_of_Selection,
                     "Samples_classification_rates": samples_classification_rates.tolist(),
