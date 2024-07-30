@@ -123,8 +123,11 @@ class MachineLearningEstimator(DataLoader):
         :rtype: tuple
         """
         scoring_check(scoring)
-        scoring_function = getattr(metrics, scoring, None)
-        scorer = make_scorer(scoring_function)
+        # scoring_function = getattr(metrics, scoring)
+        scorer = metrics.get_scorer(scoring)
+
+        # print(f"Scoring function: {scoring_function}")
+        # scorer = make_scorer(scoring_function)
 
         self.scoring = scorer
 
@@ -206,7 +209,7 @@ class MachineLearningEstimator(DataLoader):
         :return: The best estimator and evaluation results
         :rtype: tuple
         """
-        scoring_check(scoring)
+        # scoring_check(scoring)
         self.model_selection_way = "grid_search"
 
         X, y, estimator = self._preprocess(
@@ -351,7 +354,7 @@ class MachineLearningEstimator(DataLoader):
         :rtype: tuple
         """
 
-        scoring_check(scoring)
+        # scoring_check(scoring)
 
         self.model_selection_way = "random_search"
 
@@ -501,7 +504,7 @@ class MachineLearningEstimator(DataLoader):
         :rtype: tuple
 
         """
-        scoring_check(scoring)
+        # scoring_check(scoring)
         self.model_selection_way = "bayesian_search"
         self._set_optuna_verbosity(logging.ERROR)
 

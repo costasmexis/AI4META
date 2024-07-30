@@ -141,6 +141,8 @@ class DataExplorer(DataLoader):
             num_of_best_features=None,
             way_of_selection="mrmr",
             normalize=False,
+            stat_test="kstest",
+            show_box=True
         ) -> list:
             """
             Perform non-parametric statistical tests to identify significant features based on labels,
@@ -157,17 +159,20 @@ class DataExplorer(DataLoader):
             :param list_of_feature: List of features to consider for the statistical tests.
                                     If None, all features in the dataset are used. Defaults to None. (list, optional)
             :param num_of_best_features: Number of top features to select based on the specified
-                                         feature selection method. If None, no feature selection is applied. Defaults to None. (int, optional)
+                                        feature selection method. If None, no feature selection is applied. Defaults to None. (int, optional)
             :param way_of_selection: Feature selection method to use when num_of_best_features is specified.
-                                     Supported values are 'mrmr' and others as implemented in the feature_selection method.
-                                     Defaults to 'mrmr'. (str)
+                                    Supported values are 'mrmr' and others as implemented in the feature_selection method.
+                                    Defaults to 'mrmr'. (str)
             :param normalize: Normalization method to apply to the data before performing statistical tests.
-                              Supported method is 'minmax'. If None, no normalization is applied. Defaults to None. (boolean, optional)
+                            Supported method is 'minmax'. If None, no normalization is applied. Defaults to None. (boolean, optional)
+            :param stat_test: Statistical test to use. Supported values are 'mannwhitneyu' and 'kstest'. Defaults to 'kstest'. (str)
+            :param show_box: Whether to show boxplots of significant features. Defaults to True. It might be timeconsuming for large featured datasets. (boolean)
             :return: A list of feature names that show statistically significant differences across groups,
-                     based on the specified p-value threshold. Returns an empty list if no significant features are found. (list)
+                    based on the specified p-value threshold. Returns an empty list if no significant features are found. (list)
 
             :note: No normalization is required for the statistical tests since the methods used are non-parametric.
             """
+    
             
             if data is None and labels is None:
                 data = self.X
@@ -202,13 +207,16 @@ class DataExplorer(DataLoader):
 
             for feature in data.columns[:-1]:
                 group_data = [data[feature][labels == group] for group in groups]
-                # Perform the appropriate statistical test based on the number of groups
-                # Kruskal-Wallis H-test for more than two groups
-                # test_stat, p_value = stats.kruskal(*group_data)
-                # Mann-Whitney U test for two groups
-                _, p_value = stats.mannwhitneyu(
-                    *group_data, alternative="two-sided"
-                )
+                if stat_test == "mannwhitneyu":
+                    # Mann-Whitney U test for two groups
+                    _, p_value = stats.mannwhitneyu(
+                        *group_data, alternative="two-sided"
+                    )
+                elif stat_test == "kstest":
+                    # Kolmogorov-Smirnov test for two groups
+                    _, p_value = stats.kstest(*group_data, alternative="two-sided")
+                else:
+                    raise ValueError(f"Unsupported statistical test: {stat_test}, only 'mannwhitneyu' and 'kstest' are supported.")
                 p_values[feature] = p_value
 
             significant_features = [
@@ -216,44 +224,44 @@ class DataExplorer(DataLoader):
             ]
 
             if significant_features:
-                data_all = data[significant_features].copy()
-                data_all["labels"] = labels
-                melted_data_all = pd.melt(
-                    data_all, id_vars="labels", var_name="variable", value_name="value"
-                )
-                print(
-                    f"Number of significant features: {len(significant_features)} of {len(data.columns)-1} provided."
-                )
+                if show_box:
+                    data_all = data[significant_features].copy()
+                    data_all["labels"] = labels
+                    melted_data_all = pd.melt(
+                        data_all, id_vars="labels", var_name="variable", value_name="value"
+                    )
 
-                fig = go.Figure()
+                    # Create a boxplot for each significant feature
+                    fig = go.Figure()
 
-                for variable in significant_features:
-                    for label in melted_data_all["labels"].unique():
-                        filtered_data = melted_data_all[
-                            (melted_data_all["variable"] == variable)
-                            & (melted_data_all["labels"] == label)
-                        ]
-                        fig.add_trace(
-                            go.Box(
-                                y=filtered_data["value"],
-                                name=f"{variable} - {label}",
-                                jitter=0.3,
-                                pointpos=-1.8,
+                    for variable in significant_features:
+                        for label in melted_data_all["labels"].unique():
+                            filtered_data = melted_data_all[
+                                (melted_data_all["variable"] == variable)
+                                & (melted_data_all["labels"] == label)
+                            ]
+                            fig.add_trace(
+                                go.Box(
+                                    y=filtered_data["value"],
+                                    name=f"{variable} - {label}",
+                                    jitter=0.3,
+                                    pointpos=-1.8,
+                                )
                             )
-                        )
 
-                fig.update_layout(
-                    title="Boxplot of Significant Features",
-                    xaxis_title="Feature",
-                    yaxis_title="Value",
-                    template="plotly_white",
-                    width=max(20, len(significant_features)) * 40,
-                    height=400,
-                )
-                fig.update_xaxes(tickangle=90)
-                fig.show()
-                
+                    fig.update_layout(
+                        title="Boxplot of Significant Features",
+                        xaxis_title="Feature",
+                        yaxis_title="Value",
+                        template="plotly_white",
+                        width=max(20, len(significant_features)) * 40,
+                        height=400,
+                    )
+                    fig.update_xaxes(tickangle=90)
+                    fig.show()
+                    
                 # TODO: Instead of return create an attribute??
+                print(f"Number of significant features: {len(significant_features)} of {len(data.columns)-1} provided.")
                 return significant_features
             else:
                 print("No significant features found.")
