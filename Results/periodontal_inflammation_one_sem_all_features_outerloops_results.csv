@@ -1,5 +1,5 @@
-Estimator,Classifier,Outer_matthews_corrcoef,Max,Std,SEM,Median,Hyperparameters,Selected_Features,Numbers_of_Features,Way_of_Selection,Samples_classification_rates,roc_auc,accuracy,balanced_accuracy,recall,precision,f1
-CatBoostClassifier,CatBoostClassifier,"[0.95, 0.9, 0.95, 0.7, 0.75, 0.9, 0.85, 0.9, 0.55, 0.8, 0.8, 0.8, 0.8, 0.9, 0.9, 0.75, 0.9, 0.8, 0.75, 0.9, 0.75, 0.85, 0.95, 0.8, 0.85, 0.9, 0.85, 0.95, 0.75, 0.95, 0.85, 0.7, 0.9, 0.85, 0.85, 0.9, 0.95, 0.9, 0.9, 0.75, 0.7, 0.9, 0.85, 0.85, 0.9, 0.95, 0.8, 0.8, 0.85, 0.75]",0.95,0.0834805366537614,0.011925790950537342,0.85,"[{'n_estimators': 138, 'learning_rate': 0.08848855258884357, 'depth': 2, 'l2_leaf_reg': 0.7163680089167785, 'border_count': 67, 'bagging_temperature': 8.253733494558485, 'random_strength': 7.193897591750426, 'leaf_estimation_method': 'Newton', 'verbose': 0, 'model_size_reg': 0.5524039759141232, 'min_data_in_leaf': 9, 'thread_count': 1, 'loss_function': 'CrossEntropy'}
+Estimator,Classifier,Outer_matthews_corrcoef,Max,Std,SEM,Median,Hyperparameters,Selected_Features,Numbers_of_Features,Way_of_Selection,Samples_classification_rates,roc_auc,accuracy,balanced_accuracy,recall,precision,f1,Inner_Selection
+CatBoostClassifier,CatBoostClassifier,"[0.95, 0.9, 0.95, 0.7, 0.75, 0.9, 0.85, 0.9, 0.55, 0.8, 0.8, 0.8, 0.8, 0.9, 0.9, 0.75, 0.9, 0.8, 0.75, 0.9, 0.75, 0.85, 0.95, 0.8, 0.85, 0.9, 0.85, 0.95, 0.75, 0.95, 0.85, 0.7, 0.9, 0.85, 0.85, 0.9, 0.95, 0.9, 0.9, 0.75, 0.7, 0.9, 0.85, 0.85, 0.9, 0.95, 0.8, 0.8, 0.85, 0.75]",0.95,0.0834805366537614,0.0119257909505373,0.85,"[{'n_estimators': 138, 'learning_rate': 0.08848855258884357, 'depth': 2, 'l2_leaf_reg': 0.7163680089167785, 'border_count': 67, 'bagging_temperature': 8.253733494558485, 'random_strength': 7.193897591750426, 'leaf_estimation_method': 'Newton', 'verbose': 0, 'model_size_reg': 0.5524039759141232, 'min_data_in_leaf': 9, 'thread_count': 1, 'loss_function': 'CrossEntropy'}
  {'n_estimators': 244, 'learning_rate': 0.10733781199344185, 'depth': 2, 'l2_leaf_reg': 0.9956425224140256, 'border_count': 19, 'bagging_temperature': 8.394407397834017, 'random_strength': 4.302903945497581, 'leaf_estimation_method': 'Newton', 'verbose': 0, 'model_size_reg': 0.15791915029365083, 'min_data_in_leaf': 10, 'thread_count': 1, 'loss_function': 'Logloss'}
  {'n_estimators': 58, 'learning_rate': 0.18632778078222786, 'depth': 4, 'l2_leaf_reg': 1.0033281586687437, 'border_count': 135, 'bagging_temperature': 9.060425811678554, 'random_strength': 6.312381829453985, 'leaf_estimation_method': 'Gradient', 'verbose': 0, 'model_size_reg': 0.3081381733503665, 'min_data_in_leaf': 14, 'thread_count': 1, 'loss_function': 'Logloss'}
  {'n_estimators': 225, 'learning_rate': 0.053628589465204615, 'depth': 2, 'l2_leaf_reg': 1.7187027272562332, 'border_count': 216, 'bagging_temperature': 2.416097371150765, 'random_strength': 9.049186249318234, 'leaf_estimation_method': 'Newton', 'verbose': 0, 'model_size_reg': 0.8452291177876855, 'min_data_in_leaf': 2, 'thread_count': 1, 'loss_function': 'CrossEntropy'}
@@ -75,8 +75,8 @@ CatBoostClassifier,CatBoostClassifier,"[0.95, 0.9, 0.95, 0.7, 0.75, 0.9, 0.85, 0
  0.84210526 0.7        0.88888889 0.84210526 0.84210526 0.88888889
  0.94736842 0.9        0.90909091 0.76190476 0.625      0.9
  0.84210526 0.85714286 0.9        0.94736842 0.8        0.8
- 0.84210526 0.70588235]"
-ElasticNet,ElasticNet,"[0.8, 0.85, 0.85, 0.65, 0.85, 0.75, 0.85, 0.8, 0.65, 0.75, 0.75, 0.9, 0.85, 0.9, 0.65, 0.9, 0.65, 0.9, 0.85, 0.8, 0.7, 0.65, 0.9, 0.85, 0.85, 0.75, 0.8, 0.75, 0.75, 0.75, 0.75, 0.75, 0.95, 0.7, 0.7, 0.65, 0.8, 0.8, 0.9, 0.65, 0.7, 0.9, 0.75, 0.9, 0.7, 0.8, 0.75, 0.6, 0.75, 0.8]",0.95,0.08717797887081348,0.012453996981544783,0.775,"[{'penalty': 'elasticnet', 'C': 0.41369386569136696, 'solver': 'saga', 'max_iter': 353, 'n_jobs': None, 'l1_ratio': 0.9775919447861505}
+ 0.84210526 0.70588235]",one_sem
+ElasticNet,ElasticNet,"[0.8, 0.85, 0.85, 0.65, 0.85, 0.75, 0.85, 0.8, 0.65, 0.75, 0.75, 0.9, 0.85, 0.9, 0.65, 0.9, 0.65, 0.9, 0.85, 0.8, 0.7, 0.65, 0.9, 0.85, 0.85, 0.75, 0.8, 0.75, 0.75, 0.75, 0.75, 0.75, 0.95, 0.7, 0.7, 0.65, 0.8, 0.8, 0.9, 0.65, 0.7, 0.9, 0.75, 0.9, 0.7, 0.8, 0.75, 0.6, 0.75, 0.8]",0.95,0.0871779788708134,0.0124539969815447,0.775,"[{'penalty': 'elasticnet', 'C': 0.41369386569136696, 'solver': 'saga', 'max_iter': 353, 'n_jobs': None, 'l1_ratio': 0.9775919447861505}
  {'penalty': 'elasticnet', 'C': 0.9773522933600707, 'solver': 'saga', 'max_iter': 177, 'n_jobs': None, 'l1_ratio': 0.2216907291122161}
  {'penalty': 'elasticnet', 'C': 0.7573731969527914, 'solver': 'saga', 'max_iter': 104, 'n_jobs': None, 'l1_ratio': 0.07398492080392113}
  {'penalty': 'elasticnet', 'C': 0.8717431164430833, 'solver': 'saga', 'max_iter': 100, 'n_jobs': None, 'l1_ratio': 0.05607604520518985}
@@ -152,8 +152,8 @@ ElasticNet,ElasticNet,"[0.8, 0.85, 0.85, 0.65, 0.85, 0.75, 0.85, 0.8, 0.65, 0.75
  0.7826087  0.73684211 0.95238095 0.7        0.7        0.58823529
  0.81818182 0.81818182 0.90909091 0.72       0.7        0.90909091
  0.73684211 0.88888889 0.75       0.77777778 0.76190476 0.69230769
- 0.73684211 0.8       ]"
-GaussianNB,GaussianNB,"[0.75, 0.6, 0.4, 0.6, 0.75, 0.6, 0.55, 0.65, 0.6, 0.7, 0.45, 0.7, 0.6, 0.7, 0.6, 0.7, 0.65, 0.75, 0.6, 0.45, 0.65, 0.6, 0.75, 0.7, 0.5, 0.55, 0.8, 0.55, 0.65, 0.6, 0.7, 0.5, 0.65, 0.65, 0.55, 0.6, 0.6, 0.7, 0.7, 0.55, 0.6, 0.55, 0.7, 0.7, 0.55, 0.55, 0.65, 0.6, 0.7, 0.55]",0.8,0.08494704232638119,0.012135291760911597,0.6,"[{'var_smoothing': 3.240049941004601e-08}
+ 0.73684211 0.8       ]",one_sem
+GaussianNB,GaussianNB,"[0.75, 0.6, 0.4, 0.6, 0.75, 0.6, 0.55, 0.65, 0.6, 0.7, 0.45, 0.7, 0.6, 0.7, 0.6, 0.7, 0.65, 0.75, 0.6, 0.45, 0.65, 0.6, 0.75, 0.7, 0.5, 0.55, 0.8, 0.55, 0.65, 0.6, 0.7, 0.5, 0.65, 0.65, 0.55, 0.6, 0.6, 0.7, 0.7, 0.55, 0.6, 0.55, 0.7, 0.7, 0.55, 0.55, 0.65, 0.6, 0.7, 0.55]",0.8,0.0849470423263811,0.0121352917609115,0.6,"[{'var_smoothing': 3.240049941004601e-08}
  {'var_smoothing': 2.2365819917846995e-08}
  {'var_smoothing': 3.844785894875916e-09}
  {'var_smoothing': 3.928763792187904e-09}
@@ -230,8 +230,8 @@ GaussianNB,GaussianNB,"[0.75, 0.6, 0.4, 0.6, 0.75, 0.6, 0.55, 0.65, 0.6, 0.7, 0.
  0.75       0.61538462 0.66666667 0.72       0.57142857 0.6
  0.63636364 0.75       0.75       0.64       0.63636364 0.64
  0.75       0.72727273 0.64       0.60869565 0.66666667 0.69230769
- 0.75       0.60869565]"
-GaussianProcessClassifier,GaussianProcessClassifier,"[0.75, 0.85, 0.5, 0.5, 0.85, 0.7, 0.8, 0.75, 0.65, 0.8, 0.65, 0.85, 0.75, 0.75, 0.7, 0.65, 0.75, 0.8, 0.8, 0.65, 0.6, 0.7, 0.75, 0.75, 0.85, 0.75, 0.55, 0.65, 0.65, 0.75, 0.65, 0.7, 0.7, 0.7, 0.75, 0.8, 0.7, 0.85, 0.75, 0.55, 0.7, 0.65, 0.75, 0.8, 0.8, 0.65, 0.7, 0.7, 0.9, 0.7]",0.9,0.08831760866327845,0.012616801237611207,0.725,"[{'optimizer': 'fmin_l_bfgs_b', 'max_iter_predict': 93, 'warm_start': True, 'n_jobs': 1, 'n_restarts_optimizer': 0}
+ 0.75       0.60869565]",one_sem
+GaussianProcessClassifier,GaussianProcessClassifier,"[0.75, 0.85, 0.5, 0.5, 0.85, 0.7, 0.8, 0.75, 0.65, 0.8, 0.65, 0.85, 0.75, 0.75, 0.7, 0.65, 0.75, 0.8, 0.8, 0.65, 0.6, 0.7, 0.75, 0.75, 0.85, 0.75, 0.55, 0.65, 0.65, 0.75, 0.65, 0.7, 0.7, 0.7, 0.75, 0.8, 0.7, 0.85, 0.75, 0.55, 0.7, 0.65, 0.75, 0.8, 0.8, 0.65, 0.7, 0.7, 0.9, 0.7]",0.9,0.0883176086632784,0.0126168012376112,0.725,"[{'optimizer': 'fmin_l_bfgs_b', 'max_iter_predict': 93, 'warm_start': True, 'n_jobs': 1, 'n_restarts_optimizer': 0}
  {'optimizer': None, 'max_iter_predict': 62, 'warm_start': False, 'n_jobs': 1, 'n_restarts_optimizer': 0}
  {'optimizer': None, 'max_iter_predict': 171, 'warm_start': True, 'n_jobs': 1, 'n_restarts_optimizer': 0}
  {'optimizer': None, 'max_iter_predict': 146, 'warm_start': True, 'n_jobs': 1, 'n_restarts_optimizer': 0}
@@ -307,8 +307,8 @@ GaussianProcessClassifier,GaussianProcessClassifier,"[0.75, 0.85, 0.5, 0.5, 0.85
  0.69565217 0.76923077 0.7        0.72727273 0.7826087  0.81818182
  0.76923077 0.85714286 0.8        0.66666667 0.7        0.74074074
  0.7826087  0.81818182 0.81818182 0.72       0.72727273 0.75
- 0.9        0.76923077]"
-GradientBoostingClassifier,GradientBoostingClassifier,"[0.95, 0.7, 0.9, 0.7, 0.85, 0.9, 0.9, 0.85, 0.7, 0.85, 0.8, 0.7, 0.8, 0.9, 0.8, 0.7, 0.8, 0.9, 0.75, 0.75, 0.8, 0.8, 0.9, 0.95, 0.85, 0.9, 0.8, 1.0, 0.7, 0.9, 0.85, 0.75, 0.9, 0.9, 0.85, 0.9, 0.95, 0.9, 0.85, 0.7, 0.75, 0.75, 0.7, 0.9, 0.8, 0.8, 0.85, 0.75, 0.9, 0.85]",1.0,0.08072174428244226,0.011531677754634609,0.85,"[{'loss': 'exponential', 'learning_rate': 0.14784780029249658, 'n_estimators': 128, 'criterion': 'friedman_mse', 'max_depth': 2, 'min_samples_leaf': 14}
+ 0.9        0.76923077]",one_sem
+GradientBoostingClassifier,GradientBoostingClassifier,"[0.95, 0.7, 0.9, 0.7, 0.85, 0.9, 0.9, 0.85, 0.7, 0.85, 0.8, 0.7, 0.8, 0.9, 0.8, 0.7, 0.8, 0.9, 0.75, 0.75, 0.8, 0.8, 0.9, 0.95, 0.85, 0.9, 0.8, 1.0, 0.7, 0.9, 0.85, 0.75, 0.9, 0.9, 0.85, 0.9, 0.95, 0.9, 0.85, 0.7, 0.75, 0.75, 0.7, 0.9, 0.8, 0.8, 0.85, 0.75, 0.9, 0.85]",1.0,0.0807217442824422,0.0115316777546346,0.85,"[{'loss': 'exponential', 'learning_rate': 0.14784780029249658, 'n_estimators': 128, 'criterion': 'friedman_mse', 'max_depth': 2, 'min_samples_leaf': 14}
  {'loss': 'exponential', 'learning_rate': 0.013231613029930214, 'n_estimators': 233, 'criterion': 'squared_error', 'max_depth': 2, 'min_samples_leaf': 14}
  {'loss': 'exponential', 'learning_rate': 0.1636737064243247, 'n_estimators': 24, 'criterion': 'squared_error', 'max_depth': 40, 'min_samples_leaf': 12}
  {'loss': 'log_loss', 'learning_rate': 0.1935299077300931, 'n_estimators': 80, 'criterion': 'squared_error', 'max_depth': 2, 'min_samples_leaf': 9}
@@ -385,8 +385,8 @@ GradientBoostingClassifier,GradientBoostingClassifier,"[0.95, 0.7, 0.9, 0.7, 0.8
  0.85714286 0.76190476 0.88888889 0.88888889 0.85714286 0.88888889
  0.95238095 0.9        0.85714286 0.72727273 0.66666667 0.73684211
  0.7        0.9        0.77777778 0.81818182 0.85714286 0.76190476
- 0.9        0.84210526]"
-KNeighborsClassifier,KNeighborsClassifier,"[0.65, 0.8, 0.6, 0.7, 0.6, 0.5, 0.7, 0.75, 0.6, 0.7, 0.55, 0.65, 0.7, 0.65, 0.65, 0.6, 0.65, 0.8, 0.75, 0.6, 0.6, 0.7, 0.55, 0.7, 0.6, 0.75, 0.5, 0.6, 0.7, 0.65, 0.65, 0.65, 0.65, 0.7, 0.8, 0.6, 0.75, 0.65, 0.7, 0.6, 0.55, 0.55, 0.7, 0.8, 0.55, 0.65, 0.55, 0.7, 0.75, 0.75]",0.8,0.07810889834071404,0.011158414048673434,0.65,"[{'n_neighbors': 14, 'weights': 'uniform', 'algorithm': 'kd_tree', 'p': 2, 'leaf_size': 6, 'n_jobs': 1}
+ 0.9        0.84210526]",one_sem
+KNeighborsClassifier,KNeighborsClassifier,"[0.65, 0.8, 0.6, 0.7, 0.6, 0.5, 0.7, 0.75, 0.6, 0.7, 0.55, 0.65, 0.7, 0.65, 0.65, 0.6, 0.65, 0.8, 0.75, 0.6, 0.6, 0.7, 0.55, 0.7, 0.6, 0.75, 0.5, 0.6, 0.7, 0.65, 0.65, 0.65, 0.65, 0.7, 0.8, 0.6, 0.75, 0.65, 0.7, 0.6, 0.55, 0.55, 0.7, 0.8, 0.55, 0.65, 0.55, 0.7, 0.75, 0.75]",0.8,0.078108898340714,0.0111584140486734,0.65,"[{'n_neighbors': 14, 'weights': 'uniform', 'algorithm': 'kd_tree', 'p': 2, 'leaf_size': 6, 'n_jobs': 1}
  {'n_neighbors': 14, 'weights': 'uniform', 'algorithm': 'kd_tree', 'p': 1, 'leaf_size': 5, 'n_jobs': 1}
  {'n_neighbors': 6, 'weights': 'uniform', 'algorithm': 'brute', 'p': 1, 'leaf_size': 20, 'n_jobs': 1}
  {'n_neighbors': 15, 'weights': 'uniform', 'algorithm': 'brute', 'p': 1, 'leaf_size': 5, 'n_jobs': 1}
@@ -463,8 +463,8 @@ KNeighborsClassifier,KNeighborsClassifier,"[0.65, 0.8, 0.6, 0.7, 0.6, 0.5, 0.7, 
  0.66666667 0.72       0.58823529 0.72727273 0.81818182 0.63636364
  0.76190476 0.66666667 0.72727273 0.66666667 0.47058824 0.64
  0.76923077 0.77777778 0.66666667 0.66666667 0.60869565 0.76923077
- 0.7826087  0.7826087 ]"
-LGBMClassifier,LGBMClassifier,"[0.95, 0.75, 1.0, 0.65, 0.7, 0.8, 0.8, 0.85, 0.75, 0.9, 0.8, 0.95, 0.85, 0.9, 0.8, 0.9, 0.9, 0.85, 0.85, 0.75, 0.8, 0.75, 0.9, 0.95, 0.9, 0.85, 0.8, 0.95, 0.75, 0.85, 0.9, 0.85, 0.85, 0.9, 0.85, 0.95, 0.9, 0.9, 0.85, 0.75, 0.7, 0.8, 0.8, 0.95, 0.8, 0.8, 0.75, 0.95, 0.9, 0.75]",1.0,0.07833262411026455,0.011190374872894935,0.85,"[{'boosting_type': 'gbdt', 'learning_rate': 0.11487617408936926, 'n_estimators': 134, 'max_depth': 3, 'objective': 'binary', 'min_child_samples': 10, 'n_jobs': 1, 'verbose': -1, 'reg_lambda': 0.6838318045495209, 'reg_alpha': 0.3460298037152974}
+ 0.7826087  0.7826087 ]",one_sem
+LGBMClassifier,LGBMClassifier,"[0.95, 0.75, 1.0, 0.65, 0.7, 0.8, 0.8, 0.85, 0.75, 0.9, 0.8, 0.95, 0.85, 0.9, 0.8, 0.9, 0.9, 0.85, 0.85, 0.75, 0.8, 0.75, 0.9, 0.95, 0.9, 0.85, 0.8, 0.95, 0.75, 0.85, 0.9, 0.85, 0.85, 0.9, 0.85, 0.95, 0.9, 0.9, 0.85, 0.75, 0.7, 0.8, 0.8, 0.95, 0.8, 0.8, 0.75, 0.95, 0.9, 0.75]",1.0,0.0783326241102645,0.0111903748728949,0.85,"[{'boosting_type': 'gbdt', 'learning_rate': 0.11487617408936926, 'n_estimators': 134, 'max_depth': 3, 'objective': 'binary', 'min_child_samples': 10, 'n_jobs': 1, 'verbose': -1, 'reg_lambda': 0.6838318045495209, 'reg_alpha': 0.3460298037152974}
  {'boosting_type': 'gbdt', 'learning_rate': 0.16281926671142957, 'n_estimators': 40, 'max_depth': 10, 'objective': 'binary', 'min_child_samples': 15, 'n_jobs': 1, 'verbose': -1, 'reg_lambda': 0.6862801811239588, 'reg_alpha': 0.45033345364589583}
  {'boosting_type': 'gbdt', 'learning_rate': 0.144511422154021, 'n_estimators': 165, 'max_depth': 5, 'objective': 'binary', 'min_child_samples': 3, 'n_jobs': 1, 'verbose': -1, 'reg_lambda': 0.689019215936393, 'reg_alpha': 0.12721988439046028}
  {'boosting_type': 'gbdt', 'learning_rate': 0.084958345154319, 'n_estimators': 120, 'max_depth': 2, 'objective': 'binary', 'min_child_samples': 13, 'n_jobs': 1, 'verbose': -1, 'reg_lambda': 0.5798854750639455, 'reg_alpha': 0.07803172687393557}
@@ -541,8 +541,8 @@ LGBMClassifier,LGBMClassifier,"[0.95, 0.75, 1.0, 0.65, 0.7, 0.8, 0.8, 0.85, 0.75
  0.9        0.84210526 0.84210526 0.88888889 0.84210526 0.94736842
  0.9        0.9        0.85714286 0.76190476 0.66666667 0.8
  0.81818182 0.94736842 0.77777778 0.8        0.73684211 0.94736842
- 0.9        0.73684211]"
-LinearDiscriminantAnalysis,LinearDiscriminantAnalysis,"[0.95, 0.85, 0.95, 0.75, 0.75, 0.9, 0.9, 0.8, 0.85, 0.8, 0.85, 0.95, 0.9, 0.9, 0.75, 0.9, 1.0, 0.95, 0.8, 0.85, 0.75, 0.8, 0.9, 0.8, 0.7, 0.9, 0.7, 0.85, 0.8, 0.95, 0.7, 0.75, 0.9, 0.8, 0.85, 0.8, 0.85, 0.8, 1.0, 0.7, 0.6, 0.95, 0.85, 0.95, 0.85, 0.8, 0.85, 0.8, 0.8, 0.8]",1.0,0.08518215775618741,0.012168879679455345,0.85,"[{'solver': 'lsqr', 'shrinkage': 0.07894085439578201, 'tol': 0.0001, 'store_covariance': True}
+ 0.9        0.73684211]",one_sem
+LinearDiscriminantAnalysis,LinearDiscriminantAnalysis,"[0.95, 0.85, 0.95, 0.75, 0.75, 0.9, 0.9, 0.8, 0.85, 0.8, 0.85, 0.95, 0.9, 0.9, 0.75, 0.9, 1.0, 0.95, 0.8, 0.85, 0.75, 0.8, 0.9, 0.8, 0.7, 0.9, 0.7, 0.85, 0.8, 0.95, 0.7, 0.75, 0.9, 0.8, 0.85, 0.8, 0.85, 0.8, 1.0, 0.7, 0.6, 0.95, 0.85, 0.95, 0.85, 0.8, 0.85, 0.8, 0.8, 0.8]",1.0,0.0851821577561874,0.0121688796794553,0.85,"[{'solver': 'lsqr', 'shrinkage': 0.07894085439578201, 'tol': 0.0001, 'store_covariance': True}
  {'solver': 'eigen', 'shrinkage': 0.10726874300145195, 'tol': 1e-05, 'store_covariance': True}
  {'solver': 'eigen', 'shrinkage': 0.05624180758135018, 'tol': 0.0001, 'store_covariance': False}
  {'solver': 'eigen', 'shrinkage': 0.3902757221044104, 'tol': 0.001, 'store_covariance': False}
@@ -618,8 +618,8 @@ LinearDiscriminantAnalysis,LinearDiscriminantAnalysis,"[0.95, 0.85, 0.95, 0.75, 
  0.72727273 0.76190476 0.90909091 0.75       0.85714286 0.8
  0.84210526 0.81818182 1.         0.7        0.6        0.94736842
  0.85714286 0.94736842 0.85714286 0.8        0.84210526 0.81818182
- 0.8        0.8       ]"
-LogisticRegression,LogisticRegression,"[1.0, 0.8, 0.95, 0.85, 0.75, 0.9, 0.85, 0.8, 0.85, 0.8, 0.9, 0.9, 0.95, 0.9, 0.9, 0.95, 0.95, 0.9, 0.85, 0.9, 0.8, 0.8, 0.9, 0.85, 0.9, 0.85, 0.8, 0.8, 0.85, 0.75, 0.9, 0.75, 1.0, 0.8, 0.95, 0.95, 0.9, 0.8, 1.0, 0.7, 0.65, 1.0, 0.9, 0.95, 0.9, 0.9, 0.8, 0.8, 0.8, 0.8]",1.0,0.07876547467006086,0.011252210667151551,0.875,"[{'penalty': None, 'C': 0.15169186616323843, 'solver': 'newton-cg', 'max_iter': 222, 'n_jobs': None}
+ 0.8        0.8       ]",one_sem
+LogisticRegression,LogisticRegression,"[1.0, 0.8, 0.95, 0.85, 0.75, 0.9, 0.85, 0.8, 0.85, 0.8, 0.9, 0.9, 0.95, 0.9, 0.9, 0.95, 0.95, 0.9, 0.85, 0.9, 0.8, 0.8, 0.9, 0.85, 0.9, 0.85, 0.8, 0.8, 0.85, 0.75, 0.9, 0.75, 1.0, 0.8, 0.95, 0.95, 0.9, 0.8, 1.0, 0.7, 0.65, 1.0, 0.9, 0.95, 0.9, 0.9, 0.8, 0.8, 0.8, 0.8]",1.0,0.0787654746700608,0.0112522106671515,0.875,"[{'penalty': None, 'C': 0.15169186616323843, 'solver': 'newton-cg', 'max_iter': 222, 'n_jobs': None}
  {'penalty': None, 'C': 0.21142859536717062, 'solver': 'sag', 'max_iter': 560, 'n_jobs': None}
  {'penalty': None, 'C': 0.9243601755378412, 'solver': 'sag', 'max_iter': 103, 'n_jobs': None}
  {'penalty': None, 'C': 0.8491247823431599, 'solver': 'saga', 'max_iter': 898, 'n_jobs': None}
@@ -695,8 +695,8 @@ LogisticRegression,LogisticRegression,"[1.0, 0.8, 0.95, 0.85, 0.75, 0.9, 0.85, 0
  0.9        0.76190476 1.         0.77777778 0.95238095 0.94736842
  0.90909091 0.81818182 1.         0.75       0.63157895 1.
  0.9        0.94736842 0.9        0.9        0.8        0.81818182
- 0.77777778 0.81818182]"
-RandomForestClassifier,RandomForestClassifier,"[0.9, 0.6, 0.9, 0.65, 0.7, 0.75, 0.85, 0.8, 0.65, 0.7, 0.65, 0.85, 0.75, 0.9, 0.9, 0.8, 0.8, 0.95, 0.75, 0.75, 0.8, 0.75, 0.85, 0.85, 0.85, 0.85, 0.7, 0.9, 0.8, 0.75, 0.85, 0.65, 0.75, 0.85, 0.8, 0.9, 0.8, 0.85, 0.75, 0.65, 0.7, 0.9, 0.9, 0.9, 0.75, 0.85, 0.8, 0.8, 0.75, 0.8]",0.95,0.08404760555780277,0.012006800793971824,0.8,"[{'n_estimators': 185, 'criterion': 'entropy', 'max_depth': 46, 'min_samples_leaf': 11, 'bootstrap': False, 'n_jobs': 1}
+ 0.77777778 0.81818182]",one_sem
+RandomForestClassifier,RandomForestClassifier,"[0.9, 0.6, 0.9, 0.65, 0.7, 0.75, 0.85, 0.8, 0.65, 0.7, 0.65, 0.85, 0.75, 0.9, 0.9, 0.8, 0.8, 0.95, 0.75, 0.75, 0.8, 0.75, 0.85, 0.85, 0.85, 0.85, 0.7, 0.9, 0.8, 0.75, 0.85, 0.65, 0.75, 0.85, 0.8, 0.9, 0.8, 0.85, 0.75, 0.65, 0.7, 0.9, 0.9, 0.9, 0.75, 0.85, 0.8, 0.8, 0.75, 0.8]",0.95,0.0840476055578027,0.0120068007939718,0.8,"[{'n_estimators': 185, 'criterion': 'entropy', 'max_depth': 46, 'min_samples_leaf': 11, 'bootstrap': False, 'n_jobs': 1}
  {'n_estimators': 54, 'criterion': 'entropy', 'max_depth': 84, 'min_samples_leaf': 7, 'bootstrap': True, 'n_jobs': 1}
  {'n_estimators': 60, 'criterion': 'entropy', 'max_depth': 64, 'min_samples_leaf': 3, 'bootstrap': False, 'n_jobs': 1}
  {'n_estimators': 190, 'criterion': 'gini', 'max_depth': 67, 'min_samples_leaf': 9, 'bootstrap': False, 'n_jobs': 1}
@@ -772,8 +772,8 @@ RandomForestClassifier,RandomForestClassifier,"[0.9, 0.6, 0.9, 0.65, 0.7, 0.75, 
  0.85714286 0.66666667 0.70588235 0.84210526 0.8        0.88888889
  0.81818182 0.84210526 0.76190476 0.69565217 0.625      0.90909091
  0.88888889 0.90909091 0.76190476 0.84210526 0.81818182 0.77777778
- 0.76190476 0.77777778]"
-SVC,SVC,"[0.75, 0.8, 0.75, 0.65, 0.75, 0.8, 0.85, 0.75, 0.65, 0.85, 0.75, 0.85, 0.9, 0.9, 0.85, 0.9, 0.8, 0.9, 0.8, 0.85, 0.65, 0.8, 0.8, 0.9, 0.85, 0.95, 0.75, 0.75, 0.8, 0.9, 0.95, 0.75, 0.95, 0.75, 0.85, 0.75, 0.85, 0.85, 0.9, 0.65, 0.65, 1.0, 0.9, 0.65, 0.65, 0.9, 0.9, 0.65, 0.7, 0.9]",1.0,0.09505787710652915,0.013579696729504164,0.8,"[{'C': 0.14780852193126273, 'kernel': 'rbf', 'degree': 9, 'probability': True, 'shrinking': False, 'decision_function_shape': 'ovo'}
+ 0.76190476 0.77777778]",one_sem
+SVC,SVC,"[0.75, 0.8, 0.75, 0.65, 0.75, 0.8, 0.85, 0.75, 0.65, 0.85, 0.75, 0.85, 0.9, 0.9, 0.85, 0.9, 0.8, 0.9, 0.8, 0.85, 0.65, 0.8, 0.8, 0.9, 0.85, 0.95, 0.75, 0.75, 0.8, 0.9, 0.95, 0.75, 0.95, 0.75, 0.85, 0.75, 0.85, 0.85, 0.9, 0.65, 0.65, 1.0, 0.9, 0.65, 0.65, 0.9, 0.9, 0.65, 0.7, 0.9]",1.0,0.0950578771065291,0.0135796967295041,0.8,"[{'C': 0.14780852193126273, 'kernel': 'rbf', 'degree': 9, 'probability': True, 'shrinking': False, 'decision_function_shape': 'ovo'}
  {'C': 0.8829510000052108, 'kernel': 'linear', 'degree': 6, 'probability': True, 'shrinking': False, 'decision_function_shape': 'ovo'}
  {'C': 0.15265648171566037, 'kernel': 'linear', 'degree': 10, 'probability': True, 'shrinking': True, 'decision_function_shape': 'ovo'}
  {'C': 0.2713389141266271, 'kernel': 'linear', 'degree': 7, 'probability': True, 'shrinking': True, 'decision_function_shape': 'ovr'}
@@ -849,8 +849,8 @@ SVC,SVC,"[0.75, 0.8, 0.75, 0.65, 0.75, 0.8, 0.85, 0.75, 0.65, 0.85, 0.75, 0.85, 
  0.95238095 0.7826087  0.94736842 0.73684211 0.85714286 0.73684211
  0.85714286 0.84210526 0.90909091 0.72       0.58823529 1.
  0.9        0.66666667 0.69565217 0.9        0.9        0.72
- 0.66666667 0.9       ]"
-XGBClassifier,XGBClassifier,"[0.9, 0.8, 0.95, 0.7, 0.7, 0.85, 0.9, 0.8, 0.75, 0.8, 0.8, 0.9, 0.85, 0.95, 0.85, 0.85, 0.85, 0.9, 0.75, 0.8, 0.8, 0.8, 0.8, 0.8, 0.85, 0.85, 0.7, 0.9, 0.75, 0.9, 0.95, 0.7, 0.85, 0.9, 0.8, 0.9, 0.9, 0.9, 0.8, 0.8, 0.65, 0.85, 0.8, 0.8, 0.8, 0.9, 0.8, 0.85, 0.9, 0.8]",0.95,0.06934695379034324,0.009906707684334748,0.825,"[{'learning_rate': 0.09765288738640941, 'n_estimators': 486, 'max_depth': 5, 'subsample': 0.6308812844801597, 'n_jobs': 1, 'booster': 'gbtree', 'tree_method': 'approx', 'reg_alpha': 0.14822868082723878, 'reg_lambda': 0.6020583447896529, 'objective': 'binary:logistic', 'eval_metric': 'error'}
+ 0.66666667 0.9       ]",one_sem
+XGBClassifier,XGBClassifier,"[0.9, 0.8, 0.95, 0.7, 0.7, 0.85, 0.9, 0.8, 0.75, 0.8, 0.8, 0.9, 0.85, 0.95, 0.85, 0.85, 0.85, 0.9, 0.75, 0.8, 0.8, 0.8, 0.8, 0.8, 0.85, 0.85, 0.7, 0.9, 0.75, 0.9, 0.95, 0.7, 0.85, 0.9, 0.8, 0.9, 0.9, 0.9, 0.8, 0.8, 0.65, 0.85, 0.8, 0.8, 0.8, 0.9, 0.8, 0.85, 0.9, 0.8]",0.95,0.0693469537903432,0.0099067076843347,0.825,"[{'learning_rate': 0.09765288738640941, 'n_estimators': 486, 'max_depth': 5, 'subsample': 0.6308812844801597, 'n_jobs': 1, 'booster': 'gbtree', 'tree_method': 'approx', 'reg_alpha': 0.14822868082723878, 'reg_lambda': 0.6020583447896529, 'objective': 'binary:logistic', 'eval_metric': 'error'}
  {'learning_rate': 0.018251142897361478, 'n_estimators': 88, 'max_depth': 5, 'subsample': 0.7136024939235247, 'n_jobs': 1, 'booster': 'gbtree', 'tree_method': 'exact', 'reg_alpha': 0.11242371074263896, 'reg_lambda': 0.6228336055141438, 'objective': 'binary:logistic', 'eval_metric': 'error'}
  {'learning_rate': 0.08800808364463619, 'n_estimators': 82, 'max_depth': 5, 'subsample': 0.6705522926472192, 'n_jobs': 1, 'booster': 'gbtree', 'tree_method': 'hist', 'reg_alpha': 0.4257273273684953, 'reg_lambda': 0.7875780874027112, 'objective': 'binary:logistic', 'eval_metric': 'error'}
  {'learning_rate': 0.11216715186879704, 'n_estimators': 51, 'max_depth': 4, 'subsample': 0.8239088042950554, 'n_jobs': 1, 'booster': 'gbtree', 'tree_method': 'exact', 'reg_alpha': 0.17261329829323763, 'reg_lambda': 0.6884040420860569, 'objective': 'binary:logistic', 'eval_metric': 'error'}
@@ -926,4 +926,4 @@ XGBClassifier,XGBClassifier,"[0.9, 0.8, 0.95, 0.7, 0.7, 0.85, 0.9, 0.8, 0.75, 0.
  0.94736842 0.7        0.84210526 0.88888889 0.8        0.88888889
  0.88888889 0.9        0.8        0.8        0.63157895 0.84210526
  0.77777778 0.8        0.77777778 0.9        0.8        0.84210526
- 0.9        0.75      ]"
+ 0.9        0.75      ]",one_sem
