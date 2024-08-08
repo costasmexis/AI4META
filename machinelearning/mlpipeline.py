@@ -327,7 +327,7 @@ class MLPipelines(MachineLearningEstimator):
 
                 # Initialize variables
                 results = {
-                    f"Main_{self.config_rcv['scoring']}": [],
+                    f"Outer_{self.config_rcv['scoring']}": [],
                     "Classifiers": [],
                     "Selected_Features": [],
                     "Number_of_Features": [],
@@ -360,7 +360,7 @@ class MLPipelines(MachineLearningEstimator):
                             
                             # Store the results and apply one_sem method if its selected
                             results["Estimator"].append(self.name)
-                            results[f"Main_{self.config_rcv['scoring']}"].append(
+                            results[f"Outer_{self.config_rcv['scoring']}"].append(
                                 clf.score(X_test_selected, y_test)
                             )
                             if self.config_rcv["extra_metrics"] != None:
@@ -500,7 +500,7 @@ class MLPipelines(MachineLearningEstimator):
 
         for classif in np.unique(df["Classifiers"]):
             indices = df[df["Classifiers"] == classif]
-            filtered_scores = indices[f"Main_{self.config_rcv['scoring']}"].values
+            filtered_scores = indices[f"Outer_{self.config_rcv['scoring']}"].values
             if num_features is not None:
                 filtered_features = indices["Selected_Features"].values
             mean_score = np.mean(filtered_scores)
@@ -521,7 +521,7 @@ class MLPipelines(MachineLearningEstimator):
                         0
                     ],
                     "Classifier": classif,
-                    f"Main_{self.config_rcv['scoring']}": filtered_scores.tolist(),
+                    f"Outer_{self.config_rcv['scoring']}": filtered_scores.tolist(),
                     "Max": max_score,
                     "Std": std_score,
                     "SEM": sem_score,
@@ -579,15 +579,15 @@ class MLPipelines(MachineLearningEstimator):
 
         # Plot box or violin plots of the outer cross-validation scores
         if plot is not None:
-            scores_long = scores_dataframe.explode(f"Main_{self.config_rcv['scoring']}")
-            scores_long[f"Main_{self.config_rcv['scoring']}"] = scores_long[f"Main_{self.config_rcv['scoring']}"].astype(float)
+            scores_long = scores_dataframe.explode(f"Outer_{self.config_rcv['scoring']}")
+            scores_long[f"Outer_{self.config_rcv['scoring']}"] = scores_long[f"Outer_{self.config_rcv['scoring']}"].astype(float)
 
             fig = go.Figure()
             if plot == "box":
                 # Add box plots for each classifier
                 for classifier in scores_dataframe["Classifier"]:
                     data = scores_long[scores_long["Classifier"] == classifier][
-                        f"Main_{self.config_rcv['scoring']}"
+                        f"Outer_{self.config_rcv['scoring']}"
                     ]
                     median = np.median(data)
                     fig.add_trace(
@@ -603,7 +603,7 @@ class MLPipelines(MachineLearningEstimator):
             elif plot == "violin":
                 for classifier in scores_dataframe["Classifier"]:
                     data = scores_long[scores_long["Classifier"] == classifier][
-                        f"Main_{self.config_rcv['scoring']}"
+                        f"Outer_{self.config_rcv['scoring']}"
                     ]
                     median = np.median(data)
                     fig.add_trace(
