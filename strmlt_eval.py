@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import os
 import ast
 import re
@@ -44,35 +45,53 @@ def fix_format(df, metric):
         raise ValueError("The metric column is neither a string nor a list")
     return df
 
-def plotit(df, metric):
+def plotit(df, metric, one_sel_type):
     # Explode the 'metric' list into separate rows
     df = df.explode(metric)
 
     # Convert metric column to numeric type
     df[metric] = pd.to_numeric(df[metric])
+    
+    # Unique model selection types for separate plots
+    unique_selections = df['Model_Selection_Type'].unique()
 
-    # Create a new column combining 'Estimator' and 'Inner_Selection'
-    df['Estimator_Selection'] = df['Estimator'] + ' (' + df['Inner_Selection'] + ')'
+    for selection in unique_selections:
+        selected_df = df[df['Model_Selection_Type'] == selection]
+        if selection == 'RNCV':
+            # 'RNCV' handled like the original first if statement
+            selected_df['Estimator_Selection'] = selected_df['Estimator'] + ' (' + selected_df['Inner_Selection'] + ')'
+            selected_df = selected_df.sort_values('Estimator_Selection')
 
-    df = df.sort_values('Estimator_Selection')
+            fig = px.box(selected_df, x='Estimator_Selection', y=metric, color='Estimator_Selection')
+            fig.update_layout(
+                title=f'Boxplot of {metric.capitalize()} for RNCV by Estimator and Inner Selection',
+                xaxis_title='Estimator and Inner Selection',
+                yaxis_title=metric.capitalize(),
+                yaxis=dict(range=[0, 1.1]),
+                xaxis=dict(tickangle=-45),
+                height=1000,
+                width=1500,
+                legend_title_text='Estimator Selection'
+            )
 
-    # Create the interactive boxplot
-    fig = px.box(df, x='Estimator_Selection', y=metric, color='Estimator_Selection')
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            # Other types handled with consistent coloring across selections
+            selected_df['Estimator_Selection'] = selected_df['Estimator'] + ' (RCV)'
+            selected_df = selected_df.sort_values('Estimator_Selection')
 
-    # Customize the layout
-    fig.update_layout(
-        title=f'Boxplot of {metric.capitalize()} by Estimator and Inner Selection',
-        xaxis_title='Estimator and Inner Selection',
-        yaxis_title=metric.capitalize(),
-        yaxis=dict(range=[0, 1.1]),  # Assuming metric values are between 0 and 1
-        xaxis=dict(tickangle=-45),
-        height=1000,
-        width=1500,
-        legend_title_text='Estimator Selection'
-    )
-
-    # Display the plot in Streamlit
-    st.plotly_chart(fig, use_container_width=True)
+            fig = px.box(selected_df, x='Estimator_Selection', y=metric, color='Estimator_Selection')
+            fig.update_layout(
+                title=f'Boxplot of {metric.capitalize()} for {selection} by Estimator',
+                xaxis_title='Estimator and Selection Type',
+                yaxis_title=metric.capitalize(),
+                yaxis=dict(range=[0, 1.1]),
+                xaxis=dict(tickangle=-45),
+                height=1000,
+                width=1500,
+                legend_title_text='Estimator Selection'
+            )
+            st.plotly_chart(fig, use_container_width=True)
     
 def get_filenames_before_extension(directory):
     # List all files in the directory
@@ -116,6 +135,12 @@ def concatenate_csv_files(directory, dataset_name, output_excel):
     for csv_file in csv_files:
         # Read the CSV file into a DataFrame
         df = pd.read_csv(os.path.join(directory, csv_file))
+
+        # Check if 'RCV' is in the file name and assign a model selection type
+        if 'RCV' in csv_file:
+            df['Model_Selection_Type'] = 'RCV'
+        else:
+            df['Model_Selection_Type'] = 'RNCV'
         
         # Convert string representations of lists back to actual lists for specified columns
         for col in df.columns:
@@ -220,14 +245,26 @@ with tab_eval:
     
     if selected_features:
         eval_df = eval_df[eval_df['Numbers_of_Features'].isin(selected_features)]
-        
-    exclude_columns = ['Estimator', 'Classifier', 'Max', 'Std', 'SEM', 'Median','Hyperparameters','Selected_Features','Inner_Selection','Samples_classification_rates','Numbers_of_Features','Way_of_Selection']
+
+    types = df['Model_Selection_Type'].unique()
+    ms_type = scol2.multiselect("Select model selection type", types, key="ms_type", help="Choose between RCV and RNCV.")
+    if ms_type:
+        eval_df = eval_df[eval_df['Model_Selection_Type'].isin(ms_type)]
+    
+    one_sel_type = True
+    if len(eval_df['Model_Selection_Type'].unique())>1:
+        one_sel_type = False
+
+    exclude_columns = ['Estimator', 'Classifier', 'Max', 'Std', 'SEM', 'Median','Hyperparameters','Selected_Features','Inner_Selection','Samples_classification_rates','Numbers_of_Features','Way_of_Selection','Model_Selection_Type']
     available_columns = [col for col in eval_df.columns if col not in exclude_columns]
     column_eval = scol2.selectbox("Select a column to evaluate", available_columns, help="Choose the metric to evaluate.")
+
+    if st.button("Debug"):
+        st.dataframe(eval_df)
         
     if st.button("Evaluate"):
         if eval_df is not None:
             eval_df = fix_format(eval_df, column_eval)
-            plotit(eval_df, column_eval)
+            plotit(eval_df, column_eval, one_sel_type)
             
     
