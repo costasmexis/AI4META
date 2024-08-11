@@ -115,26 +115,22 @@ class MLPipelines(MachineLearningEstimator):
         else:
             raise ValueError(f"Unsupported model: {model_name}")
 
-    # TODO: Complete _one_sem_model function
-
-    def _gso_model(self, trials, model_name):
+    def _gso_model(self, trials, model_name, splits, method):
         """This function selects the 'simplest' hyperparameters for the given model."""
-        # Find the attributes of the trials that are related to the constraints
-        inner_cv_splits = self.config_rncv["inner_splits"]
         trials_data = [
             {
                 "params": t.params,
                 "mean_test_score":  t.user_attrs.get('mean_test_score'),
                 "mean_train_score": t.user_attrs.get('mean_train_score'),
-                "test_scores": [t.user_attrs.get(f"split{i}_test_score") for i in range(inner_cv_splits)],
-                "train_scores": [t.user_attrs.get(f"split{i}_train_score") for i in range(inner_cv_splits)],
-                "gap_scores": [np.abs(t.user_attrs.get(f"split{i}_test_score") - t.user_attrs.get(f"split{i}_train_score")) for i in range(inner_cv_splits)]
+                "test_scores": [t.user_attrs.get(f"split{i}_test_score") for i in range(splits)],
+                "train_scores": [t.user_attrs.get(f"split{i}_train_score") for i in range(splits)],
+                "gap_scores": [np.abs(t.user_attrs.get(f"split{i}_test_score") - t.user_attrs.get(f"split{i}_train_score")) for i in range(splits)]
             }
             for t in trials
             if t.state == optuna.trial.TrialState.COMPLETE
         ]
         
-        if self.config_rncv['inner_selection'] == "gso_1":
+        if method == "gso_1":
             # Sort trials by mean train score
             trials_data = sorted(
                         trials_data, key=lambda x: (x["mean_train_score"]), reverse=True
@@ -155,7 +151,7 @@ class MLPipelines(MachineLearningEstimator):
             else:
                 return trials[0].params
             
-        elif self.config_rncv['inner_selection'] == "gso_2":
+        elif method == "gso_2":
             # Sort trials by mean test score
             trials_data = sorted(
                 trials_data, key=lambda x: (x["mean_test_score"]), reverse=True
@@ -176,18 +172,15 @@ class MLPipelines(MachineLearningEstimator):
             else:
                 return trials[0].params
 
-    def _one_sem_model(self, trials, model_name, samples):
+    def _one_sem_model(self, trials, model_name, samples, splits, method):
         """This function selects the 'simplest' hyperparameters for the given model."""
-
         constraints = hyper_compl[model_name]
-
-        # Find the attributes of the trials that are related to the constraints
-        inner_cv_splits = self.config_rncv["inner_splits"]
+        
         trials_data = [
             {
                 "params": t.params,
                 "value": t.values[0],
-                "sem": t.user_attrs["std_test_score"] / (inner_cv_splits**0.5),
+                "sem": t.user_attrs["std_test_score"] / (splits**0.5),
                 "train_time": t.user_attrs["mean_fit_time"],
             }
             for t in trials
@@ -204,7 +197,7 @@ class MLPipelines(MachineLearningEstimator):
         # Find the scores that will possibly return simpler models with equally good performance
         sem_threshold = best_score - best_sem_score
         filtered_trials = [t for t in trials_data if t["value"] >= sem_threshold]
-        if self.config_rncv['inner_selection'] == "one_sem":
+        if method == "one_sem":
             def calculate_complexity(trial, model_name, samples):
                 params = trial["params"]
                 if model_name in ['RandomForestClassifier', 'XGBClassifier', 'GradientBoostingClassifier', 'LGBMClassifier']:
@@ -248,7 +241,7 @@ class MLPipelines(MachineLearningEstimator):
             best_trial = shorted_trials[0]
 
             return best_trial["params"]
-        else:
+        elif method == "one_sem_grd":
             # Retrieve the hyperparameter priorities for the given model type
             hyperparams = hyper_compl[model_name]
 
@@ -768,12 +761,6 @@ class MLPipelines(MachineLearningEstimator):
                     # For every estimator find the best hyperparameteres
                     self.name = estimator
                     self.estimator = self.available_clfs[estimator]
-                                        
-                    # if "n_jobs" in optuna_grid["NestedCV"][self.name]:
-                    #     if (self.config_rncv["parallel"] == "freely_parallel") and (avail_thr > 1):
-                    #         optuna_grid["NestedCV"][self.name]["n_jobs"] = optuna.distributions.CategoricalDistribution([avail_thr])
-                    #     else:
-                    #         optuna_grid["NestedCV"][self.name]["n_jobs"] = optuna.distributions.CategoricalDistribution([1])
 
                     self._set_optuna_verbosity(logging.ERROR)
                     clf = optuna.integration.OptunaSearchCV(
@@ -808,10 +795,10 @@ class MLPipelines(MachineLearningEstimator):
                         if (self.config_rncv["inner_selection"] == "one_sem") or (self.config_rncv["inner_selection"] == "one_sem_grd"):
                             samples = X_train_selected.shape[0]
                             # Find simpler parameters with the one_sem method if there are any
-                            simple_model_params = self._one_sem_model(trials, self.name, samples)
+                            simple_model_params = self._one_sem_model(trials, self.name, samples, self.config_rncv['inner_splits'],self.config_rncv["inner_selection"])
                         elif (self.config_rncv["inner_selection"] == "gso_1") or (self.config_rncv["inner_selection"] == "gso_2"):
                             # Find parameters with the smaller gap score with gso_1 method if there are any
-                            simple_model_params = self._gso_model(trials, self.name)
+                            simple_model_params = self._gso_model(trials, self.name, self.config_rncv['inner_splits'],self.config_rncv["inner_selection"])
                         results["Hyperparameters"].append(simple_model_params)
                         # Fit the new model
                         new_params_clf = self._create_model_instance(

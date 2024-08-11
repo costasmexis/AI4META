@@ -154,6 +154,7 @@ optuna_grid = {
             criterion=trial.suggest_categorical("criterion", ["gini", "entropy"]),
             min_samples_leaf=trial.suggest_int("min_samples_leaf", 2,15),
             bootstrap=trial.suggest_categorical("bootstrap", [True, False]),
+            max_depth=trial.suggest_int("max_depth", 2, 100),
             n_jobs=-1,
         ),
         "KNeighborsClassifier": lambda trial: KNeighborsClassifier(
@@ -194,11 +195,12 @@ optuna_grid = {
         ),
         "XGBClassifier": lambda trial: XGBClassifier(
             learning_rate=trial.suggest_float("learning_rate", 0.01, 0.2),
-            n_estimators=trial.suggest_int("n_estimators", 2, 400),
-            min_child_weight=trial.suggest_int("min_child_weight", 1, 10),
-            subsample=trial.suggest_float("subsample", 0.001, 1.0),
-            reg_alpha=trial.suggest_float("reg_alpha", 0, 10),
-            reg_lambda=trial.suggest_float("reg_lambda", 0.001, 10),
+            n_estimators=trial.suggest_int("n_estimators", 50, 500),
+            max_depth=trial.suggest_int("max_depth", 2, 15),
+            # min_child_weight=trial.suggest_int("min_child_weight", 1, 10),
+            subsample=trial.suggest_float("subsample", 0.01, 1.0),
+            reg_alpha=trial.suggest_float("reg_alpha", 0, 0.5),
+            reg_lambda=trial.suggest_float("reg_lambda", 0.5, 1.0),
             n_jobs=-1,
             scale_pos_weight=trial.suggest_float("scale_pos_weight", 1, 100, log=True),
             objective="binary:logistic",
@@ -225,6 +227,7 @@ optuna_grid = {
             penalty=trial.suggest_categorical("penalty", [ "l2", None]),
             solver=trial.suggest_categorical("solver", ["newton-cg", "lbfgs", "sag", "saga","newton-cholesky"]),
             C=trial.suggest_float("C", 0.01, 1.0),
+            max_iter=trial.suggest_int("max_iter", 100, 1500),
             fit_intercept=trial.suggest_categorical("fit_intercept", [True, False]),
             n_jobs=-1,
         ),
@@ -234,6 +237,7 @@ optuna_grid = {
             solver=trial.suggest_categorical("solver", ["saga"]),
             fit_intercept=trial.suggest_categorical("fit_intercept", [True, False]),
             l1_ratio=trial.suggest_float("l1_ratio", 0.0, 1.0),
+            max_iter=trial.suggest_int("max_iter", 100, 1500),
             n_jobs=-1,
         ),
         "GaussianNB": lambda trial: GaussianNB(
@@ -250,8 +254,8 @@ optuna_grid = {
             objective="binary",
             min_child_samples=trial.suggest_int("min_child_samples", 2, 15),
             n_jobs=-1,
-            reg_alpha=trial.suggest_float("reg_alpha", 0.0, 10.0),
-            reg_lambda=trial.suggest_float("reg_lambda", 0.0, 10.0),
+            reg_alpha=trial.suggest_float("reg_alpha", 0.0, 0.5),
+            reg_lambda=trial.suggest_float("reg_lambda", 0.5, 1.0),
             bagging_fraction=trial.suggest_float("bagging_fraction", 0.1, 0.9)
             if trial.params.get("boosting_type", "gbdt") not in ["goss", "rf"]
             else 1.0,
@@ -262,15 +266,18 @@ optuna_grid = {
             if trial.params.get("boosting_type", "gbdt") != "goss"
             else 1.0,
             verbose=-1,
+            max_depth=trial.suggest_int("max_depth", 2, 50),
         ),
         "GaussianProcessClassifier": lambda trial: GaussianProcessClassifier(
             optimizer=trial.suggest_categorical("optimizer", ["fmin_l_bfgs_b", None]),
             max_iter_predict=trial.suggest_int("max_iter_predict", 50, 1500),
             warm_start=trial.suggest_categorical("warm_start", [True, False]),
+            n_restarts_optimizer=trial.suggest_int("n_restarts_optimizer", 0, 10),
             n_jobs=-1,
         ),
         "CatBoostClassifier": lambda trial: CatBoostClassifier(
-            iterations=trial.suggest_int("iterations", 50, 1000),
+            # iterations=trial.suggest_int("iterations", 50, 1000),
+            n_estimators=trial.suggest_int("n_estimators", 50, 300),
             learning_rate=trial.suggest_float("learning_rate", 0.001, 0.5),
             depth=trial.suggest_int("depth", 2, 16),
             l2_leaf_reg=trial.suggest_float("l2_leaf_reg", 1e-8, 100.0, log=True),
