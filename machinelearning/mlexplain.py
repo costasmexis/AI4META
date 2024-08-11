@@ -67,6 +67,12 @@ class MLExplainer:
             raise ValueError("Explainer is not defined")
 
     def plot_shap_values(self, max_display=10, plot_type="summary", label=1):
+        # Convert shap_values to Explanation object if not already one
+        if not isinstance(self.shap_values, shap.Explanation):
+            self.shap_values = shap.Explanation(values=self.shap_values, 
+                                                feature_names=self.X.columns,
+                                                data=self.X)
+
         if plot_type == "summary":
             try:
                 shap.summary_plot(
