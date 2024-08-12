@@ -31,6 +31,7 @@ from sklearn.svm import SVC
 from sklearn.utils import resample
 from tqdm import tqdm
 from xgboost import XGBClassifier
+import warnings
 
 from .optuna_grid import optuna_grid
 
@@ -473,6 +474,7 @@ class MachineLearningEstimator(DataLoader):
         normalization="minmax",
         training_method = "validation_score",
         extra_metrics = ['roc_auc','accuracy','balanced_accuracy','recall','precision','f1','matthews_corrcoef'],
+        warnings_filter = False
     ):
         """
         Perform a Bayesian search for hyperparameter optimization.
@@ -538,29 +540,46 @@ class MachineLearningEstimator(DataLoader):
             param_grid = {estimator_name: param_grid}
             self.param_grid = param_grid
 
+        if warnings_filter:
+            warnings.filterwarnings("ignore")
+        if estimator_name == 'ElasticNet':
+            warnings.filterwarnings("ignore", category=DeprecationWarning, message="is_sparse is deprecated")
+
+
         # # Function to perform cross-validation and return the average score
         # # if training_method == 'validation_score1':
         # def objective(trial):
         #     clf = self.param_grid[estimator_name](trial)
         #     scores = []
-        #     cv_splits = StratifiedKFold(n_splits=cv, shuffle=True, random_state=1)
+        #     after_bootstrap = []
+        #     cv_splits = StratifiedKFold(n_splits=cv, shuffle=True)
 
         #     for train_index, test_index in cv_splits.split(X, y):
         #         X_train, X_test = X.iloc[train_index], X.iloc[test_index]
         #         y_train, y_test = y[train_index], y[test_index]
+            
+        #         # eval_scores = []
+        #         # for i in range(10):
+        #         #     X_train_res, y_train_res = resample(X_train, y_train, random_state=i, stratify=y_train)
+        #         #     clf.fit(X_train_res, y_train_res)
+        #         #     y_pred = clf.predict(X_test)
+                
+        #         #     # Calculate the main scoring metric
+        #         #     eval_scores.append(metrics.get_scorer(self.scoring)._score_func(y_test, y_pred))                    
+                
         #         clf.fit(X_train, y_train)
         #         y_pred = clf.predict(X_test)
         #         score = metrics.get_scorer(scoring)._score_func(y_test, y_pred)
-        #         scores.append(score)
-
+        #         scores.append(scores)
         #     return np.mean(scores)
+        #     #     after_bootstrap.append(np.mean(eval_scores))
+        #     # return after_bootstrap#np.mean(after_bootstrap)
 
         # study = optuna.create_study(sampler=TPESampler(), direction=direction)
-        # study.optimize(objective, n_trials=n_trials, show_progress_bar=True, n_jobs=-1)
+        # study.optimize(objective, n_trials=n_trials, show_progress_bar=True, n_jobs=10)
         # best_score = study.best_value
         # model_trials = study.trials
         # best_params = study.best_params
-        # clf = study.best_trial
         # else:
         print("The specific process does not support a progress bar.")
         clf = optuna.integration.OptunaSearchCV(
@@ -573,6 +592,8 @@ class MachineLearningEstimator(DataLoader):
                     verbose=0,
                     n_trials=n_trials,
                     study=optuna.create_study(direction=direction, sampler=TPESampler(constant_liar=True)),
+                    subsample=0.7*X.shape[0]*(cv-1)/cv,
+                    # enable_pruning=True
                 )
         clf.fit(X, y)
         study = clf.study_
@@ -588,21 +609,33 @@ class MachineLearningEstimator(DataLoader):
         else:
             simple_model_params = clf.best_params_
         
-        if training_method == "validation_score":
-            best_score = clf.best_score_
-        else:
-            best_score = f"Best trials score: {clf.best_score_}. New parameters are not evaluated yet."
         best_params = simple_model_params
+        
         best_model = self._create_model_instance(estimator_name, best_params)
 
         self.best_estimator = best_model
-
+                    
+        for trial in study.trials:
+            # Check if the trial parameters match the selected parameters
+            if trial.params == simple_model_params:
+                matching_score = trial.value  # Extract the score of the matching trial
+                break    
+        
+        best_score = clf.best_score_
+        
         if estimator_name == 'ElasticNet':
             print(f"Estimator: LogisticRegression with ElasticNet penalty")
         else:
             print(f"Estimator: {estimator_name}")
         print(f"Best parameters: {best_params}")
-        print(f"Best {scoring}: {best_score}")
+        
+        if training_method == "validation_score":
+            print(f"Best trials score: {matching_score}.")
+        else:
+            if matching_score == best_score:
+                print(f"Best trials score: {best_score}. Using {training_method} th best score is the same.")
+            else:
+                print(f"Best trials score wiuth validation method: {best_score}. Using {training_method} th best score is {matching_score}.")
 
         if calculate_shap:
             best_model, eval_df, shaps_array = self.evaluate(
@@ -655,7 +688,10 @@ class MachineLearningEstimator(DataLoader):
             else:
                 raise TypeError(e)
         try:
-            shap_values = explainer(X_test)
+            if self.best_estimator.__class__.__name__ in ["LGBMClassifier", "CatBoostClassifier","RandomForestClassifier"]:
+                shap_values = explainer(X_test, check_additivity=False)
+            else: 
+                shap_values = explainer(X_test)
         except ValueError:
             num_features = X_test.shape[1]
             max_evals = 2 * num_features + 1
@@ -675,17 +711,22 @@ class MachineLearningEstimator(DataLoader):
         :rtype: tuple
         """
 
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.3, shuffle=True
-        )
+        # X_train, X_test, y_train, y_test = train_test_split(
+        #     X, y, test_size=0.3, shuffle=True
+        # )
 
         bootstrap_scores = []
         extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
         
         for i in tqdm(range(100), desc="Bootstrap validation"):
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.2, shuffle=True
+                )
+            
             model_bootstrap = copy.deepcopy(model)
-            X_train_res, y_train_res = resample(X_train, y_train, random_state=i, stratify=y_train)
-            model_bootstrap.fit(X_train_res, y_train_res)
+            # X_train_res, y_train_res = resample(X_train, y_train, random_state=i, stratify=y_train)
+            # model_bootstrap.fit(X_train_res, y_train_res)
+            model_bootstrap.fit(X_train, y_train)
             y_pred = model_bootstrap.predict(X_test)
             
             # Calculate the main scoring metric

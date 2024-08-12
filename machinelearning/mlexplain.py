@@ -28,7 +28,6 @@ class MLExplainer:
 
         elif explainer_type == "tree":
             if self.name not in [
-                "DecisionTreeClassifier",
                 "RandomForestClassifier",
                 "XGBClassifier",
                 "CatBoostClassifier",
