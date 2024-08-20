@@ -550,6 +550,9 @@ class MachineLearningEstimator(DataLoader):
         self.model_selection_way = "bayesian_search"
         self._set_optuna_verbosity(logging.ERROR)
 
+        if training_method not in ['validation_score','one_sem','gso_1','gso_2','one_sem_grd']:
+            raise ValueError("Invalid training_method. Select one of the following: ['validation_score','one_sem','gso_1','gso_2','one_sem_grd']")
+
         X, y, _ = self._preprocess(
             X,
             y,
@@ -891,7 +894,7 @@ class MachineLearningEstimator(DataLoader):
             )
         else:
             fig = make_subplots(
-                rows=1, cols=2, subplot_titles=("Summary Boxplots", "Rounds Scores")
+                rows=1, cols=2, subplot_titles=("Summary Boxplot", "Rounds Scores")
             )
             all_scores = []
             best_scores_rounds = []
