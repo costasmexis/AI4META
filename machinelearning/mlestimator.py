@@ -17,7 +17,7 @@ from plotly.subplots import make_subplots
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression,Lasso
 from sklearn.metrics import make_scorer
 from sklearn.model_selection import (
     GridSearchCV,
@@ -25,6 +25,7 @@ from sklearn.model_selection import (
     StratifiedKFold,
     train_test_split,
 )
+
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -146,6 +147,7 @@ class MachineLearningEstimator(DataLoader):
 
         if features_names_list is not None:
             X = X[features_names_list]
+
         elif feat_num is not None:
             selected = self.feature_selection(X, y, feat_way, feat_num)
             X = X[selected]
@@ -156,7 +158,6 @@ class MachineLearningEstimator(DataLoader):
             estimator_name = estimator_name
 
         estimator = self.available_clfs[estimator_name]
-
         return X, y, estimator
 
     def grid_search(
@@ -378,8 +379,6 @@ class MachineLearningEstimator(DataLoader):
         :rtype: tuple
         """
 
-        # scoring_check(scoring)
-
         self.model_selection_way = "random_search"
 
         X, y, estimator = self._preprocess(
@@ -575,42 +574,6 @@ class MachineLearningEstimator(DataLoader):
         if warnings_filter:
             warnings.filterwarnings("ignore")
 
-        # # Function to perform cross-validation and return the average score
-        # # if training_method == 'validation_score1':
-        # def objective(trial):
-        #     clf = self.param_grid[estimator_name](trial)
-        #     scores = []
-        #     after_bootstrap = []
-        #     cv_splits = StratifiedKFold(n_splits=cv, shuffle=True)
-
-        #     for train_index, test_index in cv_splits.split(X, y):
-        #         X_train, X_test = X.iloc[train_index], X.iloc[test_index]
-        #         y_train, y_test = y[train_index], y[test_index]
-            
-        #         # eval_scores = []
-        #         # for i in range(10):
-        #         #     X_train_res, y_train_res = resample(X_train, y_train, random_state=i, stratify=y_train)
-        #         #     clf.fit(X_train_res, y_train_res)
-        #         #     y_pred = clf.predict(X_test)
-                
-        #         #     # Calculate the main scoring metric
-        #         #     eval_scores.append(metrics.get_scorer(self.scoring)._score_func(y_test, y_pred))                    
-                
-        #         clf.fit(X_train, y_train)
-        #         y_pred = clf.predict(X_test)
-        #         score = metrics.get_scorer(scoring)._score_func(y_test, y_pred)
-        #         scores.append(scores)
-        #     return np.mean(scores)
-        #     #     after_bootstrap.append(np.mean(eval_scores))
-        #     # return after_bootstrap#np.mean(after_bootstrap)
-
-        # study = optuna.create_study(sampler=TPESampler(), direction=direction)
-        # study.optimize(objective, n_trials=n_trials, show_progress_bar=True, n_jobs=10)
-        # best_score = study.best_value
-        # model_trials = study.trials
-        # best_params = study.best_params
-        # else:
-        
         processors_available = os.cpu_count()
         if processors == -1:
             pass
@@ -780,13 +743,12 @@ class MachineLearningEstimator(DataLoader):
         bootstrap_scores = []
         extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
         all_shap_values = np.zeros((X.shape[0], X.shape[1]))  # Initialize array to accumulate SHAP values
-        counts = np.zeros(X.shape[0])  # To keep track of how many times each sample is in the test set
+        counts = np.zeros(X.shape[0])  # To keep track of how many times each sample is in the test set        
         
         for i in tqdm(range(100), desc="Bootstrap validation"):
             X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, shuffle=True
+                X, y, test_size=0.25, shuffle=True, random_state=i
                 )
-            
             model_bootstrap = copy.deepcopy(model)
             # X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
             # model_bootstrap.fit(X_train_res, y_train_res)
