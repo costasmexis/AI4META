@@ -146,6 +146,13 @@ optuna_grid = {
                 ["Logloss", "CrossEntropy"]
             ),
         },
+        # "Lasso": {
+        #     "alpha": optuna.distributions.FloatDistribution(0.01, 1.0),
+        #     "selection": optuna.distributions.CategoricalDistribution([True, False]),
+        #     "warm_start": optuna.distributions.CategoricalDistribution([True, False]),
+        #     "positive": optuna.distributions.CategoricalDistribution([True, False]),
+        #     "precompute": optuna.distributions.CategoricalDistribution([True, False]),
+        # },
     },
  
     "ManualSearch": {
