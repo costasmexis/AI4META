@@ -33,9 +33,11 @@ with tab_papers:
         
         # Selection boxes
         select_dataset = col1.selectbox("Select Dataset", df['Dataset Name'].unique())
-        select_tr_methods = col2.multiselect("Select Training Methods", df['Training Method'].unique())
-        select_metric = col1.selectbox("Select Metric", ['matthews_corrcoef', 'roc_auc', 'f1', 'accuracy', 'balanced_accuracy', 'precision', 'recall'])
+        select_metric = col2.selectbox("Select Metric", ['matthews_corrcoef', 'roc_auc', 'f1', 'accuracy', 'balanced_accuracy', 'precision', 'recall'])
+
+        select_tr_methods = col1.multiselect("Select Training Methods", df['Training Method'].unique())
         select_estimators = col2.multiselect("Select Estimators", df['Estimator'].unique())
+        select_features = col1.multiselect("Select set of Features", df['Features'].unique())
 
         # Set default metric if none selected (though selectbox doesn't allow none)
         if select_metric is None:
@@ -53,10 +55,13 @@ with tab_papers:
                 select_estimators = temp_df['Estimator'].unique()
             if (select_tr_methods == []) or (select_tr_methods is None):
                 select_tr_methods = temp_df['Training Method'].unique()
+            if (select_features == []) or (select_features is None):
+                select_features = temp_df['Features'].unique()
 
             temp_df = temp_df[
                 (temp_df['Estimator'].isin(select_estimators)) &
-                (temp_df['Training Method'].isin(select_tr_methods))
+                (temp_df['Training Method'].isin(select_tr_methods)) &
+                (temp_df['Features'].isin(select_features))
             ]
         
         if not temp_df.empty:
@@ -111,5 +116,6 @@ with tab_papers:
                 st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("No data available for the selected filters.")
+        st.warning("There might be estimators that are not available in the dataset.")
     else:
         st.stop()
