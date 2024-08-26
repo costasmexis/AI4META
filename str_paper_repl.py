@@ -4,6 +4,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import ast
 import os
 
 st.set_page_config(layout="wide")
@@ -63,7 +64,18 @@ with tab_papers:
                 (temp_df['Training Method'].isin(select_tr_methods)) &
                 (temp_df['Features'].isin(select_features))
             ]
-        
+            
+            # Create 'Estimator_groups' based on 'Features'
+            def create_estimator_groups(row):
+                if row['Features'] == 'all':
+                    return f"{row['Estimator']}_all"
+                else:
+                    # Convert string representation of list back to a list
+                    feature_list = ast.literal_eval(row['Features'])
+                    return f"{row['Estimator']}_{len(feature_list)}"
+
+            temp_df['Estimator_groups'] = temp_df.apply(create_estimator_groups, axis=1)  
+
         if not temp_df.empty:
             for method in select_tr_methods:
                 method_df = temp_df[temp_df['Training Method'] == method]
@@ -71,19 +83,19 @@ with tab_papers:
                 # Create a box plot
                 fig = px.box(
                     method_df, 
-                    x='Estimator', 
+                    x='Estimator_groups', 
                     y=select_metric, 
-                    color='Estimator',
+                    color='Estimator_groups',
                     title=f'Boxplot of {select_metric.capitalize()} for {select_dataset} - {method}',
-                    labels={select_metric: select_metric.capitalize(), 'Estimator': 'Estimator'}
+                    labels={select_metric: select_metric.capitalize(), 'Estimator_groups': 'Estimator_groups'}
                 )
 
                 # Calculate mean for each estimator
-                means = method_df.groupby('Estimator')[select_metric].mean().reset_index()
+                means = method_df.groupby('Estimator_groups')[select_metric].mean().reset_index()
 
                 # Add mean lines to the box plot
-                for estimator in means['Estimator']:
-                    mean_value = means[means['Estimator'] == estimator][select_metric].values[0]
+                for estimator in means['Estimator_groups']:
+                    mean_value = means[means['Estimator_groups'] == estimator][select_metric].values[0]
                     
                     fig.add_shape(
                         type='line',
@@ -110,7 +122,7 @@ with tab_papers:
                     xaxis=dict(tickangle=-45),
                     height=600,
                     width=1000,
-                    legend_title_text='Estimator'
+                    legend_title_text='Estimator_groups'
                 )
 
                 st.plotly_chart(fig, use_container_width=True)
