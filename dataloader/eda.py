@@ -94,7 +94,7 @@ class DataExplorer(DataLoader):
             data=None,
             labels=None,
             list_of_feature=None,
-            num_of_best_features=10,
+            num_of_best_features=None,
             way_of_selection="mrmr",
         ) -> None:
             """
