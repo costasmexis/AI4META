@@ -1,11 +1,12 @@
-name: ai4meta
+name: my_env
 channels:
+  - conda-forge
   - defaults
 dependencies:
-  - python=3.11  
-  - numpy
+  - python=3.9
+  - numpy==1.23.5
   - pandas
-  - matplotlib 
+  - matplotlib
   - xgboost
   - scikit-learn
   - lightgbm
@@ -13,19 +14,20 @@ dependencies:
   - dask
   - progressbar2
   - ipykernel
-  - pip  
+  - catboost==1.2.5
+  - streamlit
+  - optuna
+  - joblib
+  - shap
+  - progress
+  - ipywidgets
+  - plotly
+  - nbformat
+  - umap-learn
+  - seaborn
+  - openpyxl
   - pip:
-      - catboost=1.2.5
-      - streamlit
-      - mrmr-selection
-      - optuna
-      - optuna.integration
-      - joblib
-      - shap
-      - progress
-      - ipywidgets
-      - plotly
-      - nbformat
-      - umap-learn
-      - seaborn
-      - kaleido
+    - optuna.integration
+    - kaleido
+    - mrmr-selection
+  
