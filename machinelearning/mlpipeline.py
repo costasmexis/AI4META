@@ -632,7 +632,6 @@ class MLPipelines(MachineLearningEstimator):
 
         return scores_dataframe
 
-
     def _filter_features(self, train_index, test_index, X, y, num_feature2_use, cvncvsel):
         """
         This function filters the features using the selected model.
@@ -742,6 +741,7 @@ class MLPipelines(MachineLearningEstimator):
             "Way_of_Selection": [],
             "Estimator": [],
             'Samples_counts': [],
+            'Inner_selection_mthd': [],
         }
         if self.config_rncv["extra_metrics"] != None:
             results.update({f"{metric}": [] for metric in self.config_rncv["extra_metrics"]})
@@ -774,75 +774,76 @@ class MLPipelines(MachineLearningEstimator):
                         n_trials=self.config_rncv["n_trials_ncv"],
                     )
                     clf.fit(X_train_selected, y_train)
-
-                    # Store the results and apply one_sem method if its selected
-                    results["Estimator"].append(self.name)
-                    if self.config_rncv["inner_selection"] == "validation_score":
-                        results[f"Outer_{self.config_rncv['outer_scoring']}"].append(
-                            get_scorer(self.config_rncv["outer_scoring"])(
-                                clf, X_test_selected, y_test
+                    
+                    for inner_selection in self.config_rncv["inner_selection_lst"]:
+                        results['Inner_selection_mthd'].append(inner_selection)
+                        # Store the results and apply one_sem method if its selected
+                        results["Estimator"].append(self.name)
+                        if inner_selection == "validation_score":
+                            results[f"Outer_{self.config_rncv['outer_scoring']}"].append(
+                                get_scorer(self.config_rncv["outer_scoring"])(
+                                    clf, X_test_selected, y_test
+                                )
                             )
-                        )
-                        results["Hyperparameters"].append(clf.best_params_)
-                        if self.config_rncv["extra_metrics"] != None:
-                            for metric in self.config_rncv["extra_metrics"]:
-                                results[f"{metric}"].append(
-                                    get_scorer(metric)(clf, X_test_selected, y_test)
-                                )
-                        y_pred = clf.predict(X_test_selected)
-                    else:
-                        trials = clf.trials_
-                        if (self.config_rncv["inner_selection"] == "one_sem") or (self.config_rncv["inner_selection"] == "one_sem_grd"):
-                            samples = X_train_selected.shape[0]
-                            # Find simpler parameters with the one_sem method if there are any
-                            simple_model_params = self._one_sem_model(trials, self.name, samples, self.config_rncv['inner_splits'],self.config_rncv["inner_selection"])
-                        elif (self.config_rncv["inner_selection"] == "gso_1") or (self.config_rncv["inner_selection"] == "gso_2"):
-                            # Find parameters with the smaller gap score with gso_1 method if there are any
-                            simple_model_params = self._gso_model(trials, self.name, self.config_rncv['inner_splits'],self.config_rncv["inner_selection"])
-                        results["Hyperparameters"].append(simple_model_params)
-                        # Fit the new model
-                        new_params_clf = self._create_model_instance(
-                            self.name, simple_model_params
-                        )
-                        new_params_clf.fit(X_train_selected, y_train)
-                        results[f"Outer_{self.config_rncv['outer_scoring']}"].append(
-                            new_params_clf.score(X_test_selected, y_test)
-                        )
-                        
-                        if self.config_rncv["extra_metrics"] != None:
-                            for metric in self.config_rncv["extra_metrics"]:
-                                results[f"{metric}"].append(
-                                    get_scorer(metric)(new_params_clf, X_test_selected, y_test)
-                                )
-                        y_pred = new_params_clf.predict(X_test_selected)
+                            results["Hyperparameters"].append(clf.best_params_)
+                            if self.config_rncv["extra_metrics"] != None:
+                                for metric in self.config_rncv["extra_metrics"]:
+                                    results[f"{metric}"].append(
+                                        get_scorer(metric)(clf, X_test_selected, y_test)
+                                    )
+                            y_pred = clf.predict(X_test_selected)
+                        else:
+                            trials = clf.trials_
+                            if (inner_selection == "one_sem") or (inner_selection == "one_sem_grd"):
+                                samples = X_train_selected.shape[0]
+                                # Find simpler parameters with the one_sem method if there are any
+                                simple_model_params = self._one_sem_model(trials, self.name, samples, self.config_rncv['inner_splits'],inner_selection)
+                            elif (inner_selection == "gso_1") or (inner_selection == "gso_2"):
+                                # Find parameters with the smaller gap score with gso_1 method if there are any
+                                simple_model_params = self._gso_model(trials, self.name, self.config_rncv['inner_splits'],inner_selection)
+                            results["Hyperparameters"].append(simple_model_params)
+                            # Fit the new model
+                            new_params_clf = self._create_model_instance(
+                                self.name, simple_model_params
+                            )
+                            new_params_clf.fit(X_train_selected, y_train)
+                            results[f"Outer_{self.config_rncv['outer_scoring']}"].append(
+                                new_params_clf.score(X_test_selected, y_test)
+                            )
+                            
+                            if self.config_rncv["extra_metrics"] != None:
+                                for metric in self.config_rncv["extra_metrics"]:
+                                    results[f"{metric}"].append(
+                                        get_scorer(metric)(new_params_clf, X_test_selected, y_test)
+                                    )
+                            y_pred = new_params_clf.predict(X_test_selected)
 
-                    # Store the results using different names if feature selection is applied
-                    if num_feature == "full" or num_feature is None:
-                        results["Selected_Features"].append(None)
-                        results["Number_of_Features"].append(X_test_selected.shape[1])
-                        results["Way_of_Selection"].append("full")
-                        results["Classifiers"].append(f"{self.name}")
-                    else:
-                        results["Classifiers"].append(
-                            f"{self.name}_{self.config_rncv['feature_selection_type']}_{num_feature}"
-                        )
-                        results["Selected_Features"].append(
-                            X_train_selected.columns.tolist()
-                        )
-                        results["Number_of_Features"].append(num_feature)
-                        results["Way_of_Selection"].append(
-                            self.config_rncv["feature_selection_type"]
-                        )
+                        # Store the results using different names if feature selection is applied
+                        if num_feature == "full" or num_feature is None:
+                            results["Selected_Features"].append(None)
+                            results["Number_of_Features"].append(X_test_selected.shape[1])
+                            results["Way_of_Selection"].append("full")
+                            results["Classifiers"].append(f"{self.name}")
+                        else:
+                            results["Classifiers"].append(
+                                f"{self.name}_{self.config_rncv['feature_selection_type']}_{num_feature}"
+                            )
+                            results["Selected_Features"].append(
+                                X_train_selected.columns.tolist()
+                            )
+                            results["Number_of_Features"].append(num_feature)
+                            results["Way_of_Selection"].append(
+                                self.config_rncv["feature_selection_type"]
+                            )
 
-                    # Track predictions
-                    samples_counts = np.zeros(len(self.y))
-                    for idx, resu, pred in zip(test_index, y_test, y_pred):
-                        if pred == resu:
-                            samples_counts[idx] += 1
+                        # Track predictions
+                        samples_counts = np.zeros(len(self.y))
+                        for idx, resu, pred in zip(test_index, y_test, y_pred):
+                            if pred == resu:
+                                samples_counts[idx] += 1
 
-                    results['Samples_counts'].append(samples_counts)
-
-        time.sleep(1)
+                        results['Samples_counts'].append(samples_counts)
+                        time.sleep(0.5)
         return [results]
 
     def _outer_loop(self, i, avail_thr):
@@ -931,7 +932,7 @@ class MLPipelines(MachineLearningEstimator):
         feature_selection_method="chi2",
         plot="box",
         inner_scoring="matthews_corrcoef",
-        inner_selection="validation_score",
+        inner_selection_lst=["validation_score","one_sem","gso_1","gso_2","one_sem_grd"],
         outer_scoring="matthews_corrcoef",
         inner_splits=5,
         outer_splits=5,
@@ -1002,10 +1003,11 @@ class MLPipelines(MachineLearningEstimator):
             raise ValueError(
                 f"Invalid outer scoring metric: {outer_scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
             )
-        if inner_selection not in ["validation_score", "one_sem", "gso_1", "gso_2","one_sem_grd"]:
-            raise ValueError(
-                f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem", "gso_1", "gso_2"]'
-            )
+        for inner_selection in inner_selection_lst:
+            if inner_selection not in ["validation_score", "one_sem", "gso_1", "gso_2","one_sem_grd"]:
+                raise ValueError(
+                    f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem", "one_sem_grd", "gso_1", "gso_2"]'
+                )
 
         # Parallelization
         trial_indices = range(rounds)
@@ -1041,96 +1043,124 @@ class MLPipelines(MachineLearningEstimator):
             dataframe = pd.DataFrame(item)
             df = pd.concat([df, dataframe], axis=0)
 
-        for classif in np.unique(df["Classifiers"]):
-            indices = df[df["Classifiers"] == classif]
-            filtered_scores = indices[f"Outer_{self.config_rncv['outer_scoring']}"].values
-            if num_features is not None:
-                filtered_features = indices["Selected_Features"].values
-            mean_score = np.mean(filtered_scores)
-            max_score = np.max(filtered_scores)
-            std_score = np.std(filtered_scores)
-            sem_score = sem(filtered_scores)
-            median_score = np.median(filtered_scores)
-            Numbers_of_Features = indices["Number_of_Features"].unique()[0]
-            Way_of_Selection = indices["Way_of_Selection"].unique()[0]
-            samples_classification_rates = np.zeros(len(self.y))
-            for test_part in indices["Samples_counts"]:
-                samples_classification_rates=np.add(samples_classification_rates,test_part)
-            samples_classification_rates /= rounds
-            
-            results.append(
-                {
-                    "Estimator": df[df["Classifiers"] == classif]["Estimator"].unique()[
-                        0
-                    ],
-                    "Classifier": classif,
-                    f"Outer_{self.config_rncv['outer_scoring']}": filtered_scores.tolist(),
-                    "Max": max_score,
-                    "Std": std_score,
-                    "SEM": sem_score,
-                    "Median": median_score,
-                    "Hyperparameters": df[df["Classifiers"] == classif][
-                        "Hyperparameters"
-                    ].values,
-                    "Selected_Features": filtered_features
-                    if num_features is not None
-                    else None,
-                    "Inner_Selection":inner_selection,
-                    "Numbers_of_Features": Numbers_of_Features,
-                    "Way_of_Selection": Way_of_Selection,
-                    "Samples_classification_rates": samples_classification_rates.tolist(),
-                }
-            )
+        for inner_selection in inner_selection_lst:
+            df_inner = df[df["Inner_selection_mthd"] == inner_selection]
+            for classif in np.unique(df_inner["Classifiers"]):
+                indices = df_inner[df_inner["Classifiers"] == classif]
+                filtered_scores = indices[f"Outer_{self.config_rncv['outer_scoring']}"].values
+                if num_features is not None:
+                    filtered_features = indices["Selected_Features"].values
+                mean_score = np.mean(filtered_scores)
+                max_score = np.max(filtered_scores)
+                std_score = np.std(filtered_scores)
+                sem_score = sem(filtered_scores)
+                median_score = np.median(filtered_scores)
+                Numbers_of_Features = indices["Number_of_Features"].unique()[0]
+                Way_of_Selection = indices["Way_of_Selection"].unique()[0]
+                samples_classification_rates = np.zeros(len(self.y))
+                for test_part in indices["Samples_counts"]:
+                    samples_classification_rates=np.add(samples_classification_rates,test_part)
+                samples_classification_rates /= rounds
+                
+                results.append(
+                    {
+                        "Estimator": df_inner[df_inner["Classifiers"] == classif]["Estimator"].unique()[
+                            0
+                        ],
+                        "Classifier": classif,
+                        f"Outer_{self.config_rncv['outer_scoring']}": filtered_scores.tolist(),
+                        "Max": max_score,
+                        "Std": std_score,
+                        "SEM": sem_score,
+                        "Median": median_score,
+                        "Hyperparameters": df_inner[df_inner["Classifiers"] == classif][
+                            "Hyperparameters"
+                        ].values,
+                        "Selected_Features": filtered_features
+                        if num_features is not None
+                        else None,
+                        "Inner_Selection":inner_selection,
+                        "Numbers_of_Features": Numbers_of_Features,
+                        "Way_of_Selection": Way_of_Selection,
+                        "Samples_classification_rates": samples_classification_rates.tolist(),
+                    }
+                )
 
-            # Add extra metrics
-            if extra_metrics is not None:
-                for metric in extra_metrics:
-                    results[-1][f"{metric}"] = indices[f"{metric}"].values
+                # Add extra metrics
+                if extra_metrics is not None:
+                    for metric in extra_metrics:
+                        results[-1][f"{metric}"] = indices[f"{metric}"].values
 
         print(f"Finished with {len(results)} estimators")
         scores_dataframe = pd.DataFrame(results)
         
-        # Show bad samples
         if show_bad_samples:
             threshold = 0.5
-            classifiers = scores_dataframe['Classifier'].unique()
-    
+            inner_selection_methods = scores_dataframe['Inner_Selection'].unique()
+            limit = 0  # Counter to track how many Inner_Selection methods have no bad samples
+            
             fig = go.Figure()
             
-            for classifier in classifiers:
-                df_classifier = scores_dataframe[scores_dataframe['Classifier'] == classifier]
-                samples_classification_rates = np.array(df_classifier['Samples_classification_rates'].values[0])
+            for inner_selection_method in inner_selection_methods:
+                df_inner_selection = scores_dataframe[scores_dataframe['Inner_Selection'] == inner_selection_method]
+                classifiers = df_inner_selection['Classifier'].unique()
                 
-                bad_samples_indices = np.where(samples_classification_rates < threshold)[0]
-                bad_samples_rates = samples_classification_rates[bad_samples_indices]
+                for classifier in classifiers:
+                    df_classifier = df_inner_selection[df_inner_selection['Classifier'] == classifier]
+                    samples_classification_rates = np.array(df_classifier['Samples_classification_rates'].values[0])
+                    print(f'Samples classification rates for {classifier} ({inner_selection_method}): {samples_classification_rates}')
+                    
+                    # Find bad samples (classification rate < threshold)
+                    bad_samples_indices = np.where(samples_classification_rates < threshold)[0]
+                    
+                    # Skip plotting if no bad samples are found
+                    if bad_samples_indices.size == 0:
+                        print(f'No bad samples for {classifier} ({inner_selection_method}).')
+                        limit += 1  # Increment limit if no bad samples are found
+                        continue
+                    
+                    bad_samples_rates = samples_classification_rates[bad_samples_indices]              
+                    
+                    # Add the bar trace for bad samples (with wider bars)
+                    fig.add_trace(go.Bar(
+                        x=bad_samples_indices.tolist(),  # Ensure it's converted to a list for Plotly
+                        y=bad_samples_rates.tolist(),    # Convert rates to list for Plotly
+                        name=f'Bad Samples for {classifier} ({inner_selection_method})',
+                        text=[f'{rate:.2f}' for rate in bad_samples_rates],
+                        textposition='auto',
+                        width=[0.5] * len(bad_samples_indices)  # Make bars wider (adjust the value for width)
+                    ))
+                    
+                    # Add a scatter trace to mark points where the rate is 0
+                    zero_rate_indices = bad_samples_indices[bad_samples_rates == 0]
+                    if len(zero_rate_indices) > 0:
+                        fig.add_trace(go.Scatter(
+                            x=zero_rate_indices.tolist(),
+                            y=[0] * len(zero_rate_indices),  # Place the points on y = 0
+                            mode='markers',
+                            marker=dict(color='red', size=10, symbol='circle-open'),  # Customize marker appearance
+                            name=f'Zero Rate Points for {classifier} ({inner_selection_method})',
+                            showlegend=False  # Optionally, remove from legend if not needed
+                        ))
+
+            # Check if limit equals the number of inner_selection_methods before showing the plot
+            if limit == len(inner_selection_methods):
+                print('No bad samples found for any Inner_Selection method.')
+            elif fig.data:  # Only show the plot if there are traces to plot
+                fig.update_layout(
+                    title='Bad Samples Classification Rates for Each Classifier and Inner Selection Method',
+                    xaxis_title='Sample Index',
+                    yaxis_title='Classification Rate',
+                    legend_title='Classifiers (Inner_Selection)',
+                    barmode='group',
+                    width=self.X.shape[0] * 15,  
+                    height=500
+                )
                 
-                fig.add_trace(go.Bar(
-                    x=bad_samples_indices,
-                    y=bad_samples_rates,
-                    name=f'Bad Samples for {classifier}',
-                    text=[f'{rate:.2f}' for rate in bad_samples_rates],
-                    textposition='auto'
-                ))
-            
-            # fig.add_trace(go.Scatter(
-            #     x=np.arange(len(samples_classification_rates)),
-            #     y=[threshold] * len(samples_classification_rates),
-            #     mode='lines',
-            #     name='Threshold',
-            #     line=dict(color='red', dash='dash')
-            # ))
-            
-            fig.update_layout(
-                title='Bad Samples Classification Rates for Each Classifier',
-                xaxis_title='Sample Index',
-                yaxis_title='Classification Rate',
-                legend_title='Classifiers',
-                barmode='group',
-                width=self.X.shape[0] * 15,  
-                height=500
-            )
-            
-            fig.show()
+                fig.show()
+            else:
+                print("No bad samples to plot.")
+
 
         # Create a 'Results' directory
         results_dir = "Results"
@@ -1146,18 +1176,18 @@ class MLPipelines(MachineLearningEstimator):
         try:
             dataset_name = self._set_result_csv_name(self.csv_dir)
             if name_add is None:
-                results_name = f"{dataset_name}_{inner_selection}_{features}"
+                results_name = f"{dataset_name}_{inner_selection_lst}_{features}"
             else:
-                results_name = f"{dataset_name}_{inner_selection}_{features}_{name_add}"
+                results_name = f"{dataset_name}_{inner_selection_lst}_{features}_{name_add}"
             final_dataset_name = os.path.join(results_dir, results_name)
         except Exception as e:
             dataset_name = "dataset"
             if name_add is None:
-                results_name = f"{dataset_name}_{inner_selection}_{features}"
+                results_name = f"{dataset_name}_{inner_selection_lst}_{features}"
             else:
-                results_name = f"{dataset_name}_{inner_selection}_{features}_{name_add}"
+                results_name = f"{dataset_name}_{inner_selection_lst}_{features}_{name_add}"
             final_dataset_name = os.path.join(
-                results_dir, f"{dataset_name}_{inner_selection}_{features}"
+                results_dir, f"{dataset_name}_{inner_selection_lst}_{features}"
             )
 
         # Save the results to a CSV file of the outer scores for each classifier
@@ -1176,9 +1206,7 @@ class MLPipelines(MachineLearningEstimator):
             # Plot histogram of features
             feature_counts = Counter()
             for idx, row in scores_dataframe.iterrows():
-                if (
-                    row["Way_of_Selection"] != "full"
-                ):  # If no features were selected skip
+                if row["Way_of_Selection"] != "full":  # If no features were selected, skip
                     features = list(
                         chain.from_iterable(
                             [list(index_obj) for index_obj in row["Selected_Features"]]
@@ -1192,37 +1220,39 @@ class MLPipelines(MachineLearningEstimator):
                 print("No features were selected.")
             else:
                 features, counts = zip(*sorted_features_counts[:freq_feat])
-                counts = [x / len(clfs) for x in counts]
+                counts = [x / len(clfs) for x in counts]  # Normalize counts
                 print(f"Selected {freq_feat} features")
-                max_width = 1000 #Image size must be less than 2^16 in each direction.
-                plt.figure(figsize=(min(max(10, freq_feat // 3), max_width), 10))
-                bars = plt.bar(features, counts, color="skyblue", tick_label=features)
-                plt.xlabel("Features")
-                plt.ylabel("Counts")
-                plt.title("Histogram of Selected Features")
-                plt.xticks(rotation=90)
 
-                plt.gca().margins(x=0.05)
-                plt.gcf().canvas.draw()
-                tl = plt.gca().get_xticklabels()
-                maxsize = max([t.get_window_extent().width for t in tl])
-                m = 0.5
-                s = maxsize / plt.gcf().dpi * freq_feat + 2 * m
-                margin = m / plt.gcf().get_size_inches()[0]
+                # Create the bar chart using Plotly
+                fig = go.Figure()
 
-                plt.gcf().subplots_adjust(left=margin, right=1.0 - margin)
-                plt.gca().set_xticks(plt.gca().get_xticks()[::1])
-                plt.gca().set_xlim([-1, freq_feat])
+                # Add bars to the figure
+                fig.add_trace(go.Bar(
+                    x=features,
+                    y=counts,
+                    marker=dict(color="skyblue"),
+                    text=[f"{count:.2f}" for count in counts],  # Show normalized counts as text
+                    textposition='auto'
+                ))
 
-                plt.tight_layout()
-                plt.show()
+                # Set axis labels and title
+                fig.update_layout(
+                    title="Histogram of Selected Features",
+                    xaxis_title="Features",
+                    yaxis_title="Counts",
+                    xaxis_tickangle=-90,  # Rotate x-ticks to avoid overlap
+                    bargap=0.2,
+                    template="plotly_white",
+                    width=min(max(1000, freq_feat * 20), 2000),  # Dynamically adjust plot width
+                    height=500  # Set plot height
+                )
+
+                # Show the interactive plot
+                fig.show()
 
                 # Save the plot to 'Results/histogram.png'
                 save_path = f"{final_dataset_name}_histogram.png"
-                plt.savefig(save_path, bbox_inches="tight")
-
-                # Show the plot
-                plt.show()
+                fig.write_image(save_path)
 
             # Save the number of features that were most frequently selected
             features_list = [x[0] for x in sorted_features_counts]
@@ -1239,71 +1269,80 @@ class MLPipelines(MachineLearningEstimator):
             upper_bound = np.percentile(medians, (1 + ci) / 2 * 100)
             return lower_bound, upper_bound
 
-        # Plot box or violin plots of the outer cross-validation scores
+        # Plot box or violin plots of the outer cross-validation scores for all Inner_Selection methods
         if plot is not None:
             scores_long = scores_dataframe.explode(f"Outer_{self.config_rncv['outer_scoring']}")
             scores_long[f"Outer_{self.config_rncv['outer_scoring']}"] = scores_long[f"Outer_{self.config_rncv['outer_scoring']}"].astype(float)
 
             fig = go.Figure()
-            if plot == "box":
-                # Add box plots for each classifier
-                for classifier in scores_dataframe["Classifier"]:
-                    data = scores_long[scores_long["Classifier"] == classifier][
-                        f"Outer_{self.config_rncv['outer_scoring']}"
-                    ]
-                    median = np.median(data)
-                    fig.add_trace(
-                        go.Box(
-                            y=data,
-                            name=f"{classifier} (Median: {median:.2f})",
-                            boxpoints="all",
-                            jitter=0.3,
-                            pointpos=-1.8,
-                        )
-                    )
 
-                    # Calculate and add 95% CI for the median
-                    lower, upper = bootstrap_median_ci(data)
-                    fig.add_trace(
-                        go.Scatter(
-                            x=[f"{classifier} (Median: {median:.2f})", f"{classifier} (Median: {median:.2f})"],
-                            y=[lower, upper],
-                            mode="lines",
-                            line=dict(color="black", dash="dash"),
-                            showlegend=False,
-                        )
-                    )
+            inner_selection_methods = scores_dataframe['Inner_Selection'].unique()
 
-            elif plot == "violin":
-                for classifier in scores_dataframe["Classifier"]:
-                    data = scores_long[scores_long["Classifier"] == classifier][
-                        f"Outer_{self.config_rncv['outer_scoring']}"
-                    ]
-                    median = np.median(data)
-                    fig.add_trace(
-                        go.Violin(
-                            y=data,
-                            name=f"{classifier} (Median: {median:.2f})",
-                            box_visible=False,
-                            points="all",
-                            jitter=0.3,
-                            pointpos=-1.8,
-                        )
-                    )
+            for inner_selection_method in inner_selection_methods:
+                df_inner_selection = scores_long[scores_long['Inner_Selection'] == inner_selection_method]
+                classifiers = df_inner_selection["Classifier"].unique()
 
-            else:
-                raise ValueError(
-                    f'The "{plot}" is not a valid option for plotting. Choose between "box" or "violin".'
-                )
+                if plot == "box":
+                    # Add box plots for each classifier within each Inner_Selection method
+                    for classifier in classifiers:
+                        data = df_inner_selection[df_inner_selection["Classifier"] == classifier][
+                            f"Outer_{self.config_rncv['outer_scoring']}"
+                        ]
+                        median = np.median(data)
+                        fig.add_trace(
+                            go.Box(
+                                y=data,
+                                name=f"{classifier} ({inner_selection_method}) (Median: {median:.2f})",
+                                boxpoints="all",
+                                jitter=0.3,
+                                pointpos=-1.8,
+                            )
+                        )
+
+                        # Calculate and add 95% CI for the median
+                        lower, upper = bootstrap_median_ci(data)
+                        fig.add_trace(
+                            go.Scatter(
+                                x=[f"{classifier} ({inner_selection_method}) (Median: {median:.2f})",
+                                f"{classifier} ({inner_selection_method}) (Median: {median:.2f})"],
+                                y=[lower, upper],
+                                mode="lines",
+                                line=dict(color="black", dash="dash"),
+                                showlegend=False,
+                            )
+                        )
+
+                elif plot == "violin":
+                    # Add violin plots for each classifier within each Inner_Selection method
+                    for classifier in classifiers:
+                        data = df_inner_selection[df_inner_selection["Classifier"] == classifier][
+                            f"Outer_{self.config_rncv['outer_scoring']}"
+                        ]
+                        median = np.median(data)
+                        fig.add_trace(
+                            go.Violin(
+                                y=data,
+                                name=f"{classifier} ({inner_selection_method}) (Median: {median:.2f})",
+                                box_visible=False,
+                                points="all",
+                                jitter=0.3,
+                                pointpos=-1.8,
+                            )
+                        )
+                else:
+                    raise ValueError(
+                        f'The "{plot}" is not a valid option for plotting. Choose between "box" or "violin".'
+                    )
 
             # Update layout for better readability
             fig.update_layout(
-                title="Model Selection Results",
+                title="Model Selection Results by Classifier and Inner Selection Method",
                 yaxis_title=f"Scores {self.config_rncv['outer_scoring']}",
-                xaxis_title="Classifier",
+                xaxis_title="Classifier (Inner Selection Method)",
                 xaxis_tickangle=-45,
                 template="plotly_white",
             )
+            
             # Save the figure as an image in the "Results" directory
             image_path = f"{final_dataset_name}_model_selection_plot.png"
             fig.write_image(image_path)
