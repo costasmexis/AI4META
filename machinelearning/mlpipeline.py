@@ -16,6 +16,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
 from sklearn.metrics import get_scorer
+from sklearn.feature_selection import SelectFromModel
 
 from .mlestimator import MachineLearningEstimator
 from .optuna_grid import optuna_grid, hyper_compl
@@ -272,7 +273,33 @@ class MLPipelines(MachineLearningEstimator):
 
             return simple_model["params"]
           
+    def _sfm(self, estimator, X_train, X_test, y_train, num_feature2_use=None, threshold="mean"):
+        """
+        Select features using SelectFromModel with either a predefined number of features 
+        or using the threshold if num_feature2_use is not provided.
+        """
 
+        # Ensure the model is fitted
+        estimator.fit(X_train, y_train)
+        if  num_feature2_use is None:
+            # Create the SelectFromModel object using the provided threshold
+            sfm = SelectFromModel(estimator, threshold=threshold)
+        else: 
+            sfm = SelectFromModel(estimator, max_features=num_feature2_use)
+
+        # Fit the model to select important features
+        sfm.fit(X_train, y_train)
+        
+        # get a boolean list the selected features
+        selected_features = sfm.get_support(indices=True)
+        selected_columns = X_train.columns[selected_features].to_list()
+        
+        # Select the features based on either the threshold or top num_feature2_use
+        X_train_selected = X_train[selected_columns]
+        X_test_selected = X_test[selected_columns]
+
+        return X_train_selected, X_test_selected, num_feature2_use
+    
     def _cv_loop(self, i, avail_thr):
         start = time.time()  # Count time of outer loops
         
@@ -748,11 +775,13 @@ class MLPipelines(MachineLearningEstimator):
 
         # Loop over the number of features
         for num_feature2_use in feature_loop:
-            X_train_selected, X_test_selected, num_feature = self._filter_features(
-                train_index, test_index, X, y, num_feature2_use, cvncvsel='rncv'
-            )
-            y_train, y_test = y[train_index], y[test_index]
+            if not self.config_rncv['sfm']:
+                X_train_selected, X_test_selected, num_feature = self._filter_features(
+                    train_index, test_index, X, y, num_feature2_use, cvncvsel='rncv'
+                )
+                y_train, y_test = y[train_index], y[test_index]
 
+                
             # Check of the classifiers given list
             if self.config_rncv["clfs"] is None:
                 raise ValueError("No classifier specified.")
@@ -761,7 +790,23 @@ class MLPipelines(MachineLearningEstimator):
                     # For every estimator find the best hyperparameteres
                     self.name = estimator
                     self.estimator = self.available_clfs[estimator]
+                    if (self.config_rncv["sfm"]) and ((estimator == "RandomForestClassifier") or 
+                                (estimator == "XGBClassifier") or 
+                                (estimator == 'GradientBoostingClassifier') or 
+                                (estimator == "LGBMClassifier") or 
+                                (estimator == "CatBoostClassifier")):
+                        
+                        X_train_selected, X_test_selected, num_feature = self._filter_features(
+                            train_index, test_index, X, y, num_feature2_use=X.shape[1],cvncvsel='rncv'
+                        )
+                        y_train, y_test = y[train_index], y[test_index]
 
+                        # Assuming estimator is already instantiated and fitted
+                        X_train_selected, X_test_selected, num_feature = self._sfm(self.estimator, X_train_selected, X_test_selected, y_train, num_feature2_use)   
+                    elif self.config_rncv["sfm"]:
+                        continue
+                    else:pass
+                    
                     self._set_optuna_verbosity(logging.ERROR)
                     clf = optuna.integration.OptunaSearchCV(
                         estimator=self.estimator,
@@ -774,7 +819,7 @@ class MLPipelines(MachineLearningEstimator):
                         n_trials=self.config_rncv["n_trials_ncv"],
                     )
                     clf.fit(X_train_selected, y_train)
-                    
+           
                     for inner_selection in self.config_rncv["inner_selection_lst"]:
                         results['Inner_selection_mthd'].append(inner_selection)
                         # Store the results and apply one_sem method if its selected
@@ -942,7 +987,8 @@ class MLPipelines(MachineLearningEstimator):
         frfs=None,
         name_add=None,
         extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1'],
-        show_bad_samples=False
+        show_bad_samples=False,
+        sfm=False
     ):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
