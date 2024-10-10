@@ -701,7 +701,7 @@ class MachineLearningEstimator(DataLoader):
         #     raise ValueError("Invalid evaluation method. Please choose from 'cv_simple', 'bootstrap', or 'cv_rounds'.")
         # return custom_cv_splits
         
-    def calc_shap(self, X_train, X_test, model):
+    def _calc_shap(self, X_train, X_test, model):
         try:
             explainer = shap.Explainer(model, X_train)
         except TypeError as e:
@@ -731,7 +731,7 @@ class MachineLearningEstimator(DataLoader):
             pass
         return shap_values
 
-    def bootstrap_validation(
+    def _bootstrap_validation(
             self, X, y, model, extra_metrics=None, calculate_shap=False
         ):
         """Performs bootstrap validation for model evaluation.
@@ -744,9 +744,7 @@ class MachineLearningEstimator(DataLoader):
         )
 
         bootstrap_scores = []
-        extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
-        all_shap_values = np.zeros((X.shape[0], X.shape[1]))  # Initialize array to accumulate SHAP values
-        counts = np.zeros(X.shape[0])  # To keep track of how many times each sample is in the test set        
+        extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}    
         
         for i in tqdm(range(100), desc="Bootstrap validation"):
             # X_train, X_test, y_train, y_test = train_test_split(
@@ -779,6 +777,42 @@ class MachineLearningEstimator(DataLoader):
         #     return bootstrap_scores, extra_metrics_scores, mean_shap_values
         # else:
         return bootstrap_scores, extra_metrics_scores
+    
+    def _oob_validation(
+            self, X, y, model, extra_metrics=None
+        ):
+        """Performs out of bag bootstrap validation for model evaluation.
+        :return: A tuple of (bootstrap_scores, extra_metrics_scores).
+        :rtype: tuple
+        """
+
+        oob_scores = []
+        extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
+
+        
+        for i in tqdm(range(100), desc="OOB validation"):
+            temp_oob_scores = []
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.3, shuffle=True, random_state=i
+                )
+            
+            model_oob = copy.deepcopy(model)
+
+            X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
+            model_oob.fit(X_train_res, y_train_res)
+            y_pred = model_oob.predict(X_test)
+            
+            # Calculate the main scoring metric
+            score = metrics.get_scorer(self.scoring)._score_func(y_test, y_pred)
+            oob_scores.append(score)
+            
+            # Calculate and store extra metrics
+            if extra_metrics is not None:
+                for extra in extra_metrics:
+                    extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
+                    extra_metrics_scores[extra].append(extra_score)
+
+        return oob_scores, extra_metrics_scores
 
     def _eval_boxplot(self, estimator_name, eval_df, cv, evaluation):
         """
@@ -1095,7 +1129,10 @@ class MachineLearningEstimator(DataLoader):
             # if calculate_shap:
             #     bootstrap_scores, extra_metrics_scores, x_shap = self.bootstrap_validation(X, y, best_model, extra_metrics, calculate_shap=True)
             # else:
-            bootstrap_scores, extra_metrics_scores = self.bootstrap_validation(X, y, best_model, extra_metrics)#, calculate_shap=False)
+            if evaluation == "bootstrap":
+                bootstrap_scores, extra_metrics_scores = self._bootstrap_validation(X, y, best_model, extra_metrics)#, calculate_shap=False)
+            else:
+                bootstrap_scores, extra_metrics_scores = self._oob_validation(X, y, best_model, extra_metrics)#, calculate_shap=False)
             local_data_full_outer["Scores"] = bootstrap_scores
             local_data_full_outer["mean_test_score"] = np.mean(bootstrap_scores)
             local_data_full_outer["std_test_score"] = np.std(bootstrap_scores)
@@ -1108,7 +1145,7 @@ class MachineLearningEstimator(DataLoader):
             local_data_full_outer["sem_test_score"] = sem
             local_data_full_outer["params"] = best_params
             if evaluation == "oob":
-                local_data_full_outer["trial"] = "oob"
+                local_data_full_outer["round"] = "oob"
             else:
                 local_data_full_outer["round"] = "bootstrap"
             local_data_full_outer["ranked"] = 1
