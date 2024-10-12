@@ -281,6 +281,8 @@ class MachineLearningEstimator(DataLoader):
 
         for i in range(cv):
             usefull_cols.append(f"split{i}_test_score")
+            
+        
 
         if calculate_shap:
             _, eval_df, shaps_array = self.evaluate(
@@ -586,7 +588,8 @@ class MachineLearningEstimator(DataLoader):
             print(f"Warning: {processors} processors are not available. Using 1 processor instead.")
             processors = 1
         
-        custom_cv_splits = self._splitter(X, y, cv)#, evaluation, rounds)
+        custom_cv_splits = StratifiedKFold(n_splits=cv, shuffle=True).split(X, y)
+
         
         clf = optuna.integration.OptunaSearchCV(
             estimator=self.available_clfs[estimator_name],
@@ -654,7 +657,9 @@ class MachineLearningEstimator(DataLoader):
                 best_params,
                 study,
                 calculate_shap,
-                extra_metrics
+                extra_metrics,
+                training_method,
+                estimator_name
             )
         else:
             best_model, eval_df = self._evaluate(
@@ -667,7 +672,9 @@ class MachineLearningEstimator(DataLoader):
                 best_params,
                 study,
                 calculate_shap,
-                extra_metrics
+                extra_metrics,
+                training_method,
+                estimator_name
             )
 
         if boxplot:
@@ -678,27 +685,7 @@ class MachineLearningEstimator(DataLoader):
             return self.best_estimator, eval_df, shaps_array
         else:
             return self.best_estimator, eval_df
-        
-    def _splitter(self, X, y, cv):#, evaluation, rounds):
-        # if evaluation == "cv_simple":
-        custom_cv_splits = StratifiedKFold(n_splits=cv, shuffle=True).split(X, y)
-        # elif evaluation == "cv_rounds":
-        #     custom_cv_splits = []
-        #     for i in range(rounds):
-        #         splits = StratifiedKFold(n_splits=cv, shuffle=True, random_state=i)
-        #         for train_index, val_index in splits.split(X, y):
-        #             custom_cv_splits.append((train_index, val_index))
-        # elif evaluation == "bootstrap":
-        #     print(f'The bootstrap process might take some time, especially for XGBClassifier, CatBoostClassifier and RandomForestClassifier.')
-        #     custom_cv_splits = []
-        #     for i in range(4):
-        #         train_index, val_index = train_test_split(np.arange(len(X)), test_size=0.3, random_state=i)
-        #         for j in range(25):
-        #             X_train_res = resample(train_index, random_state=j)
-        #             custom_cv_splits.append((X_train_res, val_index))
-        # else:
-        #     raise ValueError("Invalid evaluation method. Please choose from 'cv_simple', 'bootstrap', or 'cv_rounds'.")
-        return custom_cv_splits
+
         
     def _calc_shap(self, X_train, X_test, model):
         try:
@@ -730,7 +717,7 @@ class MachineLearningEstimator(DataLoader):
             pass
         return shap_values
 
-    def bootstrap_validation(
+    def _bootstrap_validation(
             self, X, y, model, extra_metrics=None):#, calculate_shap=False
         """Performs bootstrap validation for model evaluation.
         :return: A tuple of (bootstrap_scores, extra_metrics_scores).
@@ -752,7 +739,7 @@ class MachineLearningEstimator(DataLoader):
             X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
             # model_bootstrap.fit(X_train_res, y_train_res)
             # y_pred = model_bootstrap.predict(X_test)
-            model_bootstrap.fit(X_train, y_train)
+            model_bootstrap.fit(X_train_res, y_train_res)
             y_pred = model_bootstrap.predict(X_test)
             
             # Calculate the main scoring metric
@@ -777,6 +764,42 @@ class MachineLearningEstimator(DataLoader):
         #     return bootstrap_scores, extra_metrics_scores, mean_shap_values
         # else:
         return bootstrap_scores, extra_metrics_scores
+    
+    def _oob_validation(
+            self, X, y, model, extra_metrics=None
+        ):
+        """Performs out of bag bootstrap validation for model evaluation.
+        :return: A tuple of (bootstrap_scores, extra_metrics_scores).
+        :rtype: tuple
+        """
+
+        oob_scores = []
+        extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
+
+        
+        for i in tqdm(range(100), desc="OOB validation"):
+            temp_oob_scores = []
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.3, shuffle=True, random_state=i
+                )
+            
+            model_oob = copy.deepcopy(model)
+
+            X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
+            model_oob.fit(X_train_res, y_train_res)
+            y_pred = model_oob.predict(X_test)
+            
+            # Calculate the main scoring metric
+            score = metrics.get_scorer(self.scoring)._score_func(y_test, y_pred)
+            oob_scores.append(score)
+            
+            # Calculate and store extra metrics
+            if extra_metrics is not None:
+                for extra in extra_metrics:
+                    extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
+                    extra_metrics_scores[extra].append(extra_score)
+
+        return oob_scores, extra_metrics_scores
 
     def _eval_boxplot(self, estimator_name, eval_df, cv, evaluation):
         """
@@ -792,7 +815,7 @@ class MachineLearningEstimator(DataLoader):
         :type evaluation: str
         """
         
-        results_dir = "Results"
+        results_dir = "Final_Model_Results"
         if not os.path.exists(results_dir):
             os.makedirs(results_dir)
 
@@ -861,9 +884,9 @@ class MachineLearningEstimator(DataLoader):
             all_scores = []
             best_scores_rounds = []
             best_cv = []
-            for i in range(cv):
-                for row in range(eval_df.shape[0]):
-                    all_scores.append(eval_df[f"split{i}_test_score"].iloc[row])
+            for row in range(eval_df.shape[0]):
+                for score in eval_df["Scores"].iloc[row]:
+                    all_scores.append(score)
 
             fig.add_trace(
                 go.Box(
@@ -935,7 +958,7 @@ class MachineLearningEstimator(DataLoader):
         fig.write_image(save_path)
 
     def _evaluate(
-        self, X, y, cv, evaluation, rounds, best_model, best_params, way, calculate_shap, extra_metrics
+        self, X, y, cv, evaluation, rounds, best_model, best_params, way, calculate_shap, extra_metrics, training_method, estimator_name
     ):
         """
         Evaluate the performance of a machine learning model using cross-validation or bootstrap methods.
@@ -1034,58 +1057,56 @@ class MachineLearningEstimator(DataLoader):
             if calculate_shap:
                 x_shap = x_shap / (rounds)
 
-            if self.model_selection_way == "bayesian_search":
-                all_params = [trial.params for trial in way.trials]
-                trial_ids = [trial.number for trial in way.trials]
-            elif self.model_selection_way == "random_search":
-                all_params = way.cv_results_["params"]
-                trial_ids = list(range(len(all_params)))
-            else:
-                all_params = way.cv_results_["params"]
-                trial_ids = list(range(len(all_params)))
-
-            for params, trial in zip(all_params, trial_ids):
-                for round_num in range(rounds):
-                    row = {}
-                    for cv_trial in range(cv):
-                        row_key = f"split{cv_trial}_test_score"
-                        row[row_key] = scores_per_cv[round_num][cv_trial]
-
-                    row["mean_test_score"] = np.mean(scores_per_cv[round_num])
-                    row["std_test_score"] = np.std(scores_per_cv[round_num])
-
-                    valid_scores = [
-                        score for score in scores_per_cv[round_num] if score is not None
-                    ]
-                    if valid_scores:
-                        sem = np.std(valid_scores) / np.sqrt(len(valid_scores))
-                    else:
-                        sem = 0
-
-                    row["sem_test_score"] = sem
-                    row["params"] = params
-                    row["trial"] = trial
-                    row["round"] = round_num
-
-                    # Calculate and add extra metrics to the row
-                    if extra_metrics is not None:
-                        for extra in extra_metrics:
-                            extra_metric_scores = metric_lists[extra][round_num * cv:(round_num + 1) * cv]
-                            row[f"{extra}"] = extra_metric_scores
-
-                    row_df = pd.DataFrame([row])
-                    local_data_full_outer = pd.concat(
-                        [local_data_full_outer, row_df], axis=0
-                    )
-
-            local_data_full_outer.reset_index(drop=True, inplace=True)
-
-            local_data_full_outer = local_data_full_outer.sort_values(
-                "mean_test_score", ascending=False
-            )
-            local_data_full_outer.reset_index(drop=True, inplace=True)
-            local_data_full_outer["ranked"] = local_data_full_outer.index + 1
+            # if self.model_selection_way == "bayesian_search":
+            #     all_params = [trial.params for trial in way.trials]
+            #     # trial_ids = [trial.number for trial in way.trials]
+            # elif self.model_selection_way == "random_search":
+            #     all_params = way.cv_results_["params"]
+            #     # trial_ids = list(range(len(all_params)))
+            # else:
+            #     all_params = way.cv_results_["params"]
+            #     # trial_ids = list(range(len(all_params)))
             
+            for round_num in range(rounds):
+                row = {}
+                scores = []
+                for cv_trial in range(cv):
+                    # row_key = f"split{cv_trial}_test_score"
+                    # row[row_key] = scores_per_cv[round_num][cv_trial]
+                    scores.append(scores_per_cv[round_num][cv_trial])
+                    
+                row['Scores'] = scores 
+                    
+                row["mean_test_score"] = np.mean(scores_per_cv[round_num])
+                row["std_test_score"] = np.std(scores_per_cv[round_num])
+
+                valid_scores = [
+                    score for score in scores_per_cv[round_num] if score is not None
+                ]
+                if valid_scores:
+                    sem = np.std(valid_scores) / np.sqrt(len(valid_scores))
+                else:
+                    sem = 0
+
+                row["sem_test_score"] = sem
+                row["params"] = best_params
+                row["round"] = "round_cv"
+                row['train_mthd'] = training_method
+                row['estimator'] = estimator_name
+
+                # Calculate and add extra metrics to the row
+                if extra_metrics is not None:
+                    for extra in extra_metrics:
+                        extra_metric_scores = metric_lists[extra][round_num * cv:(round_num + 1) * cv]
+                        row[f"{extra}"] = extra_metric_scores
+
+                row_df = pd.DataFrame([row])
+                local_data_full_outer = pd.concat(
+                    [local_data_full_outer, row_df], axis=0
+                )
+
+            local_data_full_outer.reset_index(drop=True, inplace=True)
+        
             if calculate_shap:
                 return best_model, local_data_full_outer, x_shap
 
@@ -1112,7 +1133,8 @@ class MachineLearningEstimator(DataLoader):
                 local_data_full_outer["round"] = "oob"
             else:
                 local_data_full_outer["round"] = "bootstrap"
-            local_data_full_outer["ranked"] = 1
+            local_data_full_outer['train_mthd'] = training_method
+            local_data_full_outer['estimator'] = estimator_name
 
             # Calculate and add extra metrics for bootstrap validation
             if extra_metrics is not None:
@@ -1141,8 +1163,9 @@ class MachineLearningEstimator(DataLoader):
             local_data_full_outer['sem_test_score'] = [0,0]  # No standard error for a single run
             local_data_full_outer['params'] = [best_params, best_params]
             local_data_full_outer['round'] = ['test','train']
-            local_data_full_outer['ranked'] = [1,1]
-
+            local_data_full_outer['train_mthd'] = [training_method,training_method]
+            local_data_full_outer['estimator'] = [estimator_name,estimator_name]
+            
             # Add any extra metrics, if provided
             if extra_metrics is not None:
                 for extra in extra_metrics:

@@ -1209,7 +1209,7 @@ class MLPipelines(MachineLearningEstimator):
 
 
         # Create a 'Results' directory
-        results_dir = "Results"
+        results_dir = "Results_ncv"
         if not os.path.exists(results_dir):
             os.makedirs(results_dir)
 
