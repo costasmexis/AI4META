@@ -586,8 +586,7 @@ class MachineLearningEstimator(DataLoader):
             print(f"Warning: {processors} processors are not available. Using 1 processor instead.")
             processors = 1
         
-        # custom_cv_splits = self._splitter(X, y, cv, evaluation, rounds)
-        custom_cv_splits = StratifiedKFold(n_splits=cv, shuffle=True).split(X, y)
+        custom_cv_splits = self._splitter(X, y, cv)#, evaluation, rounds)
         
         clf = optuna.integration.OptunaSearchCV(
             estimator=self.available_clfs[estimator_name],
@@ -680,9 +679,9 @@ class MachineLearningEstimator(DataLoader):
         else:
             return self.best_estimator, eval_df
         
-    # def _splitter(self, X, y, cv, evaluation, rounds):
+    def _splitter(self, X, y, cv):#, evaluation, rounds):
         # if evaluation == "cv_simple":
-            # custom_cv_splits = StratifiedKFold(n_splits=cv, shuffle=True).split(X, y)
+        custom_cv_splits = StratifiedKFold(n_splits=cv, shuffle=True).split(X, y)
         # elif evaluation == "cv_rounds":
         #     custom_cv_splits = []
         #     for i in range(rounds):
@@ -699,7 +698,7 @@ class MachineLearningEstimator(DataLoader):
         #             custom_cv_splits.append((X_train_res, val_index))
         # else:
         #     raise ValueError("Invalid evaluation method. Please choose from 'cv_simple', 'bootstrap', or 'cv_rounds'.")
-        # return custom_cv_splits
+        return custom_cv_splits
         
     def _calc_shap(self, X_train, X_test, model):
         try:
@@ -731,9 +730,8 @@ class MachineLearningEstimator(DataLoader):
             pass
         return shap_values
 
-    def _bootstrap_validation(
-            self, X, y, model, extra_metrics=None, calculate_shap=False
-        ):
+    def bootstrap_validation(
+            self, X, y, model, extra_metrics=None):#, calculate_shap=False
         """Performs bootstrap validation for model evaluation.
         :return: A tuple of (bootstrap_scores, extra_metrics_scores).
         :rtype: tuple
@@ -752,7 +750,9 @@ class MachineLearningEstimator(DataLoader):
             #     )
             model_bootstrap = copy.deepcopy(model)
             X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
-            model_bootstrap.fit(X_train_res, y_train_res)
+            # model_bootstrap.fit(X_train_res, y_train_res)
+            # y_pred = model_bootstrap.predict(X_test)
+            model_bootstrap.fit(X_train, y_train)
             y_pred = model_bootstrap.predict(X_test)
             
             # Calculate the main scoring metric
@@ -765,54 +765,18 @@ class MachineLearningEstimator(DataLoader):
                     extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
                     extra_metrics_scores[extra].append(extra_score)
             
-        #     # Calculate and accumulate SHAP values
-        #     if calculate_shap:
-        #         shap_values = self.calc_shap(X_train, X_test, model_bootstrap)
-        #         all_shap_values[X_test.index] += shap_values.values
-        #         counts[X_test.index] += 1
+            # # Calculate and accumulate SHAP values
+            # if calculate_shap:
+            #     shap_values = self.calc_shap(X_train, X_test, model_bootstrap)
+            #     all_shap_values[X_test.index] += shap_values.values
+            #     counts[X_test.index] += 1
         
-        # # Calculate the mean SHAP values by dividing accumulated SHAP values by counts
+        # Calculate the mean SHAP values by dividing accumulated SHAP values by counts
         # if calculate_shap:
         #     mean_shap_values = all_shap_values / counts[:, None]        
         #     return bootstrap_scores, extra_metrics_scores, mean_shap_values
         # else:
         return bootstrap_scores, extra_metrics_scores
-    
-    def _oob_validation(
-            self, X, y, model, extra_metrics=None
-        ):
-        """Performs out of bag bootstrap validation for model evaluation.
-        :return: A tuple of (bootstrap_scores, extra_metrics_scores).
-        :rtype: tuple
-        """
-
-        oob_scores = []
-        extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
-
-        
-        for i in tqdm(range(100), desc="OOB validation"):
-            temp_oob_scores = []
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.3, shuffle=True, random_state=i
-                )
-            
-            model_oob = copy.deepcopy(model)
-
-            X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
-            model_oob.fit(X_train_res, y_train_res)
-            y_pred = model_oob.predict(X_test)
-            
-            # Calculate the main scoring metric
-            score = metrics.get_scorer(self.scoring)._score_func(y_test, y_pred)
-            oob_scores.append(score)
-            
-            # Calculate and store extra metrics
-            if extra_metrics is not None:
-                for extra in extra_metrics:
-                    extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
-                    extra_metrics_scores[extra].append(extra_score)
-
-        return oob_scores, extra_metrics_scores
 
     def _eval_boxplot(self, estimator_name, eval_df, cv, evaluation):
         """
@@ -828,7 +792,7 @@ class MachineLearningEstimator(DataLoader):
         :type evaluation: str
         """
         
-        results_dir = "results"
+        results_dir = "Results"
         if not os.path.exists(results_dir):
             os.makedirs(results_dir)
 
