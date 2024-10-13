@@ -20,7 +20,7 @@ for dataset in datasets:
     for estimator in estimators:
         for evaluation_method in evaluation:
             for inner in inner_selection:
-                mod, df = mlpipe.bayesian_search(estimator_name=estimator,scoring='matthews_corrcoef',boxplot=False, evaluation=evaluation_method, n_trials=100, cv=5, warnings_filter=True,training_method='one_sem',processors=5)
+                mod, df = mlpipe.bayesian_search(estimator_name=estimator,scoring='matthews_corrcoef',boxplot=False, evaluation=evaluation_method, n_trials=100, cv=5, warnings_filter=True,training_method=inner,processors=4)
                 dataset_df_final = pd.concat([dataset_df_final,df], ignore_index=True)
                 dataset_df_final.to_csv('Final_Model_Results/' + dataset + '_final.csv')
                 print(f'FINISHED WITH {dataset} AND {estimator} AND {evaluation_method} AND {inner}')
