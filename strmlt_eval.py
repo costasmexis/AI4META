@@ -166,7 +166,7 @@ def create_new_directory(dir_name):
     
 st.set_page_config(layout="wide")
 st.title('Evaluation of ML models on Metabolomics data')
-tab_excel, tab_eval = st.tabs(["Excel Maker", "Evaluation"])
+tab_excel, tab_eval, tab_paper_rep = st.tabs(["Excel Maker", "Evaluation", "Paper Replication"])
 
 # ================== TABS ==================
 
@@ -186,6 +186,12 @@ with st.sidebar:
     dataset_name = st.selectbox("Select a dataset", dataset_names)    
     st.session_state.dataset_name = dataset_name
     
+    # st.markdown("# Select file if final models are available")
+    # uploadedFile = st.file_uploader("Choose a file",type=['csv','xlsx'],accept_multiple_files=False,key="uploadedFile")
+
+    # if uploadedFile is not None:
+    #     st.success("File uploaded successfully")    
+            
 with tab_excel:
     st.markdown("# Create EXCEL")
     
@@ -195,7 +201,7 @@ with tab_excel:
     
     scol1, scol2 = st.columns(2)
         
-    init_results = current_directories.index('Results')
+    init_results = current_directories.index('Results_ncv')
     results_dir = scol1.selectbox("Select results directory", current_directories,index=init_results,help="Choose the directory that results already exists.")
     
     excel_dir = scol2.selectbox("Select output Excel directory", current_directories,help="Choose the directory to save output Excel.")
@@ -266,5 +272,98 @@ with tab_eval:
         if eval_df is not None:
             eval_df = fix_format(eval_df, column_eval)
             plotit(eval_df, column_eval, one_sel_type)
-            
     
+with tab_paper_rep:
+    st.markdown("# Papers Results")
+    
+    if 'dataset_name' in st.session_state:
+        dataset_name = st.session_state['dataset_name']
+        folder_path = 'Final_Model_Results'  # Input folder path
+        
+        # Finding all CSV files that match the dataset name
+        csv_files = [f for f in os.listdir(folder_path) if dataset_name in f and f.endswith('.csv')]
+        
+        if csv_files:
+            # Concatenate all CSV files that match the dataset name
+            df_list = [pd.read_csv(os.path.join(folder_path, file)) for file in csv_files]
+            df = pd.concat(df_list, ignore_index=True)
+            
+            # Create columns for layout
+            col1, col2 = st.columns(2)
+
+            # Select metric and other selections
+            select_metric = col2.selectbox("Select Metric", ['matthews_corrcoef', 'roc_auc', 'f1', 'accuracy', 'balanced_accuracy', 'precision', 'recall'])
+            select_tr_methods = col1.multiselect("Select Training Methods", df['train_mthd'].unique())
+            select_estimators = col2.multiselect("Select Estimators", df['estimator'].unique())
+            select_features = col1.multiselect("Select set of Features", df['features'].unique())
+            select_eval = col1.selectbox("Select Evaluation Type", ['bootstrap', 'round_cv', 'oob'])
+            if select_eval is None:
+                st.warning("Please select an evaluation type.")
+                st.stop()
+            
+            # Set default metric if none selected
+            if select_metric is None:
+                select_metric = 'Scores'
+        
+            # If no selections are made, select all unique values
+            temp_df = df.copy()
+            # temp_df = temp_df[temp_df['round'] == select_eval]
+            # st.write(temp_df)
+
+            if not select_estimators:
+                select_estimators = temp_df['estimator'].unique()
+            if not select_tr_methods:
+                select_tr_methods = temp_df['train_mthd'].unique()
+            if not select_features:
+                select_features = temp_df['features'].unique()
+
+            # Filter the dataframe based on selections
+            temp_df = temp_df[
+                (temp_df['estimator'].isin(select_estimators)) &
+                (temp_df['train_mthd'].isin(select_tr_methods)) &
+                (temp_df['features'].isin(select_features)) &
+                (temp_df['round'] == select_eval)
+            ]
+        
+            # Create 'Estimator_groups' based on 'Features'
+            def create_estimator_groups(row):
+                return f"{row['estimator']}_{row['features']}_{row['train_mthd']}"
+
+            temp_df['estimator_groups'] = temp_df.apply(create_estimator_groups, axis=1)
+            
+            if select_eval == 'round_cv':
+                # Convert strings to actual lists if necessary
+                temp_df[select_metric] = temp_df[select_metric].apply(
+                    lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
+                temp_df = temp_df.explode(select_metric).reset_index(drop=True) 
+                
+            plot_it = st.button("Create Plot")
+            if plot_it:
+                if not temp_df.empty:
+                    # Create a single box plot that combines all the methods
+                    fig = px.box(
+                        temp_df, 
+                        x='estimator_groups', 
+                        y=select_metric, 
+                        color='estimator_groups',  
+                        title=f'Boxplot of {select_metric.capitalize()} for {dataset_name}',
+                        labels={select_metric: select_metric.capitalize(), 'estimator_groups': 'Estimator Groups'}
+                    )
+                    
+                    if (select_metric == 'matthews_corrcoef'):
+                        min_val = -0.5
+                    else: min_val = 0
+                    
+                    fig.update_layout(
+                        yaxis=dict(range=[min_val, 1.1]),
+                        xaxis=dict(tickangle=-45),
+                        height=800,
+                        width=1500,
+                        legend_title_text='Estimator groups'
+                    )
+
+                    st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning(f"No CSV files found for dataset name: {dataset_name}")
+    else:
+        st.stop()

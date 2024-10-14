@@ -659,7 +659,9 @@ class MachineLearningEstimator(DataLoader):
                 calculate_shap,
                 extra_metrics,
                 training_method,
-                estimator_name
+                estimator_name,
+                features_names_list,
+                feat_num
             )
         else:
             best_model, eval_df = self._evaluate(
@@ -674,7 +676,9 @@ class MachineLearningEstimator(DataLoader):
                 calculate_shap,
                 extra_metrics,
                 training_method,
-                estimator_name
+                estimator_name,
+                features_names_list,
+                feat_num
             )
 
         if boxplot:
@@ -958,7 +962,7 @@ class MachineLearningEstimator(DataLoader):
         fig.write_image(save_path)
 
     def _evaluate(
-        self, X, y, cv, evaluation, rounds, best_model, best_params, way, calculate_shap, extra_metrics, training_method, estimator_name
+        self, X, y, cv, evaluation, rounds, best_model, best_params, way, calculate_shap, extra_metrics, training_method, estimator_name,  features_names_list, feat_num
     ):
         """
         Evaluate the performance of a machine learning model using cross-validation or bootstrap methods.
@@ -1093,6 +1097,12 @@ class MachineLearningEstimator(DataLoader):
                 row["round"] = "round_cv"
                 row['train_mthd'] = training_method
                 row['estimator'] = estimator_name
+                if features_names_list is not None:
+                    row['features'] = len(features_names_list)
+                elif feat_num is not None:
+                    row['features'] = feat_num
+                else:
+                    row['features'] = 'all'
 
                 # Calculate and add extra metrics to the row
                 if extra_metrics is not None:
@@ -1128,13 +1138,20 @@ class MachineLearningEstimator(DataLoader):
             else:
                 sem = 0
             local_data_full_outer["sem_test_score"] = sem
-            local_data_full_outer["params"] = best_params
+            # print(best_params, best_model.get_params())
+            local_data_full_outer["params"] =  local_data_full_outer.apply(lambda row: best_params.copy(), axis=1)
             if evaluation == "oob":
                 local_data_full_outer["round"] = "oob"
             else:
                 local_data_full_outer["round"] = "bootstrap"
             local_data_full_outer['train_mthd'] = training_method
             local_data_full_outer['estimator'] = estimator_name
+            if features_names_list is not None:
+                local_data_full_outer['features'] = len(features_names_list)
+            elif feat_num is not None:
+                local_data_full_outer['features'] = feat_num
+            else:
+                local_data_full_outer['features'] = 'all'
 
             # Calculate and add extra metrics for bootstrap validation
             if extra_metrics is not None:
@@ -1165,6 +1182,12 @@ class MachineLearningEstimator(DataLoader):
             local_data_full_outer['round'] = ['test','train']
             local_data_full_outer['train_mthd'] = [training_method,training_method]
             local_data_full_outer['estimator'] = [estimator_name,estimator_name]
+            if features_names_list is not None:
+                local_data_full_outer['features'] = [len(features_names_list),len(features_names_list)]
+            elif feat_num is not None:
+                local_data_full_outer['features'] = [feat_num,feat_num]
+            else:
+                local_data_full_outer['features'] = ['all','all']
             
             # Add any extra metrics, if provided
             if extra_metrics is not None:
