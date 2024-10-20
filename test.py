@@ -3,10 +3,10 @@ from machinelearning.mlexplain import MLExplainer
 from dataloader.eda import DataExplorer
 import pandas as pd
 
-datasets = ['gastric_cancer', 'chronic_fatigue','lung_cancer','periodontal_inflammation','epic_lc_ms_pos','epic_composite']
-inner_selection = ['one_sem','validation_score','gso_1','gso_2','one_sem_grd']
+datasets = ['gastric_cancer']#, 'chronic_fatigue','lung_cancer','periodontal_inflammation','epic_lc_ms_pos','epic_composite']
+inner_selection = ['one_sem','validation_score']#,'gso_1','gso_2','one_sem_grd']
 evaluation = ['cv_rounds','bootstrap','oob']
-estimators = ['LogisticRegression','XGBClassifier','SVC','RandomForestClassifier','ElasticNet','LGBMClassifier','GradientBoostingClassifier','LinearDiscriminantAnalysis']
+estimators = ['LogisticRegression', 'LinearDiscriminantAnalysis']#,'XGBClassifier','SVC','RandomForestClassifier','ElasticNet','LGBMClassifier','GradientBoostingClassifier']
 
 for dataset in datasets:
     dataset_df_final = pd.DataFrame()

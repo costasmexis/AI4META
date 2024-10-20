@@ -779,7 +779,6 @@ class MachineLearningEstimator(DataLoader):
 
         oob_scores = []
         extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
-
         
         for i in tqdm(range(100), desc="OOB validation"):
             temp_oob_scores = []
