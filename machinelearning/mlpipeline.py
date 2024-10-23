@@ -986,7 +986,7 @@ class MLPipelines(MachineLearningEstimator):
         missing_values_method="median",
         frfs=None,
         name_add=None,
-        extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1'],
+        extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1', 'average_precision',],
         show_bad_samples=False,
         sfm=False
     ):
