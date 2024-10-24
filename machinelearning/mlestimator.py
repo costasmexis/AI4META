@@ -19,6 +19,8 @@ from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.linear_model import LogisticRegression,Lasso
 from sklearn.metrics import make_scorer
+from sklearn.ensemble import BaggingClassifier
+
 from sklearn.model_selection import (
     GridSearchCV,
     RandomizedSearchCV,
@@ -772,34 +774,54 @@ class MachineLearningEstimator(DataLoader):
     def _oob_validation(
             self, X, y, model, extra_metrics=None
         ):
-        """Performs out of bag bootstrap validation for model evaluation.
-        :return: A tuple of (bootstrap_scores, extra_metrics_scores).
-        :rtype: tuple
-        """
 
         oob_scores = []
         extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
         
         for i in tqdm(range(100), desc="OOB validation"):
-            temp_oob_scores = []
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.3, shuffle=True, random_state=i
-                )
-            
-            model_oob = copy.deepcopy(model)
+            # Create a BaggingClassifier with OOB scoring enabled
+            bagging_clf = BaggingClassifier(
+                estimator=model,   # Use the pre-tuned model
+                n_estimators=21,             # Number of bootstrap samples
+                oob_score=True,               # Enable OOB scoring
+                random_state=i               #  Different random state for each iteration
+            )
 
-            X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
-            model_oob.fit(X_train_res, y_train_res)
-            y_pred = model_oob.predict(X_test)
-            
-            # Calculate the main scoring metric
-            score = metrics.get_scorer(self.scoring)._score_func(y_test, y_pred)
+            # Train the model with OOB enabled (no need for train/test split)
+            bagging_clf.fit(X, y)
+
+            # Initialize an array to collect OOB predictions
+            oob_predictions = np.zeros_like(y, dtype=float)  # For averaging predictions
+            oob_counts = np.zeros_like(y, dtype=int)  # Track how many times each sample is OOB
+
+            # For each estimator, collect OOB samples and predictions
+            for estimator, oob_indices in zip(bagging_clf.estimators_, bagging_clf.estimators_samples_):
+                # Find OOB indices (samples not in bootstrap sample)
+                oob_mask = np.ones(X.shape[0], dtype=bool)
+                oob_mask[oob_indices] = False  # Mark the OOB samples (those not used in training)
+
+                # Predict using the estimator on the OOB samples
+                oob_predictions[oob_mask] += estimator.predict(X[oob_mask])
+                oob_counts[oob_mask] += 1  # Increment count of how many times each sample was OOB
+
+            # Average the OOB predictions for each sample (this step gives soft voting results)
+            oob_predictions = oob_predictions / oob_counts
+            oob_pred_labels = (oob_predictions >= 0.5).astype(int)  # Convert to binary predictions (0 or 1)
+
+            # Only evaluate the samples that were actually OOB at least once
+            oob_valid = oob_counts > 0
+            oob_true_labels = y[oob_valid]
+            oob_pred_labels = oob_pred_labels[oob_valid]
+
+            # Calculate the chosen metric using the OOB samples
+        
+            score = metrics.get_scorer(self.scoring)._score_func(oob_true_labels, oob_pred_labels)
             oob_scores.append(score)
             
             # Calculate and store extra metrics
             if extra_metrics is not None:
                 for extra in extra_metrics:
-                    extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
+                    extra_score = metrics.get_scorer(extra)._score_func(oob_true_labels, oob_pred_labels)
                     extra_metrics_scores[extra].append(extra_score)
 
         return oob_scores, extra_metrics_scores
