@@ -15,7 +15,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
-from sklearn.metrics import get_scorer
+from sklearn.metrics import get_scorer, confusion_matrix, make_scorer
 from sklearn.feature_selection import SelectFromModel
 
 from .mlestimator import MachineLearningEstimator
@@ -33,9 +33,9 @@ import progressbar
 
 
 def scoring_check(scoring: str) -> None:
-    if scoring not in sklearn.metrics.get_scorer_names():
+    if (scoring not in sklearn.metrics.get_scorer_names()) and (scoring != "specificity"):
         raise ValueError(
-            f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
+            f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())} and specificity"
         )
 
 
@@ -44,6 +44,11 @@ class MLPipelines(MachineLearningEstimator):
         super().__init__(label, csv_dir, estimator, param_grid)
         self.config_rncv = {}
 
+    def _specificity_scorer(self, estimator, X, y):
+        y_pred = estimator.predict(X)
+        tn, fp, fn, tp = confusion_matrix(y, y_pred).ravel()
+        specificity = tn / (tn + fp)
+        return specificity
     def _set_result_csv_name(self, csv_dir):
         """This function is used to set the name of the result nested cv file with respect to the dataset name"""
         data_name = os.path.basename(csv_dir).split(".")[0]
@@ -385,9 +390,15 @@ class MLPipelines(MachineLearningEstimator):
                             )
                             if self.config_rcv["extra_metrics"] != None:
                                 for metric in self.config_rcv["extra_metrics"]:
-                                    results[f"{metric}"].append(
-                                        get_scorer(metric)(clf, X_test_selected, y_test)
-                                    )
+                                    if metric == 'specificity':
+                                        results[f"{metric}"].append(
+                                            self._specificity_scorer(clf, X_test_selected, y_test)
+                                        )
+                                    else:
+                                        # For all other metrics, use get_scorer
+                                        results[f"{metric}"].append(
+                                            get_scorer(metric)(clf, X_test_selected, y_test)
+                                        )
                             y_pred = clf.predict(X_test_selected)
 
                             # Store the results using different names if feature selection is applied
@@ -488,11 +499,11 @@ class MLPipelines(MachineLearningEstimator):
         clfs = [clf for clf in self.available_clfs.keys() if clf not in exclude_classes]
         self.config_rcv["clfs"] = clfs
 
-        # Checks for reliability of parameters
-        if scoring not in sklearn.metrics.get_scorer_names():
-            raise ValueError(
-                f"Invalid outer scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())}"
-            )
+        # # Checks for reliability of parameters
+        # if (scoring not in sklearn.metrics.get_scorer_names()) or (scoring is not 'specificity'):
+        #     raise ValueError(
+        #         f"Invalid outer scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())} and specificity"
+        #     )
         
         # Parallelization
         trial_indices = range(rounds)
@@ -833,9 +844,14 @@ class MLPipelines(MachineLearningEstimator):
                             results["Hyperparameters"].append(clf.best_params_)
                             if self.config_rncv["extra_metrics"] != None:
                                 for metric in self.config_rncv["extra_metrics"]:
-                                    results[f"{metric}"].append(
-                                        get_scorer(metric)(clf, X_test_selected, y_test)
-                                    )
+                                    if metric == 'specificity':
+                                        results[f"{metric}"].append(
+                                            self._specificity_scorer(clf, X_test_selected, y_test)
+                                        )
+                                    else:
+                                        results[f"{metric}"].append(
+                                            get_scorer(metric)(clf, X_test_selected, y_test)
+                                        )
                             y_pred = clf.predict(X_test_selected)
                         else:
                             trials = clf.trials_
@@ -858,9 +874,14 @@ class MLPipelines(MachineLearningEstimator):
                             
                             if self.config_rncv["extra_metrics"] != None:
                                 for metric in self.config_rncv["extra_metrics"]:
-                                    results[f"{metric}"].append(
-                                        get_scorer(metric)(new_params_clf, X_test_selected, y_test)
-                                    )
+                                    if metric == 'specificity':
+                                        results[f"{metric}"].append(
+                                            self._specificity_scorer(new_params_clf, X_test_selected, y_test)
+                                        )
+                                    else:
+                                        results[f"{metric}"].append(
+                                            get_scorer(metric)(new_params_clf, X_test_selected, y_test)
+                                        )
                             y_pred = new_params_clf.predict(X_test_selected)
 
                         # Store the results using different names if feature selection is applied
@@ -986,7 +1007,7 @@ class MLPipelines(MachineLearningEstimator):
         missing_values_method="median",
         frfs=None,
         name_add=None,
-        extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1', 'average_precision',],
+        extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1', 'average_precision','specificity'],
         show_bad_samples=False,
         sfm=False
     ):
