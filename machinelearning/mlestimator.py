@@ -19,13 +19,14 @@ from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.linear_model import LogisticRegression,Lasso
 from sklearn.metrics import make_scorer
-from sklearn.ensemble import BaggingClassifier
+
 
 from sklearn.model_selection import (
     GridSearchCV,
     RandomizedSearchCV,
     StratifiedKFold,
     train_test_split,
+    StratifiedShuffleSplit
 )
 
 from sklearn.naive_bayes import GaussianNB
@@ -779,52 +780,51 @@ class MachineLearningEstimator(DataLoader):
         extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
         
         for i in tqdm(range(100), desc="OOB validation"):
-            # Create a BaggingClassifier with OOB scoring enabled
-            bagging_clf = BaggingClassifier(
-                estimator=model,   # Use the pre-tuned model
-                n_estimators=21,             # Number of bootstrap samples
-                oob_score=True,               # Enable OOB scoring
-                random_state=i               #  Different random state for each iteration
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.3, shuffle=True
             )
-
-            # Train the model with OOB enabled (no need for train/test split)
-            bagging_clf.fit(X, y)
-
-            # Initialize an array to collect OOB predictions
-            oob_predictions = np.zeros_like(y, dtype=float)  # For averaging predictions
-            oob_counts = np.zeros_like(y, dtype=int)  # Track how many times each sample is OOB
-
-            # For each estimator, collect OOB samples and predictions
-            for estimator, oob_indices in zip(bagging_clf.estimators_, bagging_clf.estimators_samples_):
-                # Find OOB indices (samples not in bootstrap sample)
-                oob_mask = np.ones(X.shape[0], dtype=bool)
-                oob_mask[oob_indices] = False  # Mark the OOB samples (those not used in training)
-
-                # Predict using the estimator on the OOB samples
-                oob_predictions[oob_mask] += estimator.predict(X[oob_mask])
-                oob_counts[oob_mask] += 1  # Increment count of how many times each sample was OOB
-
-            # Average the OOB predictions for each sample (this step gives soft voting results)
-            oob_predictions = oob_predictions / oob_counts
-            oob_pred_labels = (oob_predictions >= 0.5).astype(int)  # Convert to binary predictions (0 or 1)
-
-            # Only evaluate the samples that were actually OOB at least once
-            oob_valid = oob_counts > 0
-            oob_true_labels = y[oob_valid]
-            oob_pred_labels = oob_pred_labels[oob_valid]
-
-            # Calculate the chosen metric using the OOB samples
+            X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
+            model_oob = copy.deepcopy(model)
+            model_oob = model_oob.fit(X_train_res, y_train_res)
+            y_pred = model_oob.predict(X_test)
         
-            score = metrics.get_scorer(self.scoring)._score_func(oob_true_labels, oob_pred_labels)
+            score = metrics.get_scorer(self.scoring)._score_func(y_test, y_pred)
             oob_scores.append(score)
             
             # Calculate and store extra metrics
             if extra_metrics is not None:
                 for extra in extra_metrics:
-                    extra_score = metrics.get_scorer(extra)._score_func(oob_true_labels, oob_pred_labels)
+                    extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
                     extra_metrics_scores[extra].append(extra_score)
 
         return oob_scores, extra_metrics_scores
+
+    def _train_test_validation(self, X, y, model, extra_metrics=None):
+        tt_prop_scores = []
+        extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
+        sss = StratifiedShuffleSplit(n_splits=100, test_size=0.3, random_state=0)
+
+        for i, (train_index, test_index) in tqdm(enumerate(sss.split(X, y)), desc="TT prop validation"):
+            # Use .iloc for DataFrame X and NumPy indexing for array y
+            X_train, X_test = X.iloc[train_index], X.iloc[test_index]
+            y_train, y_test = y[train_index], y[test_index]
+
+            # Deepcopy the model and fit it on the train set
+            model_tt_prop = copy.deepcopy(model)
+            model_tt_prop = model_tt_prop.fit(X_train, y_train)  
+            y_pred = model_tt_prop.predict(X_test)
+
+            # Evaluate the primary metric
+            score = metrics.get_scorer(self.scoring)._score_func(y_test, y_pred)
+            tt_prop_scores.append(score)
+
+            # Calculate and store extra metrics
+            if extra_metrics is not None:
+                for extra in extra_metrics:
+                    extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
+                    extra_metrics_scores[extra].append(extra_score)
+
+        return tt_prop_scores, extra_metrics_scores
 
     def _eval_boxplot(self, estimator_name, eval_df, cv, evaluation):
         """
@@ -844,7 +844,7 @@ class MachineLearningEstimator(DataLoader):
         if not os.path.exists(results_dir):
             os.makedirs(results_dir)
 
-        if (evaluation == "bootstrap") or (evaluation == "oob"):
+        if (evaluation == "bootstrap") or (evaluation == "oob") or (evaluation == "train_test"):
             fig = go.Figure()
             fig.add_trace(
                 go.Box(
@@ -1181,40 +1181,33 @@ class MachineLearningEstimator(DataLoader):
                     local_data_full_outer[f"{extra}"] = extra_metric_scores
         
         elif evaluation == "train_test":
-            # Split the data into training and test sets
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, shuffle=True)
-
-            # Fit the model on the training data
-            best_model.fit(X_train, y_train)
-
-            # Predict on the test data
-            y_pred = best_model.predict(X_test)
-
-            # Calculate the primary scoring metric
-            test_score = metrics.get_scorer(self.scoring)._score_func(y_test, y_pred)
-            train_score = metrics.get_scorer(self.scoring)._score_func(y_train, best_model.predict(X_train))
-
-            # Update local_data_full_outer with evaluation results
-            local_data_full_outer['Scores'] = [test_score,train_score]
-            local_data_full_outer['mean_test_score'] = [test_score,train_score]
-            local_data_full_outer['std_test_score'] = [0,0]  # No standard deviation since we only have one test run
-            local_data_full_outer['sem_test_score'] = [0,0]  # No standard error for a single run
-            local_data_full_outer['params'] = [best_params, best_params]
-            local_data_full_outer['round'] = ['test','train']
-            local_data_full_outer['train_mthd'] = [training_method,training_method]
-            local_data_full_outer['estimator'] = [estimator_name,estimator_name]
-            if features_names_list is not None:
-                local_data_full_outer['features'] = [len(features_names_list),len(features_names_list)]
-            elif feat_num is not None:
-                local_data_full_outer['features'] = [feat_num,feat_num]
-            else:
-                local_data_full_outer['features'] = ['all','all']
+            tt_scores, extra_metrics_scores = self._train_test_validation(X, y, best_model, extra_metrics)
             
-            # Add any extra metrics, if provided
+            local_data_full_outer["Scores"] = tt_scores
+            local_data_full_outer["mean_test_score"] = np.mean(tt_scores)
+            local_data_full_outer["std_test_score"] = np.std(tt_scores)
+            
+            valid_scores = [score for score in tt_scores if score is not None]
+            if valid_scores:
+                sem = np.std(valid_scores) / np.sqrt(len(valid_scores))
+            else:
+                sem = 0
+            local_data_full_outer["sem_test_score"] = sem
+            local_data_full_outer["params"] =  local_data_full_outer.apply(lambda row: best_params.copy(), axis=1)
+            local_data_full_outer["round"] = "train_test"
+            local_data_full_outer['train_mthd'] = training_method
+            local_data_full_outer['estimator'] = estimator_name
+            if features_names_list is not None:
+                local_data_full_outer['features'] = len(features_names_list)
+            elif feat_num is not None:
+                local_data_full_outer['features'] = feat_num
+            else:
+                local_data_full_outer['features'] = 'all'
+
+            # Calculate and add extra metrics for train_test validation
             if extra_metrics is not None:
                 for extra in extra_metrics:
-                    extra_score_test = metrics.get_scorer(extra)._score_func(y_test, y_pred)
-                    extra_score_train = metrics.get_scorer(extra)._score_func(y_train, best_model.predict(X_train))
-                    local_data_full_outer[f"{extra}"] = [extra_score_test,extra_score_train]
+                    extra_metric_scores = extra_metrics_scores[extra]
+                    local_data_full_outer[f"{extra}"] = extra_metric_scores
 
         return best_model, local_data_full_outer
