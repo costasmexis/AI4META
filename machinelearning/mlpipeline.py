@@ -1135,11 +1135,11 @@ class MLPipelines(MachineLearningEstimator):
                             0
                         ],
                         "Classifier": classif,
-                        f"Outer_{self.config_rncv['outer_scoring']}": filtered_scores.tolist(),
-                        "Max": max_score,
-                        "Std": std_score,
-                        "SEM": sem_score,
-                        "Median": median_score,
+                        f"{self.config_rncv['outer_scoring']}": filtered_scores.tolist(),
+                        f"Max_{self.config_rncv['outer_scoring']}": max_score,
+                        f"Std_{self.config_rncv['outer_scoring']}": std_score,
+                        f"SEM{self.config_rncv['outer_scoring']}": sem_score,
+                        f"Median_{self.config_rncv['outer_scoring']}": median_score,
                         "Hyperparameters": df_inner[df_inner["Classifiers"] == classif][
                             "Hyperparameters"
                         ].values,
@@ -1157,9 +1157,42 @@ class MLPipelines(MachineLearningEstimator):
                 if extra_metrics is not None:
                     for metric in extra_metrics:
                         results[-1][f"{metric}"] = indices[f"{metric}"].values
+                        results[-1][f"Max_{metric}"] = np.max(indices[f"{metric}"].values)
+                        results[-1][f"Std_{metric}"] = np.std(indices[f"{metric}"].values)
+                        results[-1][f"SEM{metric}"] = sem(indices[f"{metric}"].values)
+                        results[-1][f"Median_{metric}"] = np.median(indices[f"{metric}"].values)
+                        
 
         print(f"Finished with {len(results)} estimators")
         scores_dataframe = pd.DataFrame(results)
+        
+        # Create a 'Results' directory
+        results_dir = "Results_ncv"
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+
+        # Initiate name
+        if num_features is not None:
+            features = num_features
+        else:
+            features = "all_features"
+
+        try:
+            dataset_name = self._set_result_csv_name(self.csv_dir)
+            if name_add is None:
+                results_name = f"{dataset_name}_{inner_selection_lst}_{features}"
+            else:
+                results_name = f"{dataset_name}_{inner_selection_lst}_{features}_{name_add}"
+            final_dataset_name = os.path.join(results_dir, results_name)
+        except Exception as e:
+            dataset_name = "dataset"
+            if name_add is None:
+                results_name = f"{dataset_name}_{inner_selection_lst}_{features}"
+            else:
+                results_name = f"{dataset_name}_{inner_selection_lst}_{features}_{name_add}"
+            final_dataset_name = os.path.join(
+                results_dir, f"{dataset_name}_{inner_selection_lst}_{features}"
+            )
         
         if show_bad_samples:
             threshold = 0.5
@@ -1175,7 +1208,6 @@ class MLPipelines(MachineLearningEstimator):
                 for classifier in classifiers:
                     df_classifier = df_inner_selection[df_inner_selection['Classifier'] == classifier]
                     samples_classification_rates = np.array(df_classifier['Samples_classification_rates'].values[0])
-                    print(f'Samples classification rates for {classifier} ({inner_selection_method}): {samples_classification_rates}')
                     
                     # Find bad samples (classification rate < threshold)
                     bad_samples_indices = np.where(samples_classification_rates < threshold)[0]
@@ -1220,48 +1252,17 @@ class MLPipelines(MachineLearningEstimator):
                     yaxis_title='Classification Rate',
                     legend_title='Classifiers (Inner_Selection)',
                     barmode='group',
-                    width=self.X.shape[0] * 15,  
-                    height=500
+                    width=self.X.shape[0] * 17,  
+                    height=700
                 )
                 
                 fig.show()
+                
+                # Save the plot to 'Results/bad_samples.png'
+                save_path = f"{final_dataset_name}_bad_samples.png"
+                fig.write_image(save_path)
             else:
                 print("No bad samples to plot.")
-
-
-        # Create a 'Results' directory
-        results_dir = "Results_ncv"
-        if not os.path.exists(results_dir):
-            os.makedirs(results_dir)
-
-        # Initiate name
-        if num_features is not None:
-            features = num_features
-        else:
-            features = "all_features"
-
-        try:
-            dataset_name = self._set_result_csv_name(self.csv_dir)
-            if name_add is None:
-                results_name = f"{dataset_name}_{inner_selection_lst}_{features}"
-            else:
-                results_name = f"{dataset_name}_{inner_selection_lst}_{features}_{name_add}"
-            final_dataset_name = os.path.join(results_dir, results_name)
-        except Exception as e:
-            dataset_name = "dataset"
-            if name_add is None:
-                results_name = f"{dataset_name}_{inner_selection_lst}_{features}"
-            else:
-                results_name = f"{dataset_name}_{inner_selection_lst}_{features}_{name_add}"
-            final_dataset_name = os.path.join(
-                results_dir, f"{dataset_name}_{inner_selection_lst}_{features}"
-            )
-
-        # Save the results to a CSV file of the outer scores for each classifier
-        if return_csv:
-            results_path = f"{final_dataset_name}_outerloops_results.csv"
-            scores_dataframe.to_csv(results_path, index=False)
-            print(f"Results saved to {results_path}")
 
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:
@@ -1311,7 +1312,7 @@ class MLPipelines(MachineLearningEstimator):
                     bargap=0.2,
                     template="plotly_white",
                     width=min(max(1000, freq_feat * 20), 2000),  # Dynamically adjust plot width
-                    height=500  # Set plot height
+                    height=700  # Set plot height
                 )
 
                 # Show the interactive plot
@@ -1338,8 +1339,8 @@ class MLPipelines(MachineLearningEstimator):
 
         # Plot box or violin plots of the outer cross-validation scores for all Inner_Selection methods
         if plot is not None:
-            scores_long = scores_dataframe.explode(f"Outer_{self.config_rncv['outer_scoring']}")
-            scores_long[f"Outer_{self.config_rncv['outer_scoring']}"] = scores_long[f"Outer_{self.config_rncv['outer_scoring']}"].astype(float)
+            scores_long = scores_dataframe.explode(f"{self.config_rncv['outer_scoring']}")
+            scores_long[f"{self.config_rncv['outer_scoring']}"] = scores_long[f"{self.config_rncv['outer_scoring']}"].astype(float)
 
             fig = go.Figure()
 
@@ -1353,7 +1354,7 @@ class MLPipelines(MachineLearningEstimator):
                     # Add box plots for each classifier within each Inner_Selection method
                     for classifier in classifiers:
                         data = df_inner_selection[df_inner_selection["Classifier"] == classifier][
-                            f"Outer_{self.config_rncv['outer_scoring']}"
+                            f"{self.config_rncv['outer_scoring']}"
                         ]
                         median = np.median(data)
                         fig.add_trace(
@@ -1383,7 +1384,7 @@ class MLPipelines(MachineLearningEstimator):
                     # Add violin plots for each classifier within each Inner_Selection method
                     for classifier in classifiers:
                         data = df_inner_selection[df_inner_selection["Classifier"] == classifier][
-                            f"Outer_{self.config_rncv['outer_scoring']}"
+                            f"{self.config_rncv['outer_scoring']}"
                         ]
                         median = np.median(data)
                         fig.add_trace(
@@ -1403,6 +1404,9 @@ class MLPipelines(MachineLearningEstimator):
 
             # Update layout for better readability
             fig.update_layout(
+                autosize = False,
+                width=1500,
+                height=1200,
                 title="Model Selection Results by Classifier and Inner Selection Method",
                 yaxis_title=f"Scores {self.config_rncv['outer_scoring']}",
                 xaxis_title="Classifier (Inner Selection Method)",
@@ -1417,8 +1421,19 @@ class MLPipelines(MachineLearningEstimator):
         else:
             pass
 
+
+        # Save the results to a CSV file of the outer scores for each classifier
+        if return_csv:
+            results_path = f"{final_dataset_name}_outerloops_results.csv"
+            cols_drop = ["Samples_classification_rates", "Classifier",self.config_rncv['outer_scoring'],"Hyperparameters","Selected_Features"]
+            for metric in extra_metrics:
+                cols_drop.append(metric) 
+            statistics_dataframe = scores_dataframe.drop(cols_drop, axis=1)
+            statistics_dataframe.to_csv(results_path, index=False)
+            print(f"Statistics results saved to {results_path}")
+            
         # Return the dataframe and the list of features if feature selection is applied
         if num_features is not None:
-            return scores_dataframe, features_list
+            return statistics_dataframe, features_list
         else:
-            return scores_dataframe
+            return statistics_dataframe
