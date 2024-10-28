@@ -780,12 +780,19 @@ class MachineLearningEstimator(DataLoader):
         extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
         
         for i in tqdm(range(100), desc="OOB validation"):
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.3, shuffle=True
-            )
-            X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
+            # Generate a random bootstrap sample with replacement
+            rng = np.random.default_rng(i)  # New random generator for each seed
+            indices = rng.choice(range(X.shape[0]), size=X.shape[0], replace=True)
+
+            X_train, y_train = X.iloc[indices, :], y[indices]
+            
+            # Determine the OOB indices
+            oob_indices = list(set(range(X.shape[0])) - set(indices))
+            X_test, y_test = X.iloc[oob_indices, :], y[oob_indices]
+            
             model_oob = copy.deepcopy(model)
-            model_oob = model_oob.fit(X_train_res, y_train_res)
+            model_oob = model_oob.fit(X_train, y_train)
+            
             y_pred = model_oob.predict(X_test)
         
             score = metrics.get_scorer(self.scoring)._score_func(y_test, y_pred)
@@ -798,6 +805,8 @@ class MachineLearningEstimator(DataLoader):
                     extra_metrics_scores[extra].append(extra_score)
 
         return oob_scores, extra_metrics_scores
+    
+    
 
     def _train_test_validation(self, X, y, model, extra_metrics=None):
         tt_prop_scores = []
