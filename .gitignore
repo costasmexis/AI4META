@@ -14,6 +14,11 @@ Notes/*
 # C extensions
 *.so
 
+# Results
+Results_ncv/*
+Final_Model_Results/*
+exl/*
+
 # Distribution / packaging
 .Python
 build/
