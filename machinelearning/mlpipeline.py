@@ -1128,7 +1128,7 @@ class MLPipelines(MachineLearningEstimator):
                 for test_part in indices["Samples_counts"]:
                     samples_classification_rates=np.add(samples_classification_rates,test_part)
                 samples_classification_rates /= rounds
-                
+                                
                 results.append(
                     {
                         "Estimator": df_inner[df_inner["Classifiers"] == classif]["Estimator"].unique()[
@@ -1138,7 +1138,7 @@ class MLPipelines(MachineLearningEstimator):
                         f"{self.config_rncv['outer_scoring']}": filtered_scores.tolist(),
                         f"Max_{self.config_rncv['outer_scoring']}": max_score,
                         f"Std_{self.config_rncv['outer_scoring']}": std_score,
-                        f"SEM{self.config_rncv['outer_scoring']}": sem_score,
+                        f"SEM_{self.config_rncv['outer_scoring']}": sem_score,
                         f"Median_{self.config_rncv['outer_scoring']}": median_score,
                         "Hyperparameters": df_inner[df_inner["Classifiers"] == classif][
                             "Hyperparameters"
@@ -1159,7 +1159,7 @@ class MLPipelines(MachineLearningEstimator):
                         results[-1][f"{metric}"] = indices[f"{metric}"].values
                         results[-1][f"Max_{metric}"] = np.max(indices[f"{metric}"].values)
                         results[-1][f"Std_{metric}"] = np.std(indices[f"{metric}"].values)
-                        results[-1][f"SEM{metric}"] = sem(indices[f"{metric}"].values)
+                        results[-1][f"SEM_{metric}"] = sem(indices[f"{metric}"].values)
                         results[-1][f"Median_{metric}"] = np.median(indices[f"{metric}"].values)
                         
 
@@ -1256,7 +1256,7 @@ class MLPipelines(MachineLearningEstimator):
                     height=700
                 )
                 
-                fig.show()
+                # fig.show()
                 
                 # Save the plot to 'Results/bad_samples.png'
                 save_path = f"{final_dataset_name}_bad_samples.png"
@@ -1315,8 +1315,8 @@ class MLPipelines(MachineLearningEstimator):
                     height=700  # Set plot height
                 )
 
-                # Show the interactive plot
-                fig.show()
+                # # Show the interactive plot
+                # fig.show()
 
                 # Save the plot to 'Results/histogram.png'
                 save_path = f"{final_dataset_name}_histogram.png"
@@ -1327,7 +1327,7 @@ class MLPipelines(MachineLearningEstimator):
             if (frfs is not None) and (frfs < len(features_list)):
                 features_list = features_list[:frfs]
                 print(f"Top {frfs} most frequently selected features: {features_list}")
-
+            
         def bootstrap_median_ci(data, num_iterations=1000, ci=0.95):
             medians = []
             for _ in range(num_iterations):
@@ -1417,7 +1417,7 @@ class MLPipelines(MachineLearningEstimator):
             # Save the figure as an image in the "Results" directory
             image_path = f"{final_dataset_name}_model_selection_plot.png"
             fig.write_image(image_path)
-            fig.show()
+            # fig.show()
         else:
             pass
 
@@ -1432,8 +1432,4 @@ class MLPipelines(MachineLearningEstimator):
             statistics_dataframe.to_csv(results_path, index=False)
             print(f"Statistics results saved to {results_path}")
             
-        # Return the dataframe and the list of features if feature selection is applied
-        if num_features is not None:
-            return statistics_dataframe, features_list
-        else:
-            return statistics_dataframe
+        return statistics_dataframe

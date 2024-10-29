@@ -26,7 +26,6 @@ create_tables_sql = [
         classifier_id SERIAL PRIMARY KEY,
         dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
         estimator VARCHAR(255) NOT NULL,
-        classifier VARCHAR(255) NOT NULL,
         inner_selection VARCHAR(255)
     );
     """,
@@ -69,6 +68,15 @@ create_tables_sql = [
         classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
         dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
         samples_classification_rates JSON
+    );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS Feature_Counts (
+        count_id SERIAL PRIMARY KEY,
+        feature_name VARCHAR(255) NOT NULL,
+        count INT NOT NULL,
+        selection_id INT REFERENCES Feature_Selection(selection_id) ON DELETE CASCADE,
+        dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE
     );
     """
 ]
