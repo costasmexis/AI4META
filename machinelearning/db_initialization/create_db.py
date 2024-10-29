@@ -1,13 +1,26 @@
 import psycopg2
 from psycopg2 import sql
+import json
+import os
+
+# Construct the path to the credentials JSON file using os
+credentials_path = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "db_credentials",
+    "credentials.json"
+)
+
+# Load the credentials from the JSON file
+with open(credentials_path, "r") as file:
+    db_credentials = json.load(file)
 
 # Establish a connection to the PostgreSQL database
 connection = psycopg2.connect(
-    dbname="ai4meta",
-    user="postgres",
-    password="spyros212121",
-    host="localhost",
-    port="5432"
+    dbname=db_credentials["db_name"],
+    user=db_credentials["db_user"],
+    password=db_credentials["db_password"],
+    host=db_credentials["db_host"],
+    port=db_credentials["db_port"]
 )
 
 # Create a cursor object
@@ -30,14 +43,6 @@ create_tables_sql = [
     );
     """,
     """
-    CREATE TABLE IF NOT EXISTS Hyperparameters (
-        hyperparameter_id SERIAL PRIMARY KEY,
-        classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
-        dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
-        hyperparameters JSON NOT NULL
-    );
-    """,
-    """
     CREATE TABLE IF NOT EXISTS Feature_Selection (
         selection_id SERIAL PRIMARY KEY,
         classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
@@ -47,10 +52,20 @@ create_tables_sql = [
     );
     """,
     """
+    CREATE TABLE IF NOT EXISTS Hyperparameters (
+        hyperparameter_id SERIAL PRIMARY KEY,
+        classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
+        dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
+        selection_id INT REFERENCES Feature_Selection(selection_id) ON DELETE CASCADE,
+        hyperparameters JSON NOT NULL
+    );
+    """,
+    """
     CREATE TABLE IF NOT EXISTS Performance_Metrics (
         performance_id SERIAL PRIMARY KEY,
         classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
         dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
+        selection_id INT REFERENCES Feature_Selection(selection_id) ON DELETE CASCADE,
         matthews_corrcoef JSON,
         roc_auc JSON,
         accuracy JSON,
@@ -67,6 +82,7 @@ create_tables_sql = [
         sample_rate_id SERIAL PRIMARY KEY,
         classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
         dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
+        selection_id INT REFERENCES Feature_Selection(selection_id) ON DELETE CASCADE,
         samples_classification_rates JSON
     );
     """,

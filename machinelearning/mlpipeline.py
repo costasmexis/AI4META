@@ -31,6 +31,10 @@ import multiprocessing
 from collections import Counter
 import progressbar
 
+import psycopg2
+from psycopg2.extras import execute_values
+import json
+
 
 def scoring_check(scoring: str) -> None:
     if (scoring not in sklearn.metrics.get_scorer_names()) and (scoring != "specificity"):
@@ -479,7 +483,7 @@ class MLPipelines(MachineLearningEstimator):
 
         if num_features is not None:
             print(
-                f"The num_features parameter is {num_features}.\nThe result will be a Dataframe and a List with the freq_feat number of the most important features.\nIf the freq_feat is None, the result will be a List with all features."
+                f"The num_features parameter is {num_features}."#\nThe result will be a Dataframe and a List with the freq_feat number of the most important features.\nIf the freq_feat is None, the result will be a List with all features."
             )
 
         # Set available classifiers
@@ -1009,7 +1013,8 @@ class MLPipelines(MachineLearningEstimator):
         name_add=None,
         extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1', 'average_precision','specificity'],
         show_bad_samples=False,
-        sfm=False
+        sfm=False,
+        info_to_db = False
     ):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
@@ -1162,7 +1167,6 @@ class MLPipelines(MachineLearningEstimator):
                         results[-1][f"SEM_{metric}"] = sem(indices[f"{metric}"].values)
                         results[-1][f"Median_{metric}"] = np.median(indices[f"{metric}"].values)
                         
-
         print(f"Finished with {len(results)} estimators")
         scores_dataframe = pd.DataFrame(results)
         
@@ -1421,7 +1425,6 @@ class MLPipelines(MachineLearningEstimator):
         else:
             pass
 
-
         # Save the results to a CSV file of the outer scores for each classifier
         if return_csv:
             results_path = f"{final_dataset_name}_outerloops_results.csv"
@@ -1432,4 +1435,140 @@ class MLPipelines(MachineLearningEstimator):
             statistics_dataframe.to_csv(results_path, index=False)
             print(f"Statistics results saved to {results_path}")
             
+        if info_to_db:
+            try:
+                credentials_path = os.path.join(
+                    os.path.dirname(os.path.abspath(__file__)),
+                    "db_credentials",
+                    "credentials.json"
+                )
+                
+                with open(credentials_path, "r") as file:
+                    db_credentials = json.load(file)
+
+                # Establish a connection to the PostgreSQL database
+                connection = psycopg2.connect(
+                    dbname=db_credentials["db_name"],
+                    user=db_credentials["db_user"],
+                    password=db_credentials["db_password"],
+                    host=db_credentials["db_host"],
+                    port=db_credentials["db_port"]
+                )
+                cursor = connection.cursor()
+                print("Connected to PostgreSQL database")
+                
+            except Exception as e:
+                print(f"Error connecting to database: {e}")
+                
+            try:
+                # Insert dataset
+                dataset_query = """
+                    INSERT INTO Datasets (dataset_name)
+                    VALUES (%s) ON CONFLICT (dataset_name) DO NOTHING RETURNING dataset_id;
+                """
+                print(f"Dataset : {self.csv_dir}")
+
+                # Execute the query with only the dataset name as a parameter
+                cursor.execute(dataset_query, (self.csv_dir,))
+                dataset_id = cursor.fetchone()
+                
+                # If dataset_id is None (i.e., dataset already exists), retrieve it
+                if dataset_id is None:
+                    cursor.execute("SELECT dataset_id FROM Datasets WHERE dataset_name = %s;", (self.csv_dir,))
+                    dataset_id = cursor.fetchone()[0]
+                else:
+                    dataset_id = dataset_id[0]
+
+                # Insert classifiers and associated data
+                for _, row in scores_dataframe.iterrows():
+                    classifier_query = """
+                        INSERT INTO Classifiers (dataset_id, estimator, classifier, inner_selection)
+                        VALUES (%s, %s, %s, %s) RETURNING classifier_id;
+                    """
+                    print(f"Classifier : {dataset_id}, {row['Estimator']}, {row['Classifier']}, {row['Inner_Selection']}")
+                    cursor.execute(classifier_query, (dataset_id, row["Estimator"], row["Classifier"], row["Inner_Selection"]))
+                    classifier_id = cursor.fetchone()[0]
+
+                    # Insert hyperparameters
+                    hyperparameters_query = """
+                        INSERT INTO Hyperparameters (classifier_id, dataset_id, hyperparameters)
+                        VALUES (%s, %s, %s)
+                    """
+                    # Ensure hyperparameters are JSON serializable
+                    hyperparameters = row["Hyperparameters"]
+                    if isinstance(hyperparameters, np.ndarray):
+                        hyperparameters = [dict(item) for item in hyperparameters]
+                    print(f"Hyperparameters : {hyperparameters}")
+                    cursor.execute(hyperparameters_query, (classifier_id, dataset_id, json.dumps(hyperparameters)))
+
+                    # Insert feature selection data
+                    feature_selection_query = """
+                        INSERT INTO Feature_Selection (classifier_id, dataset_id, way_of_selection, numbers_of_features)
+                        VALUES (%s, %s, %s, %s) RETURNING selection_id;
+                    """
+                    print(f"Selection : {classifier_id}, {dataset_id}, {row['Way_of_Selection']}, {row['Numbers_of_Features']}")
+                    cursor.execute(
+                        feature_selection_query,
+                        (classifier_id, dataset_id, row["Way_of_Selection"], row["Numbers_of_Features"])
+                    )
+                    selection_id = cursor.fetchone()[0]
+
+                    # Insert feature counts
+                    if num_features:
+                        # Flatten the list if `Selected_Features` contains lists of lists
+                        selected_features = row["Selected_Features"]
+                        if isinstance(selected_features, list) and any(isinstance(i, list) for i in selected_features):
+                            selected_features = [item for sublist in selected_features for item in sublist]
+
+                        # Count occurrences of each feature
+                        feature_counts = Counter(selected_features)
+                        feature_counts_query = """
+                            INSERT INTO Feature_Counts (feature_name, count, selection_id, dataset_id)
+                            VALUES %s
+                        """
+                        print(f"Feature counts : {feature_counts}")
+                        feature_values = [(feat, count, selection_id, dataset_id) for feat, count in feature_counts.items()]
+                        print(f"Feature counts : {feature_values}")
+                        execute_values(cursor, feature_counts_query, feature_values)
+
+                    # Insert performance metrics
+                    performance_metrics_query = """
+                        INSERT INTO Performance_Metrics (classifier_id, dataset_id, matthews_corrcoef, roc_auc, accuracy, 
+                            balanced_accuracy, recall, precision, f1_score, specificity)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """
+                    # Convert each metric to a list if it's an ndarray, then JSON serialize it
+                    metrics = [
+                        json.dumps(metric.tolist() if isinstance(metric, np.ndarray) else metric)
+                        for metric in [row.get(metric) for metric in extra_metrics]
+                    ]
+                    print(f"Metrics : {metrics}")
+                    cursor.execute(
+                        performance_metrics_query,
+                        [classifier_id, dataset_id] + metrics
+                    )
+
+                    # Insert samples classification rates
+                    samples_classification_query = """
+                        INSERT INTO Samples_Classification_Rates (classifier_id, dataset_id, samples_classification_rates)
+                        VALUES (%s, %s, %s)
+                    """
+                    # Ensure samples classification rates are JSON serializable
+                    samples_classification_rates = row["Samples_classification_rates"]
+                    print(f"Samples classification rates : {samples_classification_rates}")
+                    cursor.execute(
+                        samples_classification_query,
+                        (classifier_id, dataset_id, json.dumps(samples_classification_rates))
+                    )
+
+                # Commit the transaction
+                connection.commit()
+                print("Data inserted into the database successfully.")
+            except Exception as e:
+                connection.rollback()
+                print(f"An error occurred while inserting data into the database: {e}")
+            finally:
+                cursor.close()
+                connection.close()
+                
         return statistics_dataframe
