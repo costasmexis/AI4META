@@ -1482,12 +1482,18 @@ class MLPipelines(MachineLearningEstimator):
                 # Insert classifiers and associated data
                 for _, row in scores_dataframe.iterrows():
                     classifier_query = """
-                        INSERT INTO Classifiers (dataset_id, estimator, classifier, inner_selection)
-                        VALUES (%s, %s, %s, %s) RETURNING classifier_id;
+                        INSERT INTO Classifiers (dataset_id, estimator, inner_selection)
+                        VALUES (%s, %s, %s) RETURNING classifier_id;
                     """
-                    print(f"Classifier : {dataset_id}, {row['Estimator']}, {row['Classifier']}, {row['Inner_Selection']}")
-                    cursor.execute(classifier_query, (dataset_id, row["Estimator"], row["Classifier"], row["Inner_Selection"]))
-                    classifier_id = cursor.fetchone()[0]
+                    print(f"Classifier : {dataset_id}, {row['Estimator']},  {row['Inner_Selection']}")
+                    # Ensure the classifier row contains all required values
+                    cursor.execute(classifier_query, (dataset_id, row["Estimator"], row["Inner_Selection"]))
+                    classifier_id = cursor.fetchone()
+                    
+                    if classifier_id:
+                        classifier_id = classifier_id[0]
+                    else:
+                        raise ValueError("Classifier ID could not be retrieved.")
 
                     # Insert hyperparameters
                     hyperparameters_query = """
@@ -1506,30 +1512,33 @@ class MLPipelines(MachineLearningEstimator):
                         INSERT INTO Feature_Selection (classifier_id, dataset_id, way_of_selection, numbers_of_features)
                         VALUES (%s, %s, %s, %s) RETURNING selection_id;
                     """
-                    print(f"Selection : {classifier_id}, {dataset_id}, {row['Way_of_Selection']}, {row['Numbers_of_Features']}")
+                    # Debugging output for feature selection values
+                    way_of_selection = row["Way_of_Selection"]
+                    numbers_of_features = row["Numbers_of_Features"]
+                    print(f"Selection : {classifier_id}, {dataset_id}, {way_of_selection}-{type(way_of_selection)}, {numbers_of_features}-{type(numbers_of_features)}")
                     cursor.execute(
                         feature_selection_query,
-                        (classifier_id, dataset_id, row["Way_of_Selection"], row["Numbers_of_Features"])
+                        (classifier_id, dataset_id, way_of_selection, numbers_of_features)
                     )
                     selection_id = cursor.fetchone()[0]
 
-                    # Insert feature counts
-                    if num_features:
-                        # Flatten the list if `Selected_Features` contains lists of lists
-                        selected_features = row["Selected_Features"]
-                        if isinstance(selected_features, list) and any(isinstance(i, list) for i in selected_features):
-                            selected_features = [item for sublist in selected_features for item in sublist]
+                    # # Insert feature counts
+                    # if num_features:
+                    #     # Flatten the list if `Selected_Features` contains lists of lists
+                    #     selected_features = row["Selected_Features"]
+                    #     if isinstance(selected_features, list) and any(isinstance(i, list) for i in selected_features):
+                    #         selected_features = [item for sublist in selected_features for item in sublist]
 
-                        # Count occurrences of each feature
-                        feature_counts = Counter(selected_features)
-                        feature_counts_query = """
-                            INSERT INTO Feature_Counts (feature_name, count, selection_id, dataset_id)
-                            VALUES %s
-                        """
-                        print(f"Feature counts : {feature_counts}")
-                        feature_values = [(feat, count, selection_id, dataset_id) for feat, count in feature_counts.items()]
-                        print(f"Feature counts : {feature_values}")
-                        execute_values(cursor, feature_counts_query, feature_values)
+                    #     # Count occurrences of each feature
+                    #     feature_counts = Counter(selected_features)
+                    #     feature_counts_query = """
+                    #         INSERT INTO Feature_Counts (feature_name, count, selection_id, dataset_id)
+                    #         VALUES %s
+                    #     """
+                    #     print(f"Feature counts : {feature_counts}")
+                    #     feature_values = [(feat, count, selection_id, dataset_id) for feat, count in feature_counts.items()]
+                    #     print(f"Feature counts : {feature_values}")
+                    #     execute_values(cursor, feature_counts_query, feature_values)
 
                     # Insert performance metrics
                     performance_metrics_query = """
