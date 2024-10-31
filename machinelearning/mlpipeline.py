@@ -1466,7 +1466,6 @@ class MLPipelines(MachineLearningEstimator):
                     INSERT INTO Datasets (dataset_name)
                     VALUES (%s) ON CONFLICT (dataset_name) DO NOTHING RETURNING dataset_id;
                 """
-                print(f"Dataset : {self.csv_dir}")
 
                 # Execute the query with only the dataset name as a parameter
                 cursor.execute(dataset_query, (self.csv_dir,))
@@ -1481,19 +1480,29 @@ class MLPipelines(MachineLearningEstimator):
 
                 # Insert classifiers and associated data
                 for _, row in scores_dataframe.iterrows():
-                    classifier_query = """
-                        INSERT INTO Classifiers (dataset_id, estimator, inner_selection)
-                        VALUES (%s, %s, %s) RETURNING classifier_id;
+                    # Check if the classifier combination already exists
+                    check_query = """
+                        SELECT classifier_id FROM Classifiers
+                        WHERE dataset_id = %s AND estimator = %s AND inner_selection = %s;
                     """
-                    print(f"Classifier : {dataset_id}, {row['Estimator']},  {row['Inner_Selection']}")
-                    # Ensure the classifier row contains all required values
-                    cursor.execute(classifier_query, (dataset_id, row["Estimator"], row["Inner_Selection"]))
+                    cursor.execute(check_query, (dataset_id, row["Estimator"], row["Inner_Selection"]))
                     classifier_id = cursor.fetchone()
-                    
+
                     if classifier_id:
+                        # If the combination exists, get the classifier_id
                         classifier_id = classifier_id[0]
                     else:
+                        # If the combination does not exist, insert a new record
+                        classifier_query = """
+                            INSERT INTO Classifiers (dataset_id, estimator, inner_selection)
+                            VALUES (%s, %s, %s) RETURNING classifier_id;
+                        """
+                        cursor.execute(classifier_query, (dataset_id, row["Estimator"], row["Inner_Selection"]))
+                        classifier_id = cursor.fetchone()[0]
+
+                    if not classifier_id:
                         raise ValueError("Classifier ID could not be retrieved.")
+
 
                     # Insert hyperparameters
                     hyperparameters_query = """
@@ -1504,7 +1513,6 @@ class MLPipelines(MachineLearningEstimator):
                     hyperparameters = row["Hyperparameters"]
                     if isinstance(hyperparameters, np.ndarray):
                         hyperparameters = [dict(item) for item in hyperparameters]
-                    print(f"Hyperparameters : {hyperparameters}")
                     cursor.execute(hyperparameters_query, (classifier_id, dataset_id, json.dumps(hyperparameters)))
 
                     # Insert feature selection data
@@ -1515,47 +1523,67 @@ class MLPipelines(MachineLearningEstimator):
                     # Debugging output for feature selection values
                     way_of_selection = row["Way_of_Selection"]
                     numbers_of_features = row["Numbers_of_Features"]
-                    print(f"Selection : {classifier_id}, {dataset_id}, {way_of_selection}-{type(way_of_selection)}, {numbers_of_features}-{type(numbers_of_features)}")
                     cursor.execute(
                         feature_selection_query,
                         (classifier_id, dataset_id, way_of_selection, numbers_of_features)
                     )
                     selection_id = cursor.fetchone()[0]
 
-                    # # Insert feature counts
-                    # if num_features:
-                    #     # Flatten the list if `Selected_Features` contains lists of lists
-                    #     selected_features = row["Selected_Features"]
-                    #     if isinstance(selected_features, list) and any(isinstance(i, list) for i in selected_features):
-                    #         selected_features = [item for sublist in selected_features for item in sublist]
+                    # Insert feature counts
+                    if num_features:
+                        # Convert `selected_features` to a plain Python list if it's an ndarray
+                        selected_features = row["Selected_Features"]
+                        if isinstance(selected_features, np.ndarray):
+                            selected_features = selected_features.tolist()
 
-                    #     # Count occurrences of each feature
-                    #     feature_counts = Counter(selected_features)
-                    #     feature_counts_query = """
-                    #         INSERT INTO Feature_Counts (feature_name, count, selection_id, dataset_id)
-                    #         VALUES %s
-                    #     """
-                    #     print(f"Feature counts : {feature_counts}")
-                    #     feature_values = [(feat, count, selection_id, dataset_id) for feat, count in feature_counts.items()]
-                    #     print(f"Feature counts : {feature_values}")
-                    #     execute_values(cursor, feature_counts_query, feature_values)
+                        # Flatten the list if `selected_features` contains nested lists
+                        if any(isinstance(i, list) for i in selected_features):
+                            selected_features = [item for sublist in selected_features for item in sublist]
 
-                    # Insert performance metrics
-                    performance_metrics_query = """
-                        INSERT INTO Performance_Metrics (classifier_id, dataset_id, matthews_corrcoef, roc_auc, accuracy, 
-                            balanced_accuracy, recall, precision, f1_score, specificity)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """
-                    # Convert each metric to a list if it's an ndarray, then JSON serialize it
-                    metrics = [
-                        json.dumps(metric.tolist() if isinstance(metric, np.ndarray) else metric)
-                        for metric in [row.get(metric) for metric in extra_metrics]
-                    ]
-                    print(f"Metrics : {metrics}")
-                    cursor.execute(
-                        performance_metrics_query,
-                        [classifier_id, dataset_id] + metrics
-                    )
+                        # Count occurrences of each feature
+                        feature_counts = Counter([feature for feature in selected_features if feature])           
+                        feature_counts_query = """
+                            INSERT INTO Feature_Counts (feature_name, count, selection_id, dataset_id)
+                            VALUES %s
+                        """
+                        # Prepare values for insertion
+                        feature_values = [(feat, count, selection_id, dataset_id) for feat, count in feature_counts.items()]
+                        # Use `execute_values` to insert all feature counts in one query
+                        execute_values(cursor, feature_counts_query, feature_values)
+
+                        # Insert performance metrics
+                        # Generating placeholders for the metrics
+                        metrics_placeholders = ', '.join(extra_metrics)
+                        # Adding the outer scoring metric from the configuration
+                        metrics_placeholders += f', {self.config_rncv["outer_scoring"]}'
+                        # Calculate the total number of %s placeholders needed
+                        counter_of_s = len(extra_metrics) + 1 + 3
+                        # Generate the %s placeholders for the VALUES part
+                        s = ', '.join('%s' for _ in range(counter_of_s)) 
+                        performance_metrics_query = f"""
+                            INSERT INTO Performance_Metrics (classifier_id, dataset_id, selection_id, {metrics_placeholders})
+                            VALUES ({s})
+                        """
+                        print(performance_metrics_query)
+                        # Convert each metric to a list if it's an ndarray, then JSON serialize it
+                        metrics_to_add = extra_metrics.extend(self.config_rncv['outer_scoring'])
+                        metrics = [
+                            json.dumps(metric.tolist() if isinstance(metric, np.ndarray) else metric)
+                            for metric in [row.get(metric) for metric in metrics_to_add]
+                        ]
+                        print(metrics)
+                        # # Ensure the metrics list has exactly 9 elements to match the placeholders
+                        # if len(metrics) != 9:
+                        #     raise ValueError("The metrics list should contain exactly 9 elements.")
+
+                        # Only insert if selection_id is valid
+                        if selection_id is not None:
+                            cursor.execute(
+                                performance_metrics_query,
+                                [classifier_id, dataset_id, selection_id] + metrics
+                            )
+                        else:
+                            print("Warning: selection_id is None. Skipping performance metrics insertion.")
 
                     # Insert samples classification rates
                     samples_classification_query = """
@@ -1564,7 +1592,6 @@ class MLPipelines(MachineLearningEstimator):
                     """
                     # Ensure samples classification rates are JSON serializable
                     samples_classification_rates = row["Samples_classification_rates"]
-                    print(f"Samples classification rates : {samples_classification_rates}")
                     cursor.execute(
                         samples_classification_query,
                         (classifier_id, dataset_id, json.dumps(samples_classification_rates))
