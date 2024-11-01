@@ -356,7 +356,7 @@ class MLPipelines(MachineLearningEstimator):
 
                 # Initialize variables
                 results = {
-                    f"Outer_{self.config_rcv['scoring']}": [],
+                    f"{self.config_rcv['scoring']}": [],
                     "Classifiers": [],
                     "Selected_Features": [],
                     "Number_of_Features": [],
@@ -389,7 +389,7 @@ class MLPipelines(MachineLearningEstimator):
                             
                             # Store the results and apply one_sem method if its selected
                             results["Estimator"].append(self.name)
-                            results[f"Outer_{self.config_rcv['scoring']}"].append(
+                            results[f"{self.config_rcv['scoring']}"].append(
                                 clf.score(X_test_selected, y_test)
                             )
                             if self.config_rcv["extra_metrics"] != None:
@@ -458,7 +458,7 @@ class MLPipelines(MachineLearningEstimator):
         normalization="minmax",
         missing_values_method="median",
         name_add=None,
-        extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1'],
+        extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1','average_precision','specificity'],
     ):
         # Missing values manipulation
         if missing_values_method == "drop":
@@ -535,7 +535,7 @@ class MLPipelines(MachineLearningEstimator):
 
         for classif in np.unique(df["Classifiers"]):
             indices = df[df["Classifiers"] == classif]
-            filtered_scores = indices[f"Outer_{self.config_rcv['scoring']}"].values
+            filtered_scores = indices[f"{self.config_rcv['scoring']}"].values
             if num_features is not None:
                 filtered_features = indices["Selected_Features"].values
             mean_score = np.mean(filtered_scores)
@@ -556,7 +556,7 @@ class MLPipelines(MachineLearningEstimator):
                         0
                     ],
                     "Classifier": classif,
-                    f"Outer_{self.config_rcv['scoring']}": filtered_scores.tolist(),
+                    f"{self.config_rcv['scoring']}": filtered_scores.tolist(),
                     "Max": max_score,
                     "Std": std_score,
                     "SEM": sem_score,
@@ -614,15 +614,15 @@ class MLPipelines(MachineLearningEstimator):
 
         # Plot box or violin plots of the outer cross-validation scores
         if plot is not None:
-            scores_long = scores_dataframe.explode(f"Outer_{self.config_rcv['scoring']}")
-            scores_long[f"Outer_{self.config_rcv['scoring']}"] = scores_long[f"Outer_{self.config_rcv['scoring']}"].astype(float)
+            scores_long = scores_dataframe.explode(f"{self.config_rcv['scoring']}")
+            scores_long[f"{self.config_rcv['scoring']}"] = scores_long[f"{self.config_rcv['scoring']}"].astype(float)
 
             fig = go.Figure()
             if plot == "box":
                 # Add box plots for each classifier
                 for classifier in scores_dataframe["Classifier"]:
                     data = scores_long[scores_long["Classifier"] == classifier][
-                        f"Outer_{self.config_rcv['scoring']}"
+                        f"{self.config_rcv['scoring']}"
                     ]
                     median = np.median(data)
                     fig.add_trace(
@@ -638,7 +638,7 @@ class MLPipelines(MachineLearningEstimator):
             elif plot == "violin":
                 for classifier in scores_dataframe["Classifier"]:
                     data = scores_long[scores_long["Classifier"] == classifier][
-                        f"Outer_{self.config_rcv['scoring']}"
+                        f"{self.config_rcv['scoring']}"
                     ]
                     median = np.median(data)
                     fig.add_trace(
@@ -775,7 +775,7 @@ class MLPipelines(MachineLearningEstimator):
 
         # Initialize variables
         results = {
-            f"Outer_{self.config_rncv['inner_scoring']}": [],
+            f"{self.config_rncv['inner_scoring']}": [],
             "Classifiers": [],
             "Selected_Features": [],
             "Number_of_Features": [],
@@ -840,7 +840,7 @@ class MLPipelines(MachineLearningEstimator):
                         # Store the results and apply one_sem method if its selected
                         results["Estimator"].append(self.name)
                         if inner_selection == "validation_score":
-                            results[f"Outer_{self.config_rncv['outer_scoring']}"].append(
+                            results[f"{self.config_rncv['outer_scoring']}"].append(
                                 get_scorer(self.config_rncv["outer_scoring"])(
                                     clf, X_test_selected, y_test
                                 )
@@ -872,7 +872,7 @@ class MLPipelines(MachineLearningEstimator):
                                 self.name, simple_model_params
                             )
                             new_params_clf.fit(X_train_selected, y_train)
-                            results[f"Outer_{self.config_rncv['outer_scoring']}"].append(
+                            results[f"{self.config_rncv['outer_scoring']}"].append(
                                 new_params_clf.score(X_test_selected, y_test)
                             )
                             
@@ -1119,7 +1119,7 @@ class MLPipelines(MachineLearningEstimator):
             df_inner = df[df["Inner_selection_mthd"] == inner_selection]
             for classif in np.unique(df_inner["Classifiers"]):
                 indices = df_inner[df_inner["Classifiers"] == classif]
-                filtered_scores = indices[f"Outer_{self.config_rncv['outer_scoring']}"].values
+                filtered_scores = indices[f"{self.config_rncv['outer_scoring']}"].values
                 if num_features is not None:
                     filtered_features = indices["Selected_Features"].values
                 mean_score = np.mean(filtered_scores)
@@ -1466,7 +1466,6 @@ class MLPipelines(MachineLearningEstimator):
                     INSERT INTO Datasets (dataset_name)
                     VALUES (%s) ON CONFLICT (dataset_name) DO NOTHING RETURNING dataset_id;
                 """
-
                 # Execute the query with only the dataset name as a parameter
                 cursor.execute(dataset_query, (self.csv_dir,))
                 dataset_id = cursor.fetchone()
@@ -1478,6 +1477,29 @@ class MLPipelines(MachineLearningEstimator):
                 else:
                     dataset_id = dataset_id[0]
 
+                # Insert the outer metric to the extra metrics list if not exist
+                if self.config_rncv['outer_scoring'] not in extra_metrics:
+                    extra_metrics.append(self.config_rncv['outer_scoring'])
+                
+                # Attempt to insert the selected metric for inner and outer scoring
+                selected_metric_query = """
+                    INSERT INTO In_Out_Metrics (inner_metric_name, outer_metric_name)
+                    VALUES (%s, %s)
+                    ON CONFLICT (inner_metric_name, outer_metric_name) DO NOTHING
+                    RETURNING metric_id;
+                """
+                cursor.execute(selected_metric_query, (self.config_rncv['inner_scoring'], self.config_rncv['outer_scoring']))
+                metric_id = cursor.fetchone()
+
+                # If no ID was returned (because of a conflict), query for the existing ID
+                if metric_id is None:
+                    cursor.execute("""
+                        SELECT metric_id FROM In_Out_Metrics
+                        WHERE inner_metric_name = %s AND outer_metric_name = %s;
+                    """, (self.config_rncv['inner_scoring'], self.config_rncv['outer_scoring']))
+                    metric_id = cursor.fetchone()
+                print(f"Metric in out Finished")
+                
                 # Insert classifiers and associated data
                 for _, row in scores_dataframe.iterrows():
                     # Check if the classifier combination already exists
@@ -1499,10 +1521,10 @@ class MLPipelines(MachineLearningEstimator):
                         """
                         cursor.execute(classifier_query, (dataset_id, row["Estimator"], row["Inner_Selection"]))
                         classifier_id = cursor.fetchone()[0]
+                    print(f"Classifier Finished")
 
                     if not classifier_id:
                         raise ValueError("Classifier ID could not be retrieved.")
-
 
                     # Insert hyperparameters
                     hyperparameters_query = """
@@ -1514,6 +1536,7 @@ class MLPipelines(MachineLearningEstimator):
                     if isinstance(hyperparameters, np.ndarray):
                         hyperparameters = [dict(item) for item in hyperparameters]
                     cursor.execute(hyperparameters_query, (classifier_id, dataset_id, json.dumps(hyperparameters)))
+                    print(f"Hyperparameters Finished")
 
                     # Insert feature selection data
                     feature_selection_query = """
@@ -1527,11 +1550,11 @@ class MLPipelines(MachineLearningEstimator):
                         feature_selection_query,
                         (classifier_id, dataset_id, way_of_selection, numbers_of_features)
                     )
-                    selection_id = cursor.fetchone()[0]
+                    selection_id = cursor.fetchone()[0]             
+                    print(f"Feature Selection Finished")       
 
-                    # Insert feature counts
-                    if num_features:
-                        # Convert `selected_features` to a plain Python list if it's an ndarray
+                    # Convert `selected_features` to a plain Python list if it's an ndarray
+                    if row["Selected_Features"] is not None:
                         selected_features = row["Selected_Features"]
                         if isinstance(selected_features, np.ndarray):
                             selected_features = selected_features.tolist()
@@ -1550,40 +1573,30 @@ class MLPipelines(MachineLearningEstimator):
                         feature_values = [(feat, count, selection_id, dataset_id) for feat, count in feature_counts.items()]
                         # Use `execute_values` to insert all feature counts in one query
                         execute_values(cursor, feature_counts_query, feature_values)
+                        print(f"Feature Counts Finished")                        
 
-                        # Insert performance metrics
-                        # Generating placeholders for the metrics
-                        metrics_placeholders = ', '.join(extra_metrics)
-                        # Adding the outer scoring metric from the configuration
-                        metrics_placeholders += f', {self.config_rncv["outer_scoring"]}'
-                        # Calculate the total number of %s placeholders needed
-                        counter_of_s = len(extra_metrics) + 1 + 3
-                        # Generate the %s placeholders for the VALUES part
-                        s = ', '.join('%s' for _ in range(counter_of_s)) 
-                        performance_metrics_query = f"""
-                            INSERT INTO Performance_Metrics (classifier_id, dataset_id, selection_id, {metrics_placeholders})
-                            VALUES ({s})
-                        """
-                        print(performance_metrics_query)
-                        # Convert each metric to a list if it's an ndarray, then JSON serialize it
-                        metrics_to_add = extra_metrics.extend(self.config_rncv['outer_scoring'])
-                        metrics = [
-                            json.dumps(metric.tolist() if isinstance(metric, np.ndarray) else metric)
-                            for metric in [row.get(metric) for metric in metrics_to_add]
-                        ]
-                        print(metrics)
-                        # # Ensure the metrics list has exactly 9 elements to match the placeholders
-                        # if len(metrics) != 9:
-                        #     raise ValueError("The metrics list should contain exactly 9 elements.")
+                    # Insert performance metrics
+                    # Generating placeholders for the metrics
+                    metrics_placeholders = ', '.join(extra_metrics)
+                    # Calculate the total number of %s placeholders needed
+                    counter_of_s = len(extra_metrics) + 4 # +4 for classifier_id, dataset_id, selection_id, metric_id
+                    # Generate the %s placeholders for the VALUES part
+                    s = ', '.join('%s' for _ in range(counter_of_s)) 
+                    performance_metrics_query = f"""
+                        INSERT INTO Performance_Metrics (classifier_id, dataset_id, selection_id, metric_id, {metrics_placeholders})
+                        VALUES ({s})
+                    """
+                    
+                    metrics = [
+                        json.dumps(metric.tolist() if isinstance(metric, np.ndarray) else metric)
+                        for metric in [row.get(metric) for metric in extra_metrics]
+                    ]
 
-                        # Only insert if selection_id is valid
-                        if selection_id is not None:
-                            cursor.execute(
-                                performance_metrics_query,
-                                [classifier_id, dataset_id, selection_id] + metrics
-                            )
-                        else:
-                            print("Warning: selection_id is None. Skipping performance metrics insertion.")
+                    cursor.execute(
+                        performance_metrics_query,
+                        [classifier_id, dataset_id, selection_id, metric_id] + metrics
+                    )
+                    print(f"Performance Metrics Finished")
 
                     # Insert samples classification rates
                     samples_classification_query = """
@@ -1596,6 +1609,7 @@ class MLPipelines(MachineLearningEstimator):
                         samples_classification_query,
                         (classifier_id, dataset_id, json.dumps(samples_classification_rates))
                     )
+                    print(f"Samples Classification Rates Finished")
 
                 # Commit the transaction
                 connection.commit()

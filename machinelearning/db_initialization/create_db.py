@@ -52,6 +52,13 @@ create_tables_sql = [
     );
     """,
     """
+    CREATE TABLE IF NOT EXISTS In_Out_Metrics (
+        metric_id SERIAL PRIMARY KEY,
+        inner_metric_name VARCHAR(255) NOT NULL,
+        outer_metric_name VARCHAR(255) NOT NULL,
+        UNIQUE (inner_metric_name, outer_metric_name)
+    )""",
+    """
     CREATE TABLE IF NOT EXISTS Hyperparameters (
         hyperparameter_id SERIAL PRIMARY KEY,
         classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
@@ -66,13 +73,14 @@ create_tables_sql = [
         classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
         dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
         selection_id INT REFERENCES Feature_Selection(selection_id) ON DELETE CASCADE,
+        metric_id INT REFERENCES In_Out_Metrics(metric_id) ON DELETE CASCADE,
         matthews_corrcoef JSON,
         roc_auc JSON,
         accuracy JSON,
         balanced_accuracy JSON,
         recall JSON,
         precision JSON,
-        f1_score JSON,
+        f1 JSON,
         specificity JSON,
         average_precision JSON
     );
