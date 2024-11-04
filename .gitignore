@@ -134,6 +134,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
+.ai4meta
 .env
 .venv
 env/
@@ -174,3 +175,7 @@ cython_debug/
 #.idea/
 
 .vscode/
+
+# Results
+Results_ncv/
+results/
