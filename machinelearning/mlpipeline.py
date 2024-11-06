@@ -777,7 +777,7 @@ class MLPipelines(MachineLearningEstimator):
 
         # Initialize variables
         results = {
-            f"{self.config_rncv['inner_scoring']}": [],
+            # f"{self.config_rncv['inner_scoring']}": [],
             "Classifiers": [],
             "Selected_Features": [],
             "Number_of_Features": [],
@@ -845,7 +845,7 @@ class MLPipelines(MachineLearningEstimator):
                             
                             res_model = copy.deepcopy(clf)
 
-                            params = clf.best_params_
+                            params = res_model.best_params_
 
                         else:
                             trials = clf.trials_
@@ -867,16 +867,17 @@ class MLPipelines(MachineLearningEstimator):
 
                             res_model = copy.deepcopy(new_params_clf)
 
-                        if self.config_rncv['outer_scoring'] != 'specificity':
-                            results[f"{self.config_rncv['outer_scoring']}"].append(
-                                get_scorer(self.config_rncv["outer_scoring"])(
-                                    res_model, X_test_selected, y_test
-                                )
-                            )
-                        else: 
-                            results[f"{self.config_rncv['outer_scoring']}"].append(
-                                self._specificity_scorer(res_model, X_test_selected, y_test)
-                            )
+                        # if self.config_rncv['outer_scoring'] != 'specificity':
+                        #     results[f"{self.config_rncv['outer_scoring']}"].append(
+                        #         get_scorer(self.config_rncv["outer_scoring"])(
+                        #             res_model, X_test_selected, y_test
+                        #         )
+                        #     )
+                        # else: 
+                        #     print(f"Appending to matthews_corrcoef: {estimator}")
+                        #     results[f"{self.config_rncv['outer_scoring']}"].append(
+                        #         self._specificity_scorer(res_model, X_test_selected, y_test)
+                        #     )
 
                         results["Hyperparameters"].append(params)
                         
@@ -919,6 +920,14 @@ class MLPipelines(MachineLearningEstimator):
 
                         results['Samples_counts'].append(samples_counts)
                         time.sleep(0.5)
+                        
+        # Check for consistent list lengths
+        lengths = {key: len(val) for key, val in results.items()}
+
+        if len(set(lengths.values())) > 1:
+            print("Inconsistent lengths in results:", lengths)
+            raise ValueError("Inconsistent lengths in results dictionary")
+
         return [results]
 
     def _outer_loop(self, i, avail_thr):
@@ -1016,7 +1025,7 @@ class MLPipelines(MachineLearningEstimator):
         missing_values_method="median",
         frfs=None,
         name_add=None,
-        extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1', 'average_precision','specificity'],
+        extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1', 'average_precision','specificity','matthews_corrcoef'],
         show_bad_samples=False,
         sfm=False,
         info_to_db = False
@@ -1041,6 +1050,10 @@ class MLPipelines(MachineLearningEstimator):
             for metric in extra_metrics:
                 scoring_check(metric)
             print('All the extra metrics are valid.')
+            if outer_scoring not in extra_metrics:
+                extra_metrics.append(outer_scoring)
+        else:
+            extra_metrics = [outer_scoring]
 
         # Set parameters for the nested functions of the ncv process
         self.config_rncv = locals()
@@ -1112,11 +1125,13 @@ class MLPipelines(MachineLearningEstimator):
             )
 
         list_dfs_flat = list(chain.from_iterable(list_dfs))
-
+        
         # Create results dataframe
         results = []
         df = pd.DataFrame()
         for item in list_dfs_flat:
+            for key, value in item.items():
+                length = len(value)
             dataframe = pd.DataFrame(item)
             df = pd.concat([df, dataframe], axis=0)
 
@@ -1145,11 +1160,11 @@ class MLPipelines(MachineLearningEstimator):
                             0
                         ],
                         "Classifier": classif,
-                        f"{self.config_rncv['outer_scoring']}": filtered_scores.tolist(),
-                        f"Max_{self.config_rncv['outer_scoring']}": max_score,
-                        f"Std_{self.config_rncv['outer_scoring']}": std_score,
-                        f"SEM_{self.config_rncv['outer_scoring']}": sem_score,
-                        f"Median_{self.config_rncv['outer_scoring']}": median_score,
+                        # f"{self.config_rncv['outer_scoring']}": filtered_scores.tolist(),
+                        # f"Max_{self.config_rncv['outer_scoring']}": max_score,
+                        # f"Std_{self.config_rncv['outer_scoring']}": std_score,
+                        # f"SEM_{self.config_rncv['outer_scoring']}": sem_score,
+                        # f"Median_{self.config_rncv['outer_scoring']}": median_score,
                         "Hyperparameters": df_inner[df_inner["Classifiers"] == classif][
                             "Hyperparameters"
                         ].values,
@@ -1433,9 +1448,10 @@ class MLPipelines(MachineLearningEstimator):
         # Save the results to a CSV file of the outer scores for each classifier
         if return_csv:
             results_path = f"{final_dataset_name}_outerloops_results.csv"
-            cols_drop = ["Samples_classification_rates", "Classifier",self.config_rncv['outer_scoring'],"Hyperparameters","Selected_Features"]
-            for metric in extra_metrics:
-                cols_drop.append(metric) 
+            cols_drop = ["Samples_classification_rates", "Classifier", "Hyperparameters", "Selected_Features"]
+            if extra_metrics is not None:
+                for metric in extra_metrics:
+                    cols_drop.append(metric) 
             statistics_dataframe = scores_dataframe.drop(cols_drop, axis=1)
             statistics_dataframe.to_csv(results_path, index=False)
             print(f"Statistics results saved to {results_path}")
@@ -1482,9 +1498,9 @@ class MLPipelines(MachineLearningEstimator):
                 else:
                     dataset_id = dataset_id[0]
 
-                # Insert the outer metric to the extra metrics list if not exist
-                if self.config_rncv['outer_scoring'] not in extra_metrics:
-                    extra_metrics.append(self.config_rncv['outer_scoring'])
+                # # Insert the outer metric to the extra metrics list if not exist
+                # if self.config_rncv['outer_scoring'] not in extra_metrics:
+                #     extra_metrics.append(self.config_rncv['outer_scoring'])
                 
                 # Attempt to insert the selected metric for inner and outer scoring
                 selected_metric_query = """
