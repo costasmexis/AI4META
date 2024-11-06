@@ -901,15 +901,23 @@ class MLPipelines(MachineLearningEstimator):
                             results["Way_of_Selection"].append("full")
                             results["Classifiers"].append(f"{self.name}")
                         else:
+                            if (self.config_rncv["sfm"]) and ((estimator == "RandomForestClassifier") or 
+                                (estimator == "XGBClassifier") or 
+                                (estimator == 'GradientBoostingClassifier') or 
+                                (estimator == "LGBMClassifier") or 
+                                (estimator == "CatBoostClassifier")):
+                                fs_type = "sfm"
+                            else:
+                                fs_type = self.config_rncv["feature_selection_type"]
                             results["Classifiers"].append(
-                                f"{self.name}_{self.config_rncv['feature_selection_type']}_{num_feature}"
+                                f"{self.name}_{fs_type}_{num_feature}"
                             )
                             results["Selected_Features"].append(
                                 X_train_selected.columns.tolist()
                             )
                             results["Number_of_Features"].append(num_feature)
                             results["Way_of_Selection"].append(
-                                self.config_rncv["feature_selection_type"]
+                                fs_type
                             )
 
                         # Track predictions
@@ -1026,7 +1034,7 @@ class MLPipelines(MachineLearningEstimator):
         frfs=None,
         name_add=None,
         extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1', 'average_precision','specificity','matthews_corrcoef'],
-        show_bad_samples=False,
+        # show_bad_samples=False,
         sfm=False,
         info_to_db = False
     ):
@@ -1126,6 +1134,19 @@ class MLPipelines(MachineLearningEstimator):
 
         list_dfs_flat = list(chain.from_iterable(list_dfs))
         
+        def _bootstrap_ci(data, type='median'):
+            ms = []
+            for _ in range(1000):
+                sample = np.random.choice(data, size=len(data), replace=True)
+                if type == 'median':
+                    ms.append(np.median(sample))
+                elif type == 'mean':
+                    ms.append(np.mean(sample))
+            lower_bound = np.percentile(ms, (1 - 0.95) / 2 * 100)
+            upper_bound = np.percentile(ms, (1 + 0.95) / 2 * 100)
+            return lower_bound, upper_bound
+
+        
         # Create results dataframe
         results = []
         df = pd.DataFrame()
@@ -1160,11 +1181,6 @@ class MLPipelines(MachineLearningEstimator):
                             0
                         ],
                         "Classifier": classif,
-                        # f"{self.config_rncv['outer_scoring']}": filtered_scores.tolist(),
-                        # f"Max_{self.config_rncv['outer_scoring']}": max_score,
-                        # f"Std_{self.config_rncv['outer_scoring']}": std_score,
-                        # f"SEM_{self.config_rncv['outer_scoring']}": sem_score,
-                        # f"Median_{self.config_rncv['outer_scoring']}": median_score,
                         "Hyperparameters": df_inner[df_inner["Classifiers"] == classif][
                             "Hyperparameters"
                         ].values,
@@ -1172,20 +1188,48 @@ class MLPipelines(MachineLearningEstimator):
                         if num_features is not None
                         else None,
                         "Inner_Selection":inner_selection,
-                        "Numbers_of_Features": Numbers_of_Features,
+                        "Features_num": Numbers_of_Features,
                         "Way_of_Selection": Way_of_Selection,
+                        "FS_inner_method": feature_selection_method,
+                        "Normalization": normalization,
+                        "Missing_values": missing_values_method,
+                        "Inner_cv": inner_splits,
+                        "Outer_cv": outer_splits,
+                        "Rounds": rounds,
+                        "Optuna_trials": n_trials_ncv,
+                        "Tunning_scoring": inner_scoring,
                         "Samples_classification_rates": samples_classification_rates.tolist(),
                     }
                 )
 
-                # Add extra metrics
-                if extra_metrics is not None:
-                    for metric in extra_metrics:
-                        results[-1][f"{metric}"] = indices[f"{metric}"].values
-                        results[-1][f"Max_{metric}"] = np.max(indices[f"{metric}"].values)
-                        results[-1][f"Std_{metric}"] = np.std(indices[f"{metric}"].values)
-                        results[-1][f"SEM_{metric}"] = sem(indices[f"{metric}"].values)
-                        results[-1][f"Median_{metric}"] = np.median(indices[f"{metric}"].values)
+                # Add metrics
+                for metric in extra_metrics:
+                    metric_values = indices[f"{metric}"].values
+
+                    results[-1][f"{metric}"] = metric_values
+                    results[-1][f"Max_{metric}"] = np.max(metric_values)
+                    results[-1][f"Std_{metric}"] = np.std(metric_values)
+                    results[-1][f"SEM_{metric}"] = sem(metric_values)
+                    results[-1][f"Med_{metric}"] = np.median(metric_values)
+                    results[-1][f"Mean_{metric}"] = np.mean(metric_values)
+
+                    # Bootstrap confidence intervals for median and mean
+                    results[-1][f"Lomed_{metric}"], results[-1][f"Upmed_{metric}"] = _bootstrap_ci(metric_values, type='median')
+                    results[-1][f"Lomean_{metric}"], results[-1][f"Upmean_{metric}"] = _bootstrap_ci(metric_values, type='mean')
+
+                    # Compute lower and upper percentage values, e.g., 
+                    lower_percentile = np.percentile(metric_values, 5)
+                    upper_percentile = np.percentile(metric_values, 95)
+                    results[-1][f"LowerPct_{metric}"] = lower_percentile
+                    results[-1][f"UpperPct_{metric}"] = upper_percentile
+                    
+                # Reorder to make `outer_scoring` metrics appear first
+                outer_scoring_keys = [key for key in results[-1].keys() if outer_scoring in key]
+                other_keys = [key for key in results[-1] if key not in outer_scoring_keys]
+                ordered_keys = outer_scoring_keys + other_keys
+
+                # Rebuild the result dictionary with ordered keys
+                results[-1] = {key: results[-1][key] for key in ordered_keys}
                         
         print(f"Finished with {len(results)} estimators")
         scores_dataframe = pd.DataFrame(results)
@@ -1217,76 +1261,6 @@ class MLPipelines(MachineLearningEstimator):
             final_dataset_name = os.path.join(
                 results_dir, f"{dataset_name}_{inner_selection_lst}_{features}"
             )
-        
-        if show_bad_samples:
-            threshold = 0.5
-            inner_selection_methods = scores_dataframe['Inner_Selection'].unique()
-            limit = 0  # Counter to track how many Inner_Selection methods have no bad samples
-            
-            fig = go.Figure()
-            
-            for inner_selection_method in inner_selection_methods:
-                df_inner_selection = scores_dataframe[scores_dataframe['Inner_Selection'] == inner_selection_method]
-                classifiers = df_inner_selection['Classifier'].unique()
-                
-                for classifier in classifiers:
-                    df_classifier = df_inner_selection[df_inner_selection['Classifier'] == classifier]
-                    samples_classification_rates = np.array(df_classifier['Samples_classification_rates'].values[0])
-                    
-                    # Find bad samples (classification rate < threshold)
-                    bad_samples_indices = np.where(samples_classification_rates < threshold)[0]
-                    
-                    # Skip plotting if no bad samples are found
-                    if bad_samples_indices.size == 0:
-                        print(f'No bad samples for {classifier} ({inner_selection_method}).')
-                        limit += 1  # Increment limit if no bad samples are found
-                        continue
-                    
-                    bad_samples_rates = samples_classification_rates[bad_samples_indices]              
-                    
-                    # Add the bar trace for bad samples (with wider bars)
-                    fig.add_trace(go.Bar(
-                        x=bad_samples_indices.tolist(),  # Ensure it's converted to a list for Plotly
-                        y=bad_samples_rates.tolist(),    # Convert rates to list for Plotly
-                        name=f'Bad Samples for {classifier} ({inner_selection_method})',
-                        text=[f'{rate:.2f}' for rate in bad_samples_rates],
-                        textposition='auto',
-                        width=[0.5] * len(bad_samples_indices)  # Make bars wider (adjust the value for width)
-                    ))
-                    
-                    # Add a scatter trace to mark points where the rate is 0
-                    zero_rate_indices = bad_samples_indices[bad_samples_rates == 0]
-                    if len(zero_rate_indices) > 0:
-                        fig.add_trace(go.Scatter(
-                            x=zero_rate_indices.tolist(),
-                            y=[0] * len(zero_rate_indices),  # Place the points on y = 0
-                            mode='markers',
-                            marker=dict(color='red', size=10, symbol='circle-open'),  # Customize marker appearance
-                            name=f'Zero Rate Points for {classifier} ({inner_selection_method})',
-                            showlegend=False  # Optionally, remove from legend if not needed
-                        ))
-
-            # Check if limit equals the number of inner_selection_methods before showing the plot
-            if limit == len(inner_selection_methods):
-                print('No bad samples found for any Inner_Selection method.')
-            elif fig.data:  # Only show the plot if there are traces to plot
-                fig.update_layout(
-                    title='Bad Samples Classification Rates for Each Classifier and Inner Selection Method',
-                    xaxis_title='Sample Index',
-                    yaxis_title='Classification Rate',
-                    legend_title='Classifiers (Inner_Selection)',
-                    barmode='group',
-                    width=self.X.shape[0] * 17,  
-                    height=700
-                )
-                
-                # fig.show()
-                
-                # Save the plot to 'Results/bad_samples.png'
-                save_path = f"{final_dataset_name}_bad_samples.png"
-                fig.write_image(save_path)
-            else:
-                print("No bad samples to plot.")
 
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:
@@ -1351,16 +1325,7 @@ class MLPipelines(MachineLearningEstimator):
             if (frfs is not None) and (frfs < len(features_list)):
                 features_list = features_list[:frfs]
                 print(f"Top {frfs} most frequently selected features: {features_list}")
-            
-        def bootstrap_median_ci(data, num_iterations=1000, ci=0.95):
-            medians = []
-            for _ in range(num_iterations):
-                sample = np.random.choice(data, size=len(data), replace=True)
-                medians.append(np.median(sample))
-            lower_bound = np.percentile(medians, (1 - ci) / 2 * 100)
-            upper_bound = np.percentile(medians, (1 + ci) / 2 * 100)
-            return lower_bound, upper_bound
-
+        
         # Plot box or violin plots of the outer cross-validation scores for all Inner_Selection methods
         if plot is not None:
             scores_long = scores_dataframe.explode(f"{self.config_rncv['outer_scoring']}")
@@ -1392,7 +1357,7 @@ class MLPipelines(MachineLearningEstimator):
                         )
 
                         # Calculate and add 95% CI for the median
-                        lower, upper = bootstrap_median_ci(data)
+                        lower, upper = _bootstrap_ci(data, type='median')
                         fig.add_trace(
                             go.Scatter(
                                 x=[f"{classifier} ({inner_selection_method}) (Median: {median:.2f})",
