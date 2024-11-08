@@ -1462,10 +1462,6 @@ class MLPipelines(MachineLearningEstimator):
                     dataset_id = cursor.fetchone()[0]
                 else:
                     dataset_id = dataset_id[0]
-
-                # # Insert the outer metric to the extra metrics list if not exist
-                # if self.config_rncv['outer_scoring'] not in extra_metrics:
-                #     extra_metrics.append(self.config_rncv['outer_scoring'])
                 
                 # Attempt to insert the selected metric for inner and outer scoring
                 selected_metric_query = """
@@ -1484,7 +1480,7 @@ class MLPipelines(MachineLearningEstimator):
                         WHERE inner_metric_name = %s AND outer_metric_name = %s;
                     """, (self.config_rncv['inner_scoring'], self.config_rncv['outer_scoring']))
                     metric_id = cursor.fetchone()
-                # print(f"Metric in out Finished")
+                print(f"Metric in out Finished")
                 
                 # Insert classifiers and associated data
                 for _, row in scores_dataframe.iterrows():
@@ -1507,7 +1503,7 @@ class MLPipelines(MachineLearningEstimator):
                         """
                         cursor.execute(classifier_query, (dataset_id, row["Estimator"], row["Inner_Selection"]))
                         classifier_id = cursor.fetchone()[0]
-                    # print(f"Classifier Finished")
+                    print(f"Classifier Finished")
 
                     if not classifier_id:
                         raise ValueError("Classifier ID could not be retrieved.")
@@ -1522,7 +1518,7 @@ class MLPipelines(MachineLearningEstimator):
                     if isinstance(hyperparameters, np.ndarray):
                         hyperparameters = [dict(item) for item in hyperparameters]
                     cursor.execute(hyperparameters_query, (classifier_id, dataset_id, json.dumps(hyperparameters)))
-                    # print(f"Hyperparameters Finished")
+                    print(f"Hyperparameters Finished")
 
                     # Insert feature selection data
                     feature_selection_query = """
@@ -1530,14 +1526,15 @@ class MLPipelines(MachineLearningEstimator):
                         VALUES (%s, %s, %s, %s) RETURNING selection_id;
                     """
                     # Debugging output for feature selection values
+
                     way_of_selection = row["Way_of_Selection"]
-                    numbers_of_features = row["Numbers_of_Features"]
+                    numbers_of_features = row["Features_num"]
                     cursor.execute(
                         feature_selection_query,
                         (classifier_id, dataset_id, way_of_selection, numbers_of_features)
                     )
                     selection_id = cursor.fetchone()[0]             
-                    # print(f"Feature Selection Finished")       
+                    print(f"Feature Selection Finished")       
 
                     # Convert `selected_features` to a plain Python list if it's an ndarray
                     if row["Selected_Features"] is not None:
@@ -1559,7 +1556,7 @@ class MLPipelines(MachineLearningEstimator):
                         feature_values = [(feat, count, selection_id, dataset_id) for feat, count in feature_counts.items()]
                         # Use `execute_values` to insert all feature counts in one query
                         execute_values(cursor, feature_counts_query, feature_values)
-                        # print(f"Feature Counts Finished")                        
+                        print(f"Feature Counts Finished")                        
 
                     # Insert performance metrics
                     # Generating placeholders for the metrics
@@ -1582,7 +1579,7 @@ class MLPipelines(MachineLearningEstimator):
                         performance_metrics_query,
                         [classifier_id, dataset_id, selection_id, metric_id] + metrics
                     )
-                    # print(f"Performance Metrics Finished")
+                    print(f"Performance Metrics Finished")
 
                     # Insert samples classification rates
                     samples_classification_query = """
@@ -1595,7 +1592,7 @@ class MLPipelines(MachineLearningEstimator):
                         samples_classification_query,
                         (classifier_id, dataset_id, json.dumps(samples_classification_rates))
                     )
-                    # print(f"Samples Classification Rates Finished")
+                    print(f"Samples Classification Rates Finished")
 
                 # Commit the transaction
                 connection.commit()
