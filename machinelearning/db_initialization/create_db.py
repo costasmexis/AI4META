@@ -37,43 +37,40 @@ create_tables_sql = [
     """
     CREATE TABLE IF NOT EXISTS Classifiers (
         classifier_id SERIAL PRIMARY KEY,
-        dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
         estimator VARCHAR(255) NOT NULL,
         inner_selection VARCHAR(255)
     );
     """,
     """
+    CREATE TABLE IF NOT EXISTS Class_Imbalance (
+        imbalance_id SERIAL PRIMARY KEY,
+        imbalance VARCHAR(255) NOT NULL UNIQUE
+    );
+    """,
+    """
+    INSERT INTO Class_Imbalance (imbalance)
+    VALUES
+    ('method1'),
+    ('method2'),
+    ('method3')
+    ON CONFLICT DO NOTHING;
+    """,
+    """
     CREATE TABLE IF NOT EXISTS Feature_Selection (
         selection_id SERIAL PRIMARY KEY,
-        classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
-        dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
         way_of_selection VARCHAR(255),
         numbers_of_features INT
     );
     """,
     """
-    CREATE TABLE IF NOT EXISTS In_Out_Metrics (
-        metric_id SERIAL PRIMARY KEY,
-        inner_metric_name VARCHAR(255) NOT NULL,
-        outer_metric_name VARCHAR(255) NOT NULL,
-        UNIQUE (inner_metric_name, outer_metric_name)
-    )""",
-    """
     CREATE TABLE IF NOT EXISTS Hyperparameters (
         hyperparameter_id SERIAL PRIMARY KEY,
-        classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
-        dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
-        selection_id INT REFERENCES Feature_Selection(selection_id) ON DELETE CASCADE,
         hyperparameters JSON NOT NULL
     );
     """,
     """
     CREATE TABLE IF NOT EXISTS Performance_Metrics (
         performance_id SERIAL PRIMARY KEY,
-        classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
-        dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
-        selection_id INT REFERENCES Feature_Selection(selection_id) ON DELETE CASCADE,
-        metric_id INT REFERENCES In_Out_Metrics(metric_id) ON DELETE CASCADE,
         matthews_corrcoef JSON,
         roc_auc JSON,
         accuracy JSON,
@@ -88,9 +85,6 @@ create_tables_sql = [
     """
     CREATE TABLE IF NOT EXISTS Samples_Classification_Rates (
         sample_rate_id SERIAL PRIMARY KEY,
-        classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
-        dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
-        selection_id INT REFERENCES Feature_Selection(selection_id) ON DELETE CASCADE,
         samples_classification_rates JSON
     );
     """,
@@ -98,12 +92,40 @@ create_tables_sql = [
     CREATE TABLE IF NOT EXISTS Feature_Counts (
         count_id SERIAL PRIMARY KEY,
         feature_name VARCHAR(255) NOT NULL,
-        count INT NOT NULL,
+        count INT NOT NULL
+    );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS Job_Parameters (
+        job_id SERIAL PRIMARY KEY,
+        n_trials_ncv INT,
+        rounds INT,
+        feature_selection_type VARCHAR(255),
+        feature_selection_method VARCHAR(255),
+        inner_scoring VARCHAR(255),
+        outer_scoring VARCHAR(255),
+        inner_splits INT,
+        outer_splits INT,
+        normalization VARCHAR(255),
+        missing_values_method VARCHAR(255)
+    );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS Job_Combinations (
+        combination_id SERIAL PRIMARY KEY,
+        job_id INT REFERENCES Job_Parameters(job_id) ON DELETE CASCADE,
+        classifier_id INT REFERENCES Classifiers(classifier_id) ON DELETE CASCADE,
+        dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE,
         selection_id INT REFERENCES Feature_Selection(selection_id) ON DELETE CASCADE,
-        dataset_id INT REFERENCES Datasets(dataset_id) ON DELETE CASCADE
+        hyperparameter_id INT REFERENCES Hyperparameters(hyperparameter_id) ON DELETE CASCADE,
+        performance_id INT REFERENCES Performance_Metrics(performance_id) ON DELETE CASCADE,
+        sample_rate_id INT REFERENCES Samples_Classification_Rates(sample_rate_id) ON DELETE CASCADE,
+        count_id INT REFERENCES Feature_Counts(count_id) ON DELETE CASCADE,
+        imbalance_id INT REFERENCES Class_Imbalance(imbalance_id) ON DELETE CASCADE
     );
     """
 ]
+
 
 # Execute each CREATE TABLE statement
 for statement in create_tables_sql:
