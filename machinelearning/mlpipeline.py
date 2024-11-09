@@ -1059,7 +1059,12 @@ class MLPipelines(MachineLearningEstimator):
                 scoring_check(metric)
             print('All the extra metrics are valid.')
             if outer_scoring not in extra_metrics:
-                extra_metrics.append(outer_scoring)
+                extra_metrics.insert(0, outer_scoring)
+            elif outer_scoring in extra_metrics and extra_metrics.index(outer_scoring) != 0:
+                # Remove it from its current position
+                extra_metrics.remove(outer_scoring)
+                # Insert it at the first index
+                extra_metrics.insert(0, outer_scoring)
         else:
             extra_metrics = [outer_scoring]
 
@@ -1146,6 +1151,18 @@ class MLPipelines(MachineLearningEstimator):
             upper_bound = np.percentile(ms, (1 + 0.95) / 2 * 100)
             return lower_bound, upper_bound
 
+        # Metrics dict
+        metric_abbreviations = {
+            'roc_auc': 'AUC',
+            'accuracy': 'ACC',
+            'balanced_accuracy': 'BAL_ACC',
+            'recall': 'REC',
+            'precision': 'PREC',
+            'f1': 'F1',
+            'average_precision': 'AVG_PREC',
+            'specificity': 'SPEC',
+            'matthews_corrcoef': 'MCC'
+        }
         
         # Create results dataframe
         results = []
@@ -1204,33 +1221,32 @@ class MLPipelines(MachineLearningEstimator):
 
                 # Add metrics
                 for metric in extra_metrics:
+                    qck_mtrc = metric_abbreviations[f"{metric}"]
                     metric_values = indices[f"{metric}"].values
 
-                    results[-1][f"{metric}"] = metric_values
-                    results[-1][f"Max_{metric}"] = np.max(metric_values)
-                    results[-1][f"Std_{metric}"] = np.std(metric_values)
-                    results[-1][f"SEM_{metric}"] = sem(metric_values)
-                    results[-1][f"Med_{metric}"] = np.median(metric_values)
-                    results[-1][f"Mean_{metric}"] = np.mean(metric_values)
+                    results[-1][f"{metric}"] = metric_values  # If this stores an array, keep it as-is
+
+                    # Round metrics to 3 decimal places
+                    results[-1][f"Max_{qck_mtrc}"] = round(np.max(metric_values), 3)
+                    results[-1][f"Std_{qck_mtrc}"] = round(np.std(metric_values), 3)
+                    results[-1][f"SEM_{qck_mtrc}"] = round(sem(metric_values), 3)
+                    results[-1][f"Med_{qck_mtrc}"] = round(np.median(metric_values), 3)
+                    results[-1][f"Mean_{qck_mtrc}"] = round(np.mean(metric_values), 3)
 
                     # Bootstrap confidence intervals for median and mean
-                    results[-1][f"Lomed_{metric}"], results[-1][f"Upmed_{metric}"] = _bootstrap_ci(metric_values, type='median')
-                    results[-1][f"Lomean_{metric}"], results[-1][f"Upmean_{metric}"] = _bootstrap_ci(metric_values, type='mean')
+                    lomed, upmed = _bootstrap_ci(metric_values, type='median')
+                    lomean, upmean = _bootstrap_ci(metric_values, type='mean')
+                    results[-1][f"Lomed_{qck_mtrc}"] = round(lomed, 3)
+                    results[-1][f"Upmed_{qck_mtrc}"] = round(upmed, 3)
+                    results[-1][f"Lomean_{qck_mtrc}"] = round(lomean, 3)
+                    results[-1][f"Upmean_{qck_mtrc}"] = round(upmean, 3)
 
-                    # Compute lower and upper percentage values, e.g., 
+                    # Compute lower and upper percentage values and round to 3 decimal places
                     lower_percentile = np.percentile(metric_values, 5)
                     upper_percentile = np.percentile(metric_values, 95)
-                    results[-1][f"LowerPct_{metric}"] = lower_percentile
-                    results[-1][f"UpperPct_{metric}"] = upper_percentile
-                    
-                # Reorder to make `outer_scoring` metrics appear first
-                outer_scoring_keys = [key for key in results[-1].keys() if outer_scoring in key]
-                other_keys = [key for key in results[-1] if key not in outer_scoring_keys]
-                ordered_keys = outer_scoring_keys + other_keys
-
-                # Rebuild the result dictionary with ordered keys
-                results[-1] = {key: results[-1][key] for key in ordered_keys}
-                        
+                    results[-1][f"LowerPct_{qck_mtrc}"] = round(lower_percentile, 3)
+                    results[-1][f"UpperPct_{qck_mtrc}"] = round(upper_percentile, 3)
+                                            
         print(f"Finished with {len(results)} estimators")
         scores_dataframe = pd.DataFrame(results)
         
@@ -1330,7 +1346,7 @@ class MLPipelines(MachineLearningEstimator):
         if plot is not None:
             scores_long = scores_dataframe.explode(f"{self.config_rncv['outer_scoring']}")
             scores_long[f"{self.config_rncv['outer_scoring']}"] = scores_long[f"{self.config_rncv['outer_scoring']}"].astype(float)
-
+            print(scores_long)
             fig = go.Figure()
 
             inner_selection_methods = scores_dataframe['Inner_Selection'].unique()
@@ -1416,7 +1432,7 @@ class MLPipelines(MachineLearningEstimator):
             cols_drop = ["Samples_classification_rates", "Classifier", "Hyperparameters", "Selected_Features"]
             if extra_metrics is not None:
                 for metric in extra_metrics:
-                    cols_drop.append(metric) 
+                    cols_drop.append(f"{metric}") 
             statistics_dataframe = scores_dataframe.drop(cols_drop, axis=1)
             statistics_dataframe.to_csv(results_path, index=False)
             print(f"Statistics results saved to {results_path}")
@@ -1441,7 +1457,7 @@ class MLPipelines(MachineLearningEstimator):
                     port=db_credentials["db_port"]
                 )
                 cursor = connection.cursor()
-                print("Connected to PostgreSQL database")
+                # print("Connected to PostgreSQL database")
                 
             except Exception as e:
                 print(f"Error connecting to database: {e}")
@@ -1462,6 +1478,10 @@ class MLPipelines(MachineLearningEstimator):
                     dataset_id = cursor.fetchone()[0]
                 else:
                     dataset_id = dataset_id[0]
+
+                # # Insert the outer metric to the extra metrics list if not exist
+                # if self.config_rncv['outer_scoring'] not in extra_metrics:
+                #     extra_metrics.append(self.config_rncv['outer_scoring'])
                 
                 # Attempt to insert the selected metric for inner and outer scoring
                 selected_metric_query = """
@@ -1480,7 +1500,7 @@ class MLPipelines(MachineLearningEstimator):
                         WHERE inner_metric_name = %s AND outer_metric_name = %s;
                     """, (self.config_rncv['inner_scoring'], self.config_rncv['outer_scoring']))
                     metric_id = cursor.fetchone()
-                print(f"Metric in out Finished")
+                # print(f"Metric in out Finished")
                 
                 # Insert classifiers and associated data
                 for _, row in scores_dataframe.iterrows():
@@ -1503,7 +1523,7 @@ class MLPipelines(MachineLearningEstimator):
                         """
                         cursor.execute(classifier_query, (dataset_id, row["Estimator"], row["Inner_Selection"]))
                         classifier_id = cursor.fetchone()[0]
-                    print(f"Classifier Finished")
+                    # print(f"Classifier Finished")
 
                     if not classifier_id:
                         raise ValueError("Classifier ID could not be retrieved.")
@@ -1518,7 +1538,7 @@ class MLPipelines(MachineLearningEstimator):
                     if isinstance(hyperparameters, np.ndarray):
                         hyperparameters = [dict(item) for item in hyperparameters]
                     cursor.execute(hyperparameters_query, (classifier_id, dataset_id, json.dumps(hyperparameters)))
-                    print(f"Hyperparameters Finished")
+                    # print(f"Hyperparameters Finished")
 
                     # Insert feature selection data
                     feature_selection_query = """
@@ -1526,7 +1546,6 @@ class MLPipelines(MachineLearningEstimator):
                         VALUES (%s, %s, %s, %s) RETURNING selection_id;
                     """
                     # Debugging output for feature selection values
-
                     way_of_selection = row["Way_of_Selection"]
                     numbers_of_features = row["Features_num"]
                     cursor.execute(
@@ -1534,7 +1553,7 @@ class MLPipelines(MachineLearningEstimator):
                         (classifier_id, dataset_id, way_of_selection, numbers_of_features)
                     )
                     selection_id = cursor.fetchone()[0]             
-                    print(f"Feature Selection Finished")       
+                    # print(f"Feature Selection Finished")       
 
                     # Convert `selected_features` to a plain Python list if it's an ndarray
                     if row["Selected_Features"] is not None:
@@ -1556,7 +1575,7 @@ class MLPipelines(MachineLearningEstimator):
                         feature_values = [(feat, count, selection_id, dataset_id) for feat, count in feature_counts.items()]
                         # Use `execute_values` to insert all feature counts in one query
                         execute_values(cursor, feature_counts_query, feature_values)
-                        print(f"Feature Counts Finished")                        
+                        # print(f"Feature Counts Finished")                        
 
                     # Insert performance metrics
                     # Generating placeholders for the metrics
@@ -1574,6 +1593,7 @@ class MLPipelines(MachineLearningEstimator):
                         json.dumps(metric.tolist() if isinstance(metric, np.ndarray) else metric)
                         for metric in [row.get(metric) for metric in extra_metrics]
                     ]
+                    print(f"Metrics: {metrics}")
 
                     cursor.execute(
                         performance_metrics_query,
@@ -1592,7 +1612,7 @@ class MLPipelines(MachineLearningEstimator):
                         samples_classification_query,
                         (classifier_id, dataset_id, json.dumps(samples_classification_rates))
                     )
-                    print(f"Samples Classification Rates Finished")
+                    # print(f"Samples Classification Rates Finished")
 
                 # Commit the transaction
                 connection.commit()
