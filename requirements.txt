@@ -24,3 +24,4 @@ seaborn
 kaleido
 openpyxl
 psycopg2
+imblearn

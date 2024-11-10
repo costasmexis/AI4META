@@ -42,20 +42,6 @@ create_tables_sql = [
     );
     """,
     """
-    CREATE TABLE IF NOT EXISTS Class_Imbalance (
-        imbalance_id SERIAL PRIMARY KEY,
-        imbalance VARCHAR(255) NOT NULL UNIQUE
-    );
-    """,
-    """
-    INSERT INTO Class_Imbalance (imbalance)
-    VALUES
-    ('method1'),
-    ('method2'),
-    ('method3')
-    ON CONFLICT DO NOTHING;
-    """,
-    """
     CREATE TABLE IF NOT EXISTS Feature_Selection (
         selection_id SERIAL PRIMARY KEY,
         way_of_selection VARCHAR(255),
@@ -89,13 +75,6 @@ create_tables_sql = [
     );
     """,
     """
-    CREATE TABLE IF NOT EXISTS Feature_Counts (
-        count_id SERIAL PRIMARY KEY,
-        feature_name VARCHAR(255) NOT NULL,
-        count INT NOT NULL
-    );
-    """,
-    """
     CREATE TABLE IF NOT EXISTS Job_Parameters (
         job_id SERIAL PRIMARY KEY,
         n_trials_ncv INT,
@@ -107,7 +86,8 @@ create_tables_sql = [
         inner_splits INT,
         outer_splits INT,
         normalization VARCHAR(255),
-        missing_values_method VARCHAR(255)
+        missing_values_method VARCHAR(255),
+        class_balance VARCHAR(255)
     );
     """,
     """
@@ -120,12 +100,18 @@ create_tables_sql = [
         hyperparameter_id INT REFERENCES Hyperparameters(hyperparameter_id) ON DELETE CASCADE,
         performance_id INT REFERENCES Performance_Metrics(performance_id) ON DELETE CASCADE,
         sample_rate_id INT REFERENCES Samples_Classification_Rates(sample_rate_id) ON DELETE CASCADE,
-        count_id INT REFERENCES Feature_Counts(count_id) ON DELETE CASCADE,
-        imbalance_id INT REFERENCES Class_Imbalance(imbalance_id) ON DELETE CASCADE
+        model_selection_type VARCHAR(255)
+    );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS Feature_Counts (
+        count_id SERIAL PRIMARY KEY,
+        feature_name VARCHAR(255) NOT NULL,
+        count INT NOT NULL,
+        combination_id INT REFERENCES Job_Combinations(combination_id) ON DELETE CASCADE
     );
     """
 ]
-
 
 # Execute each CREATE TABLE statement
 for statement in create_tables_sql:
