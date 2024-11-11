@@ -87,7 +87,16 @@ create_tables_sql = [
         outer_splits INT,
         normalization VARCHAR(255),
         missing_values_method VARCHAR(255),
-        class_balance VARCHAR(255)
+        class_balance VARCHAR(255),
+        evaluation_mthd VARCHAR(255),
+        param_grid JSON,
+        features_names_list JSON
+    );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS Shap_Values (
+        shap_values_id SERIAL PRIMARY KEY,
+        shap_values JSON
     );
     """,
     """
@@ -100,7 +109,8 @@ create_tables_sql = [
         hyperparameter_id INT REFERENCES Hyperparameters(hyperparameter_id) ON DELETE CASCADE,
         performance_id INT REFERENCES Performance_Metrics(performance_id) ON DELETE CASCADE,
         sample_rate_id INT REFERENCES Samples_Classification_Rates(sample_rate_id) ON DELETE CASCADE,
-        model_selection_type VARCHAR(255)
+        shap_values_id INT REFERENCES Shap_Values(shap_values_id) ON DELETE CASCADE,
+        model_selection_type VARCHAR(255) 
     );
     """,
     """

@@ -522,7 +522,6 @@ class MLPipelines(MachineLearningEstimator):
         plot="box",
         scoring="matthews_corrcoef",
         splits=5,
-        frfs=None,
         freq_feat=None,
         normalization="minmax",
         missing_values_method="median",
@@ -575,10 +574,6 @@ class MLPipelines(MachineLearningEstimator):
         if num_features is not None:
             print(
                 f"The num_features parameter is {num_features}."#\nThe result will be a Dataframe and a List with the freq_feat number of the most important features.\nIf the freq_feat is None, the result will be a List with all features."
-            )
-        if (frfs is not None) and (num_features is None):
-            print(
-                "You are using the frfs parameter and not the num_features. The results will not contain the most important features."
             )
             
         # Set available classifiers
@@ -793,12 +788,6 @@ class MLPipelines(MachineLearningEstimator):
                 # Save the plot to 'Results/histogram.png'
                 save_path = f"{final_dataset_name}_histogram.png"
                 fig.write_image(save_path)
-
-            # Save the number of features that were most frequently selected
-            features_list = [x[0] for x in sorted_features_counts]
-            if (frfs is not None) and (frfs < len(features_list)):
-                features_list = features_list[:frfs]
-                print(f"Top {frfs} most frequently selected features: {features_list}")
         
         # Plot box or violin plots of the outer cross-validation scores 
         if plot is not None:
@@ -1434,7 +1423,6 @@ class MLPipelines(MachineLearningEstimator):
         n_trials_ncv=100,
         rounds=10,
         exclude=None,
-        freq_feat=None,
         search_on=None,
         num_features=None,
         feature_selection_type="mrmr",
@@ -1450,7 +1438,6 @@ class MLPipelines(MachineLearningEstimator):
         normalization="minmax",
         parallel="thread_per_round",
         missing_values_method="median",
-        frfs=None,
         name_add=None,
         extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1', 'average_precision','specificity','matthews_corrcoef'],
         sfm=False,
@@ -1498,14 +1485,6 @@ class MLPipelines(MachineLearningEstimator):
         self.config_rncv['dataset_name'] = self.csv_dir
         self.config_rncv['model_selection_type'] = 'rncv'
         
-        if num_features is not None:
-            print(
-                f"The num_features parameter is {num_features}.\nThe result will be a Dataframe and a List with the freq_feat number of the most important features.\nIf the freq_feat is None, the result will be a List with all features."
-            )
-        if (frfs is not None) and (num_features is None):
-            print(
-                "You are using the frfs parameter and not the num_features. The results will not contain the most important features."
-            )
         # Set available classifiers
         if exclude is not None:
             exclude_classes = (
@@ -1748,12 +1727,6 @@ class MLPipelines(MachineLearningEstimator):
                 # Save the plot to 'Results/histogram.png'
                 save_path = f"{final_dataset_name}_histogram.png"
                 fig.write_image(save_path)
-
-            # Save the number of features that were most frequently selected
-            features_list = [x[0] for x in sorted_features_counts]
-            if (frfs is not None) and (frfs < len(features_list)):
-                features_list = features_list[:frfs]
-                print(f"Top {frfs} most frequently selected features: {features_list}")
         
         # Plot box or violin plots of the outer cross-validation scores for all Inner_Selection methods
         if plot is not None:
