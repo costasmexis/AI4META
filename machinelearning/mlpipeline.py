@@ -530,7 +530,8 @@ class MLPipelines(MachineLearningEstimator):
         class_balance = 'auto',
         sfm=False,
         extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1','average_precision','specificity'],
-        info_to_db=False
+        info_to_db=False,
+        filter_csv=None
     ):
         # Missing values manipulation
         if missing_values_method == "drop":
@@ -616,19 +617,6 @@ class MLPipelines(MachineLearningEstimator):
 
         list_dfs_flat = list(chain.from_iterable(list_dfs))
         
-        # Metrics dict
-        metric_abbreviations = {
-            'roc_auc': 'AUC',
-            'accuracy': 'ACC',
-            'balanced_accuracy': 'BAL_ACC',
-            'recall': 'REC',
-            'precision': 'PREC',
-            'f1': 'F1',
-            'average_precision': 'AVG_PREC',
-            'specificity': 'SPEC',
-            'matthews_corrcoef': 'MCC'
-        }
-        
          # Create results dataframe
         results = []
         df = pd.DataFrame()
@@ -676,34 +664,10 @@ class MLPipelines(MachineLearningEstimator):
                     "Classif_rates": samples_classification_rates.tolist(),
                 }
             )
-
-            # Add metrics
-            for metric in extra_metrics:
-                qck_mtrc = metric_abbreviations[f"{metric}"]
-                metric_values = indices[f"{metric}"].values
-
-                results[-1][f"{metric}"] = metric_values  # If this stores an array, keep it as-is
-
-                # Round metrics to 3 decimal places
-                results[-1][f"Max_{qck_mtrc}"] = round(np.max(metric_values), 3)
-                results[-1][f"Std_{qck_mtrc}"] = round(np.std(metric_values), 3)
-                results[-1][f"SEM_{qck_mtrc}"] = round(sem(metric_values), 3)
-                results[-1][f"Med_{qck_mtrc}"] = round(np.median(metric_values), 3)
-                results[-1][f"Mean_{qck_mtrc}"] = round(np.mean(metric_values), 3)
-
-                # Bootstrap confidence intervals for median and mean
-                lomed, upmed = self._bootstrap_ci(metric_values, type='median')
-                lomean, upmean = self._bootstrap_ci(metric_values, type='mean')
-                results[-1][f"Lomed_{qck_mtrc}"] = round(lomed, 3)
-                results[-1][f"Upmed_{qck_mtrc}"] = round(upmed, 3)
-                results[-1][f"Lomean_{qck_mtrc}"] = round(lomean, 3)
-                results[-1][f"Upmean_{qck_mtrc}"] = round(upmean, 3)
-
-                # Compute lower and upper percentage values and round to 3 decimal places
-                lower_percentile = np.percentile(metric_values, 5)
-                upper_percentile = np.percentile(metric_values, 95)
-                results[-1][f"LowerPct_{qck_mtrc}"] = round(lower_percentile, 3)
-                results[-1][f"UpperPct_{qck_mtrc}"] = round(upper_percentile, 3)
+            
+            results = self._input_renamed_metrics(
+                extra_metrics, results, indices
+            )
                                             
         print(f"Finished with {len(results)} models")
         scores_dataframe = pd.DataFrame(results)
@@ -714,161 +678,20 @@ class MLPipelines(MachineLearningEstimator):
             os.makedirs(results_dir)
 
         # Initiate name
-        try:
-            dataset_name = self._set_result_csv_name(self.csv_dir)
-            name_add  = self._file_name(self.config_rcv)
-            results_name = f"{dataset_name}_{name_add}_rcv"
-            final_dataset_name = os.path.join(results_dir, results_name)
-        except Exception as e:
-            name_add = self._file_name(self.config_rcv)
-            results_name = f"results_{name_add}_rcv"
-            final_dataset_name = os.path.join(
-                results_dir, results_name
-            )
+        final_dataset_name = self._name_outputs(self.config_rcv, results_dir)  
+          
+        # Save the results to a CSV file of the outer scores for each classifier
+        if return_csv:
+            statistics_dataframe = self._return_csv(final_dataset_name, scores_dataframe, extra_metrics, filter_csv)
 
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:
-            if freq_feat == None:
-                freq_feat = self.X.shape[1]
-            elif freq_feat > self.X.shape[1]:
-                freq_feat = self.X.shape[1]
-
             # Plot histogram of features
-            feature_counts = Counter()
-            for idx, row in scores_dataframe.iterrows():
-                if row["Sel_way"] != "full":  # If no features were selected, skip
-                    features = list(
-                        chain.from_iterable(
-                            [list(index_obj) for index_obj in row["Sel_feat"]]
-                        )
-                    )
-                    feature_counts.update(features)
-
-            sorted_features_counts = feature_counts.most_common()
-
-            if len(sorted_features_counts) == 0:
-                print("No features were selected.")
-            else:
-                features, counts = zip(*sorted_features_counts[:freq_feat])
-                counts = [x / len(clfs) for x in counts]  # Normalize counts
-                print(f"Selected {freq_feat} features")
-
-                # Create the bar chart using Plotly
-                fig = go.Figure()
-
-                # Add bars to the figure
-                fig.add_trace(go.Bar(
-                    x=features,
-                    y=counts,
-                    marker=dict(color="skyblue"),
-                    text=[f"{count:.2f}" for count in counts],  # Show normalized counts as text
-                    textposition='auto'
-                ))
-
-                # Set axis labels and title
-                fig.update_layout(
-                    title="Histogram of Selected Features",
-                    xaxis_title="Features",
-                    yaxis_title="Counts",
-                    xaxis_tickangle=-90,  # Rotate x-ticks to avoid overlap
-                    bargap=0.2,
-                    template="plotly_white",
-                    width=min(max(1000, freq_feat * 20), 2000),  # Dynamically adjust plot width
-                    height=700  # Set plot height
-                )
-
-                # Save the plot to 'Results/histogram.png'
-                save_path = f"{final_dataset_name}_histogram.png"
-                fig.write_image(save_path)
+            self._histogram(scores_dataframe, final_dataset_name, freq_feat, clfs)
         
         # Plot box or violin plots of the outer cross-validation scores 
         if plot is not None:
-            scores_long = scores_dataframe.explode(f"{self.config_rcv['scoring']}")
-            scores_long[f"{self.config_rcv['scoring']}"] = scores_long[f"{self.config_rcv['scoring']}"].astype(float)
-            fig = go.Figure()
-            
-            classifiers = scores_long["Clf"].unique()
-
-            if plot == "box":
-                # Add box plots for each classifier within each Inner_Selection method
-                for classifier in classifiers:
-                    data = scores_long[scores_long["Clf"] == classifier][
-                        f"{self.config_rcv['scoring']}"
-                    ]
-                    median = np.median(data)
-                    fig.add_trace(
-                        go.Box(
-                            y=data,
-                            name=f"{classifier} (Median: {median:.2f})",
-                            boxpoints="all",
-                            jitter=0.3,
-                            pointpos=-1.8,
-                        )
-                    )
-
-                    # Calculate and add 95% CI for the median
-                    lower, upper = self._bootstrap_ci(data, type='median')
-                    fig.add_trace(
-                        go.Scatter(
-                            x=[f"{classifier} (Median: {median:.2f})",
-                            f"{classifier} (Median: {median:.2f})"],
-                            y=[lower, upper],
-                            mode="lines",
-                            line=dict(color="black", dash="dash"),
-                            showlegend=False,
-                        )
-                    )
-
-            elif plot == "violin":
-                for classifier in classifiers:
-                    data = scores_long[scores_long["Clf"] == classifier][
-                        f"{self.config_rcv['scoring']}"
-                    ]
-                    median = np.median(data)
-                    fig.add_trace(
-                        go.Violin(
-                            y=data,
-                            name=f"{classifier} (Median: {median:.2f})",
-                            box_visible=False,
-                            points="all",
-                            jitter=0.3,
-                            pointpos=-1.8,
-                        )
-                    )
-            else:
-                raise ValueError(
-                    f'The "{plot}" is not a valid option for plotting. Choose between "box" or "violin".'
-                )
-
-            # Update layout for better readability
-            fig.update_layout(
-                autosize = False,
-                width=1500,
-                height=1200,
-                title="Model Selection Results by Classifier",
-                yaxis_title=f"Scores {self.config_rcv['scoring']}",
-                xaxis_title="Classifier",
-                xaxis_tickangle=-45,
-                template="plotly_white",
-            )
-            
-            # Save the figure as an image in the "Results" directory
-            image_path = f"{final_dataset_name}_model_selection_plot.png"
-            fig.write_image(image_path)
-            
-        else:
-            pass
-        
-        # Save the results to a CSV file of the outer scores for each classifier
-        if return_csv:
-            results_path = f"{final_dataset_name}_cvrounds_results.csv"
-            cols_drop = ["Classif_rates", "Clf", "Hyp", "Sel_feat","In_sel"]
-            if extra_metrics is not None:
-                for metric in extra_metrics:
-                    cols_drop.append(f"{metric}") 
-            statistics_dataframe = scores_dataframe.drop(cols_drop, axis=1)
-            statistics_dataframe.to_csv(results_path, index=False)
-            print(f"Statistics results saved to {results_path}")
+            self._plot(scores_dataframe, plot, self.config_rcv['scoring'], final_dataset_name)
             
         if info_to_db:
             # Add to database
@@ -876,6 +699,149 @@ class MLPipelines(MachineLearningEstimator):
 
         return statistics_dataframe
 
+    def _plot(self, scores_dataframe, plot, scorer, final_dataset_name):
+        
+        scores_long = scores_dataframe.explode(f"{scorer}")
+        scores_long[f"{scorer}"] = scores_long[f"{scorer}"].astype(float)
+        fig = go.Figure()
+        
+        classifiers = scores_long["Clf"].unique()
+
+        if plot == "box":
+            # Add box plots for each classifier within each Inner_Selection method
+            for classifier in classifiers:
+                data = scores_long[scores_long["Clf"] == classifier][
+                    f"{scorer}"
+                ]
+                median = np.median(data)
+                fig.add_trace(
+                    go.Box(
+                        y=data,
+                        name=f"{classifier} (Median: {median:.2f})",
+                        boxpoints="all",
+                        jitter=0.3,
+                        pointpos=-1.8,
+                    )
+                )
+
+                # Calculate and add 95% CI for the median
+                lower, upper = self._bootstrap_ci(data, type='median')
+                fig.add_trace(
+                    go.Scatter(
+                        x=[f"{classifier} (Median: {median:.2f})",
+                        f"{classifier} (Median: {median:.2f})"],
+                        y=[lower, upper],
+                        mode="lines",
+                        line=dict(color="black", dash="dash"),
+                        showlegend=False,
+                    )
+                )
+
+        elif plot == "violin":
+            for classifier in classifiers:
+                data = scores_long[scores_long["Clf"] == classifier][
+                    f"{scorer}"
+                ]
+                median = np.median(data)
+                fig.add_trace(
+                    go.Violin(
+                        y=data,
+                        name=f"{classifier} (Median: {median:.2f})",
+                        box_visible=False,
+                        points="all",
+                        jitter=0.3,
+                        pointpos=-1.8,
+                    )
+                )
+        else:
+            raise ValueError(
+                f'The "{plot}" is not a valid option for plotting. Choose between "box" or "violin".'
+            )
+
+        # Update layout for better readability
+        fig.update_layout(
+            autosize = False,
+            width=1500,
+            height=1200,
+            title="Model Selection Results by Classifier",
+            yaxis_title=f"Scores {scorer}",
+            xaxis_title="Classifier",
+            xaxis_tickangle=-45,
+            template="plotly_white",
+        )
+        
+        # Save the figure as an image in the "Results" directory
+        image_path = f"{final_dataset_name}_model_selection_plot.png"
+        fig.write_image(image_path)
+              
+    def _histogram(self, scores_dataframe, final_dataset_name, freq_feat, clfs):
+        if freq_feat == None:
+            freq_feat = self.X.shape[1]
+        elif freq_feat > self.X.shape[1]:
+            freq_feat = self.X.shape[1]
+            
+        # Plot histogram of features
+        feature_counts = Counter()
+        for idx, row in scores_dataframe.iterrows():
+            if row["Sel_way"] != "full":  # If no features were selected, skip
+                features = list(
+                    chain.from_iterable(
+                        [list(index_obj) for index_obj in row["Sel_feat"]]
+                    )
+                )
+                feature_counts.update(features)
+
+        sorted_features_counts = feature_counts.most_common()
+
+        if len(sorted_features_counts) == 0:
+            print("No features were selected.")
+        else:
+            features, counts = zip(*sorted_features_counts[:freq_feat])
+            counts = [x / len(clfs) for x in counts]  # Normalize counts
+            print(f"Selected {freq_feat} features")
+
+            # Create the bar chart using Plotly
+            fig = go.Figure()
+
+            # Add bars to the figure
+            fig.add_trace(go.Bar(
+                x=features,
+                y=counts,
+                marker=dict(color="skyblue"),
+                text=[f"{count:.2f}" for count in counts],  # Show normalized counts as text
+                textposition='auto'
+            ))
+
+            # Set axis labels and title
+            fig.update_layout(
+                title="Histogram of Selected Features",
+                xaxis_title="Features",
+                yaxis_title="Counts",
+                xaxis_tickangle=-90,  # Rotate x-ticks to avoid overlap
+                bargap=0.2,
+                template="plotly_white",
+                width=min(max(1000, freq_feat * 20), 2000),  # Dynamically adjust plot width
+                height=700  # Set plot height
+            )
+
+            # Save the plot to 'Results/histogram.png'
+            save_path = f"{final_dataset_name}_histogram.png"
+            fig.write_image(save_path)
+            
+    def _name_outputs(self, config, results_dir):
+        try:
+            dataset_name = self._set_result_csv_name(self.csv_dir)
+            name_add  = self._file_name(config)
+            results_name = f"{dataset_name}_{name_add}_{config['model_selection_type']}"
+            final_dataset_name = os.path.join(results_dir, results_name)
+        except Exception as e:
+            name_add = self._file_name(config)
+            results_name = f"results_{name_add}_{config['model_selection_type']}"
+            final_dataset_name = os.path.join(
+                results_dir, results_name
+            )
+        return final_dataset_name
+            
     def _filter_features(self, train_index, test_index, X, y, num_feature2_use, cvncvsel):
         """
         This function filters the features using the selected model.
@@ -1409,6 +1375,7 @@ class MLPipelines(MachineLearningEstimator):
         finally:
             cursor.close()
             connection.close()
+            
     def _file_name(self,config):
         default_values = {
             "rounds": 10,
@@ -1422,15 +1389,8 @@ class MLPipelines(MachineLearningEstimator):
             "normalization": "minmax",
             "class_balance": "auto",    
             "sfm": False,
-            # "inner_selection": ["validation_score", "one_sem", "gso_1", "gso_2", "one_sem_grd"],
-            # "extra_metrics": ['recall', 'specificity', 'accuracy', 'balanced_accuracy', 
-                            # 'precision', 'f1', 'roc_auc', 'average_precision', 'matthews_corrcoef'],
-            # "plot": "box",
             "missing_values": "median",
             "num_features": None,
-            # "freaq_feat": None,
-            # "search_on": None,
-            # "exclude": None,
             "scoring": "matthews_corrcoef",
             "splits": 5
             
@@ -1442,7 +1402,68 @@ class MLPipelines(MachineLearningEstimator):
                     name_add += f"_{conf}_{config[conf]}"
         name_add += f"_{datetime.now().strftime('%Y%m%d_%H%M')}"
         return name_add
+     
+    def _return_csv(self, final_dataset_name, scores_dataframe, extra_metrics=None, filter_csv=None):
+        results_path = f"{final_dataset_name}_outerloops_results.csv"
+        cols_drop = ["Classif_rates", "Clf", "Hyp", "Sel_feat"]
+        if extra_metrics is not None:
+            for metric in extra_metrics:
+                cols_drop.append(f"{metric}") 
+        statistics_dataframe = scores_dataframe.drop(cols_drop, axis=1)
+        if filter_csv != None:
+            try:
+                for mtrc_stat in filter_csv:
+                    if 'h' in filter_csv[mtrc_stat]:
+                        statistics_dataframe = statistics_dataframe[statistics_dataframe[mtrc_stat] >= filter_csv[mtrc_stat]['h']]
+                    elif 'l' in filter_csv[mtrc_stat]:
+                        statistics_dataframe = statistics_dataframe[statistics_dataframe[mtrc_stat] <= filter_csv[mtrc_stat]['l']]
+            except Exception as e:
+                print(f'An error occurred while filtering the final csv file: {e}\nThe final csv file will not be filtered.')
+        statistics_dataframe.to_csv(results_path, index=False)
+        print(f"Statistics results saved to {results_path}")
+        return statistics_dataframe
+    
+    def _input_renamed_metrics(self, extra_metrics, results, indices):
+        # Metrics dict
+        metric_abbreviations = {
+            'roc_auc': 'AUC',
+            'accuracy': 'ACC',
+            'balanced_accuracy': 'BAL_ACC',
+            'recall': 'REC',
+            'precision': 'PREC',
+            'f1': 'F1',
+            'average_precision': 'AVG_PREC',
+            'specificity': 'SPEC',
+            'matthews_corrcoef': 'MCC'
+        }
         
+        # Add metrics
+        for metric in extra_metrics:
+            qck_mtrc = metric_abbreviations[f"{metric}"]
+            metric_values = indices[f"{metric}"].values
+
+            results[-1][f"{metric}"] = metric_values  # If this stores an array, keep it as-is
+
+            # Round metrics to 3 decimal places
+            results[-1][f"{qck_mtrc}_mean"] = round(np.mean(metric_values), 3)
+            results[-1][f"{qck_mtrc}_std"] = round(np.std(metric_values), 3)
+            results[-1][f"{qck_mtrc}_sem"] = round(sem(metric_values), 3)
+            # Compute lower and upper percentage values and round to 3 decimal places
+            lower_percentile = np.percentile(metric_values, 5)
+            upper_percentile = np.percentile(metric_values, 95)
+            results[-1][f"{qck_mtrc}_lowerCI"] = round(lower_percentile, 3)
+            results[-1][f"{qck_mtrc}_upperCI"] = round(upper_percentile, 3)
+            results[-1][f"{qck_mtrc}_med"] = round(np.median(metric_values), 3)
+            # Bootstrap confidence intervals for median and mean
+            lomed, upmed = self._bootstrap_ci(metric_values, type='median')
+            lomean, upmean = self._bootstrap_ci(metric_values, type='mean')
+            results[-1][f"{qck_mtrc}_lomean"] = round(lomean, 3)
+            results[-1][f"{qck_mtrc}_upmean"] = round(upmean, 3)
+            results[-1][f"{qck_mtrc}_lomed"] = round(lomed, 3)
+            results[-1][f"{qck_mtrc}_upmed"] = round(upmed, 3)
+        
+        return results
+            
     def nested_cv(
         self,
         n_trials: int = 100,
@@ -1468,6 +1489,7 @@ class MLPipelines(MachineLearningEstimator):
         normalization: str = "minmax",
         missing_values_method: str = "median",
         return_csv: bool = True,
+        filter_csv: dict = None
     ):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
@@ -1569,19 +1591,6 @@ class MLPipelines(MachineLearningEstimator):
             )
 
         list_dfs_flat = list(chain.from_iterable(list_dfs))
-
-        # Metrics dict
-        metric_abbreviations = {
-            'roc_auc': 'AUC',
-            'accuracy': 'ACC',
-            'balanced_accuracy': 'BAL_ACC',
-            'recall': 'REC',
-            'precision': 'PREC',
-            'f1': 'F1',
-            'average_precision': 'AVG_PREC',
-            'specificity': 'SPEC',
-            'matthews_corrcoef': 'MCC'
-        }
         
         # Create results dataframe
         results = []
@@ -1632,35 +1641,15 @@ class MLPipelines(MachineLearningEstimator):
                         "Trials": n_trials,
                         "Class_blnc": class_balance,
                         "In_scor": inner_scoring,
+                        "Out_scor": outer_scoring,
                         "In_sel":inner_selection,
                         "Classif_rates": samples_classification_rates.tolist(),
                     }
                 )
 
-                # Add metrics
-                for metric in extra_metrics:
-                    qck_mtrc = metric_abbreviations[f"{metric}"]
-                    metric_values = indices[f"{metric}"].values
-
-                    results[-1][f"{metric}"] = metric_values  # If this stores an array, keep it as-is
-
-                    # Round metrics to 3 decimal places
-                    results[-1][f"{qck_mtrc}_Mean"] = round(np.mean(metric_values), 3)
-                    results[-1][f"{qck_mtrc}_Std"] = round(np.std(metric_values), 3)
-                    results[-1][f"{qck_mtrc}_SEM"] = round(sem(metric_values), 3)
-                    # Compute lower and upper percentage values and round to 3 decimal places
-                    lower_percentile = np.percentile(metric_values, 5)
-                    upper_percentile = np.percentile(metric_values, 95)
-                    results[-1][f"{qck_mtrc}_LowerCI"] = round(lower_percentile, 3)
-                    results[-1][f"{qck_mtrc}_UpperCI"] = round(upper_percentile, 3)
-                    results[-1][f"{qck_mtrc}_Med"] = round(np.median(metric_values), 3)
-                    # Bootstrap confidence intervals for median and mean
-                    lomed, upmed = self._bootstrap_ci(metric_values, type='median')
-                    lomean, upmean = self._bootstrap_ci(metric_values, type='mean')
-                    results[-1][f"{qck_mtrc}_Lomean"] = round(lomean, 3)
-                    results[-1][f"{qck_mtrc}_Upmean"] = round(upmean, 3)
-                    results[-1][f"{qck_mtrc}_Lomed"] = round(lomed, 3)
-                    results[-1][f"{qck_mtrc}_Upmed"] = round(upmed, 3)
+                results = self._input_renamed_metrics(
+                    extra_metrics, results, indices
+                )
                                             
         print(f"Finished with {len(results)} models")
         scores_dataframe = pd.DataFrame(results)
@@ -1671,169 +1660,21 @@ class MLPipelines(MachineLearningEstimator):
             os.makedirs(results_dir)
 
         # Name
-        try:
-            dataset_name = self._set_result_csv_name(self.csv_dir)
-            name_add  = self._file_name(self.config_rncv)
-            results_name = f"{dataset_name}{name_add}_rncv"
-            final_dataset_name = os.path.join(results_dir, results_name)
-        except Exception as e:
-            name_add = self._file_name(self.config_rncv)
-            results_name = f"rncv_results{name_add}"
-            final_dataset_name = os.path.join(
-                results_dir, results_name
-            )
-
+        final_dataset_name = self._name_outputs(self.config_rncv, results_dir)  
+            
+        # Save the results to a CSV file of the outer scores for each classifier
+        if return_csv:
+            statistics_dataframe = self._return_csv(final_dataset_name, scores_dataframe, extra_metrics, filter_csv)
+            
         # Manipulate the size of the plot to fit the number of features
-        if num_features is not None:
-            if freq_feat == None:
-                freq_feat = self.X.shape[1]
-            elif freq_feat > self.X.shape[1]:
-                freq_feat = self.X.shape[1]
-
+        if num_features is not None:    
             # Plot histogram of features
-            feature_counts = Counter()
-            for idx, row in scores_dataframe.iterrows():
-                if row["Sel_way"] != "full":  # If no features were selected, skip
-                    features = list(
-                        chain.from_iterable(
-                            [list(index_obj) for index_obj in row["Sel_feat"]]
-                        )
-                    )
-                    feature_counts.update(features)
+            self._histogram(scores_dataframe, final_dataset_name, freq_feat, clfs)
 
-            sorted_features_counts = feature_counts.most_common()
-
-            if len(sorted_features_counts) == 0:
-                print("No features were selected.")
-            else:
-                features, counts = zip(*sorted_features_counts[:freq_feat])
-                counts = [x / len(clfs) for x in counts]  # Normalize counts
-                print(f"Selected {freq_feat} features")
-
-                # Create the bar chart using Plotly
-                fig = go.Figure()
-
-                # Add bars to the figure
-                fig.add_trace(go.Bar(
-                    x=features,
-                    y=counts,
-                    marker=dict(color="skyblue"),
-                    text=[f"{count:.2f}" for count in counts],  # Show normalized counts as text
-                    textposition='auto'
-                ))
-
-                # Set axis labels and title
-                fig.update_layout(
-                    title="Histogram of Selected Features",
-                    xaxis_title="Features",
-                    yaxis_title="Counts",
-                    xaxis_tickangle=-90,  # Rotate x-ticks to avoid overlap
-                    bargap=0.2,
-                    template="plotly_white",
-                    width=min(max(1000, freq_feat * 20), 2000),  # Dynamically adjust plot width
-                    height=700  # Set plot height
-                )
-
-                # # Show the interactive plot
-                # fig.show()
-
-                # Save the plot to 'Results/histogram.png'
-                save_path = f"{final_dataset_name}_histogram.png"
-                fig.write_image(save_path)
         
         # Plot box or violin plots of the outer cross-validation scores for all Inner_Selection methods
         if plot is not None:
-            scores_long = scores_dataframe.explode(f"{self.config_rncv['outer_scoring']}")
-            scores_long[f"{self.config_rncv['outer_scoring']}"] = scores_long[f"{self.config_rncv['outer_scoring']}"].astype(float)
-            fig = go.Figure()
-
-            inner_selection_methods = scores_dataframe['In_sel'].unique()
-
-            for inner_selection_method in inner_selection_methods:
-                df_inner_selection = scores_long[scores_long['In_sel'] == inner_selection_method]
-                classifiers = df_inner_selection["Clf"].unique()
-
-                if plot == "box":
-                    # Add box plots for each classifier within each Inner_Selection method
-                    for classifier in classifiers:
-                        data = df_inner_selection[df_inner_selection["Clf"] == classifier][
-                            f"{self.config_rncv['outer_scoring']}"
-                        ]
-                        median = np.median(data)
-                        fig.add_trace(
-                            go.Box(
-                                y=data,
-                                name=f"{classifier} ({inner_selection_method}) (Median: {median:.2f})",
-                                boxpoints="all",
-                                jitter=0.3,
-                                pointpos=-1.8,
-                            )
-                        )
-
-                        # Calculate and add 95% CI for the median
-                        lower, upper = self._bootstrap_ci(data, type='median')
-                        fig.add_trace(
-                            go.Scatter(
-                                x=[f"{classifier} ({inner_selection_method}) (Median: {median:.2f})",
-                                f"{classifier} ({inner_selection_method}) (Median: {median:.2f})"],
-                                y=[lower, upper],
-                                mode="lines",
-                                line=dict(color="black", dash="dash"),
-                                showlegend=False,
-                            )
-                        )
-
-                elif plot == "violin":
-                    # Add violin plots for each classifier within each Inner_Selection method
-                    for classifier in classifiers:
-                        data = df_inner_selection[df_inner_selection["Clf"] == classifier][
-                            f"{self.config_rncv['outer_scoring']}"
-                        ]
-                        median = np.median(data)
-                        fig.add_trace(
-                            go.Violin(
-                                y=data,
-                                name=f"{classifier} ({inner_selection_method}) (Median: {median:.2f})",
-                                box_visible=False,
-                                points="all",
-                                jitter=0.3,
-                                pointpos=-1.8,
-                            )
-                        )
-                else:
-                    raise ValueError(
-                        f'The "{plot}" is not a valid option for plotting. Choose between "box" or "violin".'
-                    )
-
-            # Update layout for better readability
-            fig.update_layout(
-                autosize = False,
-                width=1500,
-                height=1200,
-                title="Model Selection Results by Classifier and Inner Selection Method",
-                yaxis_title=f"Scores {self.config_rncv['outer_scoring']}",
-                xaxis_title="Classifier (Inner Selection Method)",
-                xaxis_tickangle=-45,
-                template="plotly_white",
-            )
-            
-            # Save the figure as an image in the "Results" directory
-            image_path = f"{final_dataset_name}_model_selection_plot.png"
-            fig.write_image(image_path)
-            # fig.show()
-        else:
-            pass
-
-        # Save the results to a CSV file of the outer scores for each classifier
-        if return_csv:
-            results_path = f"{final_dataset_name}_outerloops_results.csv"
-            cols_drop = ["Classif_rates", "Clf", "Hyp", "Sel_feat"]
-            if extra_metrics is not None:
-                for metric in extra_metrics:
-                    cols_drop.append(f"{metric}") 
-            statistics_dataframe = scores_dataframe.drop(cols_drop, axis=1)
-            statistics_dataframe.to_csv(results_path, index=False)
-            print(f"Statistics results saved to {results_path}")
+            self._plot(scores_dataframe, plot, self.config_rncv['outer_scoring'], final_dataset_name)
             
         if info_to_db:
             # Add to database
