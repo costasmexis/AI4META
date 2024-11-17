@@ -77,7 +77,7 @@ create_tables_sql = [
     """
     CREATE TABLE IF NOT EXISTS Job_Parameters (
         job_id SERIAL PRIMARY KEY,
-        n_trials_ncv INT,
+        n_trials INT,
         rounds INT,
         feature_selection_type VARCHAR(255),
         feature_selection_method VARCHAR(255),

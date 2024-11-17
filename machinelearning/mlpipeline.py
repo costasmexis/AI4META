@@ -37,8 +37,9 @@ import json
 from imblearn.combine import SMOTEENN
 from imblearn.over_sampling import SMOTE, ADASYN, BorderlineSMOTE
 from imblearn.under_sampling import TomekLinks, EditedNearestNeighbours
-
+from typing import Union
 import copy
+from datetime import datetime
 
 
 def scoring_check(scoring: str) -> None:
@@ -654,25 +655,25 @@ class MLPipelines(MachineLearningEstimator):
                             
             results.append(
                 {
-                    "Estimator": df[df["Classifiers"] == classif]["Estimator"].unique()[
+                    "Est": df[df["Classifiers"] == classif]["Estimator"].unique()[
                         0
                     ],
-                    "Classifier": classif,
-                    "Hyperparameters": 'Default',
-                    "Selected_Features": filtered_features
+                    "Clf": classif,
+                    "Hyp": 'Default',
+                    "Sel_feat": filtered_features
                     if num_features is not None
                     else None,
-                    "Features_num": Numbers_of_Features,
-                    "Way_of_Selection": Way_of_Selection,
-                    "FS_inner_method": feature_selection_method,
-                    "Normalization": normalization,
-                    "Missing_values": missing_values_method,
+                    "Fs_num": Numbers_of_Features,
+                    "Sel_way": Way_of_Selection,
+                    "Fs_inner": feature_selection_method,
+                    "Norm": normalization,
+                    "Miss_vals": missing_values_method,
                     "Splits": splits,
-                    "Rounds": rounds,
-                    "Class_Balancing": class_balance,
+                    "Rnds": rounds,
+                    "Class_bal": class_balance,
                     "Scoring": scoring,
-                    "Inner_Selection": 'validation_score',
-                    "Samples_classification_rates": samples_classification_rates.tolist(),
+                    "In_sel": 'validation_score',
+                    "Classif_rates": samples_classification_rates.tolist(),
                 }
             )
 
@@ -713,26 +714,17 @@ class MLPipelines(MachineLearningEstimator):
             os.makedirs(results_dir)
 
         # Initiate name
-        if num_features is not None:
-            features = num_features
-        else:
-            features = "all_features"
-
         try:
             dataset_name = self._set_result_csv_name(self.csv_dir)
-            if name_add is None:
-                results_name = f"{dataset_name}_{'validation_score'}_{features}_RCV"
-            else:
-                results_name = f"{dataset_name}_{'validation_score'}_{features}_{name_add}_RCV"
+            name_add  = self._file_name(self.config_rcv)
+            results_name = f"{dataset_name}_{name_add}_rcv"
             final_dataset_name = os.path.join(results_dir, results_name)
         except Exception as e:
-            dataset_name = "dataset"
-            if name_add is None:
-                results_name = f"{dataset_name}_{'validation_score'}_{features}_RCV"
-            else:
-                results_name = f"{dataset_name}_{'validation_score'}_{features}_{name_add}_RCV"
+            name_add = self._file_name(self.config_rcv)
+            results_name = f"results_{name_add}_rcv"
             final_dataset_name = os.path.join(
-                results_dir, results_name)
+                results_dir, results_name
+            )
 
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:
@@ -744,10 +736,10 @@ class MLPipelines(MachineLearningEstimator):
             # Plot histogram of features
             feature_counts = Counter()
             for idx, row in scores_dataframe.iterrows():
-                if row["Way_of_Selection"] != "full":  # If no features were selected, skip
+                if row["Sel_way"] != "full":  # If no features were selected, skip
                     features = list(
                         chain.from_iterable(
-                            [list(index_obj) for index_obj in row["Selected_Features"]]
+                            [list(index_obj) for index_obj in row["Sel_feat"]]
                         )
                     )
                     feature_counts.update(features)
@@ -795,12 +787,12 @@ class MLPipelines(MachineLearningEstimator):
             scores_long[f"{self.config_rcv['scoring']}"] = scores_long[f"{self.config_rcv['scoring']}"].astype(float)
             fig = go.Figure()
             
-            classifiers = scores_long["Classifier"].unique()
+            classifiers = scores_long["Clf"].unique()
 
             if plot == "box":
                 # Add box plots for each classifier within each Inner_Selection method
                 for classifier in classifiers:
-                    data = scores_long[scores_long["Classifier"] == classifier][
+                    data = scores_long[scores_long["Clf"] == classifier][
                         f"{self.config_rcv['scoring']}"
                     ]
                     median = np.median(data)
@@ -829,7 +821,7 @@ class MLPipelines(MachineLearningEstimator):
 
             elif plot == "violin":
                 for classifier in classifiers:
-                    data = scores_long[scores_long["Classifier"] == classifier][
+                    data = scores_long[scores_long["Clf"] == classifier][
                         f"{self.config_rcv['scoring']}"
                     ]
                     median = np.median(data)
@@ -870,7 +862,7 @@ class MLPipelines(MachineLearningEstimator):
         # Save the results to a CSV file of the outer scores for each classifier
         if return_csv:
             results_path = f"{final_dataset_name}_cvrounds_results.csv"
-            cols_drop = ["Samples_classification_rates", "Classifier", "Hyperparameters", "Selected_Features","Inner_Selection"]
+            cols_drop = ["Classif_rates", "Clf", "Hyp", "Sel_feat","In_sel"]
             if extra_metrics is not None:
                 for metric in extra_metrics:
                     cols_drop.append(f"{metric}") 
@@ -998,27 +990,27 @@ class MLPipelines(MachineLearningEstimator):
 
         # Loop over the number of features
         for num_feature2_use in feature_loop:            
-            if not self.config_rncv['sfm']:
-                X_train_selected, X_test_selected, num_feature = self._filter_features(
-                    train_index, test_index, X, y, num_feature2_use, cvncvsel='rncv'
-                )
-                y_train, y_test = y[train_index], y[test_index]
-                
-                # Apply class balancing strategies
-                if self.config_rncv['class_balance'] == 'auto':
-                    # No balancing is applied; use original X_train_selected and y_train
-                    pass
-                elif self.config_rncv['class_balance'] == 'smote':
-                    X_train_selected, y_train = SMOTE(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-                elif self.config_rncv['class_balance'] == 'smote_enn':
-                    X_train_selected, y_train = SMOTEENN(random_state=i, n_jobs=n_jobs, enn=EditedNearestNeighbours()).fit_resample(X_train_selected, y_train)
-                elif self.config_rncv['class_balance'] == 'adasyn':
-                    X_train_selected, y_train = ADASYN(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-                elif self.config_rncv['class_balance'] == 'borderline_smote':
-                    X_train_selected, y_train = BorderlineSMOTE(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-                elif self.config_rncv['class_balance'] == 'tomek':
-                    tomek = TomekLinks(n_jobs=n_jobs)
-                    X_train_selected, y_train = tomek.fit_resample(X_train_selected, y_train)
+            # if not self.config_rncv['sfm']:
+            X_train_selected, X_test_selected, num_feature = self._filter_features(
+                train_index, test_index, X, y, num_feature2_use, cvncvsel='rncv'
+            )
+            y_train, y_test = y[train_index], y[test_index]
+            
+            # Apply class balancing strategies
+            if self.config_rncv['class_balance'] == 'auto':
+                # No balancing is applied; use original X_train_selected and y_train
+                pass
+            elif self.config_rncv['class_balance'] == 'smote':
+                X_train_selected, y_train = SMOTE(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
+            elif self.config_rncv['class_balance'] == 'smote_enn':
+                X_train_selected, y_train = SMOTEENN(random_state=i, n_jobs=n_jobs, enn=EditedNearestNeighbours()).fit_resample(X_train_selected, y_train)
+            elif self.config_rncv['class_balance'] == 'adasyn':
+                X_train_selected, y_train = ADASYN(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
+            elif self.config_rncv['class_balance'] == 'borderline_smote':
+                X_train_selected, y_train = BorderlineSMOTE(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
+            elif self.config_rncv['class_balance'] == 'tomek':
+                tomek = TomekLinks(n_jobs=n_jobs)
+                X_train_selected, y_train = tomek.fit_resample(X_train_selected, y_train)
                                 
             # Check of the classifiers given list
             if self.config_rncv["clfs"] is None:
@@ -1067,7 +1059,7 @@ class MLPipelines(MachineLearningEstimator):
                         return_train_score=True,
                         n_jobs=n_jobs,
                         verbose=0,
-                        n_trials=self.config_rncv["n_trials_ncv"],
+                        n_trials=self.config_rncv["n_trials"],
                     )
                     clf.fit(X_train_selected, y_train)
            
@@ -1277,7 +1269,7 @@ class MLPipelines(MachineLearningEstimator):
             if config['model_selection_type'] == 'rncv':
                 job_parameters_query = """
                     INSERT INTO Job_Parameters (
-                        n_trials_ncv, rounds, feature_selection_type, feature_selection_method, 
+                        n_trials, rounds, feature_selection_type, feature_selection_method, 
                         inner_scoring, outer_scoring, inner_splits, outer_splits, normalization, 
                         missing_values_method, class_balance
                     )
@@ -1287,7 +1279,7 @@ class MLPipelines(MachineLearningEstimator):
                 cursor.execute(
                     job_parameters_query,
                     (
-                        config['n_trials_ncv'], config['rounds'], config['feature_selection_type'],
+                        config['n_trials'], config['rounds'], config['feature_selection_type'],
                         config['feature_selection_method'], config['inner_scoring'], config['outer_scoring'],
                         config['inner_splits'], config['outer_splits'], config['normalization'],
                         config['missing_values_method'], config['class_balance']
@@ -1322,7 +1314,7 @@ class MLPipelines(MachineLearningEstimator):
                     SELECT classifier_id FROM Classifiers
                     WHERE estimator = %s AND inner_selection = %s;
                 """
-                cursor.execute(check_query, (row["Estimator"], row["Inner_Selection"]))
+                cursor.execute(check_query, (row["Est"], row["In_sel"]))
                 classifier_id = cursor.fetchone()
 
                 if classifier_id:
@@ -1332,7 +1324,7 @@ class MLPipelines(MachineLearningEstimator):
                         INSERT INTO Classifiers (estimator, inner_selection)
                         VALUES (%s, %s) RETURNING classifier_id;
                     """
-                    cursor.execute(classifier_query, (row["Estimator"], row["Inner_Selection"]))
+                    cursor.execute(classifier_query, (row["Est"], row["In_sel"]))
                     classifier_id = cursor.fetchone()[0]
 
                 # Insert hyperparameters
@@ -1340,7 +1332,7 @@ class MLPipelines(MachineLearningEstimator):
                     INSERT INTO Hyperparameters (hyperparameters)
                     VALUES (%s) RETURNING hyperparameter_id;
                 """
-                hyperparameters = row["Hyperparameters"]
+                hyperparameters = row["Hyp"]
                 if isinstance(hyperparameters, np.ndarray):
                     hyperparameters = [dict(item) for item in hyperparameters]
                 cursor.execute(hyperparameters_query, (json.dumps(hyperparameters),))
@@ -1351,7 +1343,7 @@ class MLPipelines(MachineLearningEstimator):
                     INSERT INTO Feature_Selection (way_of_selection, numbers_of_features)
                     VALUES (%s, %s) RETURNING selection_id;
                 """
-                cursor.execute(feature_selection_query, (row["Way_of_Selection"], row["Features_num"]))
+                cursor.execute(feature_selection_query, (row["Sel_way"], row["Fs_num"]))
                 selection_id = cursor.fetchone()[0]
 
                 # Insert performance metrics
@@ -1371,7 +1363,7 @@ class MLPipelines(MachineLearningEstimator):
                     INSERT INTO Samples_Classification_Rates (samples_classification_rates)
                     VALUES (%s) RETURNING sample_rate_id;
                 """
-                cursor.execute(samples_classification_query, (json.dumps(row["Samples_classification_rates"]),))
+                cursor.execute(samples_classification_query, (json.dumps(row["Classif_rates"]),))
                 sample_rate_id = cursor.fetchone()[0]
 
                 # Insert data into job combinations
@@ -1389,8 +1381,8 @@ class MLPipelines(MachineLearningEstimator):
                 combination_id = cursor.fetchone()[0]
 
                 # Insert feature counts
-                if row["Selected_Features"] is not None:
-                    selected_features = row["Selected_Features"]
+                if row["Sel_feat"] is not None:
+                    selected_features = row["Sel_feat"]
                     if isinstance(selected_features, np.ndarray):
                         selected_features = selected_features.tolist()
 
@@ -1417,31 +1409,65 @@ class MLPipelines(MachineLearningEstimator):
         finally:
             cursor.close()
             connection.close()
+    def _file_name(self,config):
+        default_values = {
+            "rounds": 10,
+            "n_trials": 100,
+            "feature_selection_type": "mrmr",
+            "feature_selection_method": "chi2",
+            "inner_scoring": "matthews_corrcoef",
+            "outer_scoring": "matthews_corrcoef",
+            "inner_splits": 5,
+            "outer_splits": 5,
+            "normalization": "minmax",
+            "class_balance": "auto",    
+            "sfm": False,
+            # "inner_selection": ["validation_score", "one_sem", "gso_1", "gso_2", "one_sem_grd"],
+            # "extra_metrics": ['recall', 'specificity', 'accuracy', 'balanced_accuracy', 
+                            # 'precision', 'f1', 'roc_auc', 'average_precision', 'matthews_corrcoef'],
+            # "plot": "box",
+            "missing_values": "median",
+            "num_features": None,
+            # "freaq_feat": None,
+            # "search_on": None,
+            # "exclude": None,
+            "scoring": "matthews_corrcoef",
+            "splits": 5
             
+        }
+        name_add = ""
+        for conf in config:
+            if conf in default_values.keys():
+                if config[conf] != default_values[conf]:
+                    name_add += f"_{conf}_{config[conf]}"
+        name_add += f"_{datetime.now().strftime('%Y%m%d_%H%M')}"
+        return name_add
+        
     def nested_cv(
         self,
-        n_trials_ncv=100,
-        rounds=10,
-        exclude=None,
-        search_on=None,
-        num_features=None,
-        feature_selection_type="mrmr",
-        return_csv=True,
-        feature_selection_method="chi2",
-        plot="box",
-        class_balance='auto',
-        inner_scoring="matthews_corrcoef",
-        outer_scoring="matthews_corrcoef",
-        inner_selection_lst=["validation_score","one_sem","gso_1","gso_2","one_sem_grd"],
-        inner_splits=5,
-        outer_splits=5,
-        normalization="minmax",
-        parallel="thread_per_round",
-        missing_values_method="median",
-        name_add=None,
-        extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1', 'average_precision','specificity','matthews_corrcoef'],
-        sfm=False,
-        info_to_db = False
+        n_trials: int = 100,
+        rounds: int = 10,
+        exclude: str|list = None,
+        search_on: str|list = None,
+        info_to_db: bool = False,
+        num_features: int|list = None,
+        feature_selection_type: str = "mrmr",
+        feature_selection_method: str = "chi2",
+        sfm: bool = False,
+        freq_feat: int = None,
+        class_balance: str = 'auto',
+        inner_scoring: str = "matthews_corrcoef",
+        outer_scoring: str = "matthews_corrcoef",
+        inner_selection_lst: list = ["validation_score", "one_sem", "gso_1", "gso_2", "one_sem_grd"],
+        extra_metrics: str|list = ['recall', 'specificity', 'accuracy', 'balanced_accuracy', 
+                            'precision', 'f1', 'roc_auc', 'average_precision', 'matthews_corrcoef'],
+        plot: str = "box",
+        inner_splits: int = 5,
+        outer_splits: int = 5,
+        parallel: str = "thread_per_round",
+        normalization: str = "minmax",
+        missing_values_method: str = "median",
+        return_csv: bool = True,
     ):
         """
         Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
@@ -1486,15 +1512,15 @@ class MLPipelines(MachineLearningEstimator):
         self.config_rncv['model_selection_type'] = 'rncv'
         
         # Set available classifiers
-        if exclude is not None:
-            exclude_classes = (
-                exclude  # 'exclude' is a list of classifier names as strings
-            )
-        elif search_on is not None:
+        if search_on is not None:
             classes = search_on  # 'search_on' is a list of classifier names as strings
             exclude_classes = [
                 clf for clf in self.available_clfs.keys() if clf not in classes
             ]
+        elif exclude is not None:
+             exclude_classes = (
+                exclude  # 'exclude' is a list of classifier names as strings
+            )
         else:
             exclude_classes = []
 
@@ -1585,29 +1611,29 @@ class MLPipelines(MachineLearningEstimator):
                                 
                 results.append(
                     {
-                        "Estimator": df_inner[df_inner["Classifiers"] == classif]["Estimator"].unique()[
+                        "Est": df_inner[df_inner["Classifiers"] == classif]["Estimator"].unique()[
                             0
                         ],
-                        "Classifier": classif,
-                        "Hyperparameters": df_inner[df_inner["Classifiers"] == classif][
+                        "Clf": classif,
+                        "Hyp": df_inner[df_inner["Classifiers"] == classif][
                             "Hyperparameters"
                         ].values,
-                        "Selected_Features": filtered_features
+                        "Sel_way": Way_of_Selection,
+                        "Fs_inner": feature_selection_method,
+                        "Fs_num": Numbers_of_Features,
+                        "Sel_feat": filtered_features
                         if num_features is not None
                         else None,
-                        "Inner_Selection":inner_selection,
-                        "Features_num": Numbers_of_Features,
-                        "Way_of_Selection": Way_of_Selection,
-                        "FS_inner_method": feature_selection_method,
-                        "Normalization": normalization,
-                        "Missing_values": missing_values_method,
-                        "Inner_cv": inner_splits,
-                        "Outer_cv": outer_splits,
-                        "Rounds": rounds,
-                        "Optuna_trials": n_trials_ncv,
-                        "Class_Balancing": class_balance,
-                        "Tunning_scoring": inner_scoring,
-                        "Samples_classification_rates": samples_classification_rates.tolist(),
+                        "Norm": normalization,
+                        "Miss_vals": missing_values_method,
+                        "In_cv": inner_splits,
+                        "Out_cv": outer_splits,
+                        "Rnds": rounds,
+                        "Trials": n_trials,
+                        "Class_blnc": class_balance,
+                        "In_scor": inner_scoring,
+                        "In_sel":inner_selection,
+                        "Classif_rates": samples_classification_rates.tolist(),
                     }
                 )
 
@@ -1619,55 +1645,42 @@ class MLPipelines(MachineLearningEstimator):
                     results[-1][f"{metric}"] = metric_values  # If this stores an array, keep it as-is
 
                     # Round metrics to 3 decimal places
-                    results[-1][f"Max_{qck_mtrc}"] = round(np.max(metric_values), 3)
-                    results[-1][f"Std_{qck_mtrc}"] = round(np.std(metric_values), 3)
-                    results[-1][f"SEM_{qck_mtrc}"] = round(sem(metric_values), 3)
-                    results[-1][f"Med_{qck_mtrc}"] = round(np.median(metric_values), 3)
-                    results[-1][f"Mean_{qck_mtrc}"] = round(np.mean(metric_values), 3)
-
-                    # Bootstrap confidence intervals for median and mean
-                    lomed, upmed = self._bootstrap_ci(metric_values, type='median')
-                    lomean, upmean = self._bootstrap_ci(metric_values, type='mean')
-                    results[-1][f"Lomed_{qck_mtrc}"] = round(lomed, 3)
-                    results[-1][f"Upmed_{qck_mtrc}"] = round(upmed, 3)
-                    results[-1][f"Lomean_{qck_mtrc}"] = round(lomean, 3)
-                    results[-1][f"Upmean_{qck_mtrc}"] = round(upmean, 3)
-
+                    results[-1][f"{qck_mtrc}_Mean"] = round(np.mean(metric_values), 3)
+                    results[-1][f"{qck_mtrc}_Std"] = round(np.std(metric_values), 3)
+                    results[-1][f"{qck_mtrc}_SEM"] = round(sem(metric_values), 3)
                     # Compute lower and upper percentage values and round to 3 decimal places
                     lower_percentile = np.percentile(metric_values, 5)
                     upper_percentile = np.percentile(metric_values, 95)
-                    results[-1][f"LowerPct_{qck_mtrc}"] = round(lower_percentile, 3)
-                    results[-1][f"UpperPct_{qck_mtrc}"] = round(upper_percentile, 3)
+                    results[-1][f"{qck_mtrc}_LowerCI"] = round(lower_percentile, 3)
+                    results[-1][f"{qck_mtrc}_UpperCI"] = round(upper_percentile, 3)
+                    results[-1][f"{qck_mtrc}_Med"] = round(np.median(metric_values), 3)
+                    # Bootstrap confidence intervals for median and mean
+                    lomed, upmed = self._bootstrap_ci(metric_values, type='median')
+                    lomean, upmean = self._bootstrap_ci(metric_values, type='mean')
+                    results[-1][f"{qck_mtrc}_Lomean"] = round(lomean, 3)
+                    results[-1][f"{qck_mtrc}_Upmean"] = round(upmean, 3)
+                    results[-1][f"{qck_mtrc}_Lomed"] = round(lomed, 3)
+                    results[-1][f"{qck_mtrc}_Upmed"] = round(upmed, 3)
                                             
         print(f"Finished with {len(results)} models")
         scores_dataframe = pd.DataFrame(results)
         
         # Create a 'Results' directory
-        results_dir = "Results_ncv"
+        results_dir = "Results"
         if not os.path.exists(results_dir):
             os.makedirs(results_dir)
 
-        # Initiate name
-        if num_features is not None:
-            features = num_features
-        else:
-            features = "all_features"
-
+        # Name
         try:
             dataset_name = self._set_result_csv_name(self.csv_dir)
-            if name_add is None:
-                results_name = f"{dataset_name}_{inner_selection_lst}_{features}"
-            else:
-                results_name = f"{dataset_name}_{inner_selection_lst}_{features}_{name_add}"
+            name_add  = self._file_name(self.config_rncv)
+            results_name = f"{dataset_name}{name_add}_rncv"
             final_dataset_name = os.path.join(results_dir, results_name)
         except Exception as e:
-            dataset_name = "dataset"
-            if name_add is None:
-                results_name = f"{dataset_name}_{inner_selection_lst}_{features}"
-            else:
-                results_name = f"{dataset_name}_{inner_selection_lst}_{features}_{name_add}"
+            name_add = self._file_name(self.config_rncv)
+            results_name = f"rncv_results{name_add}"
             final_dataset_name = os.path.join(
-                results_dir, f"{dataset_name}_{inner_selection_lst}_{features}"
+                results_dir, results_name
             )
 
         # Manipulate the size of the plot to fit the number of features
@@ -1680,10 +1693,10 @@ class MLPipelines(MachineLearningEstimator):
             # Plot histogram of features
             feature_counts = Counter()
             for idx, row in scores_dataframe.iterrows():
-                if row["Way_of_Selection"] != "full":  # If no features were selected, skip
+                if row["Sel_way"] != "full":  # If no features were selected, skip
                     features = list(
                         chain.from_iterable(
-                            [list(index_obj) for index_obj in row["Selected_Features"]]
+                            [list(index_obj) for index_obj in row["Sel_feat"]]
                         )
                     )
                     feature_counts.update(features)
@@ -1734,16 +1747,16 @@ class MLPipelines(MachineLearningEstimator):
             scores_long[f"{self.config_rncv['outer_scoring']}"] = scores_long[f"{self.config_rncv['outer_scoring']}"].astype(float)
             fig = go.Figure()
 
-            inner_selection_methods = scores_dataframe['Inner_Selection'].unique()
+            inner_selection_methods = scores_dataframe['In_sel'].unique()
 
             for inner_selection_method in inner_selection_methods:
-                df_inner_selection = scores_long[scores_long['Inner_Selection'] == inner_selection_method]
-                classifiers = df_inner_selection["Classifier"].unique()
+                df_inner_selection = scores_long[scores_long['In_sel'] == inner_selection_method]
+                classifiers = df_inner_selection["Clf"].unique()
 
                 if plot == "box":
                     # Add box plots for each classifier within each Inner_Selection method
                     for classifier in classifiers:
-                        data = df_inner_selection[df_inner_selection["Classifier"] == classifier][
+                        data = df_inner_selection[df_inner_selection["Clf"] == classifier][
                             f"{self.config_rncv['outer_scoring']}"
                         ]
                         median = np.median(data)
@@ -1773,7 +1786,7 @@ class MLPipelines(MachineLearningEstimator):
                 elif plot == "violin":
                     # Add violin plots for each classifier within each Inner_Selection method
                     for classifier in classifiers:
-                        data = df_inner_selection[df_inner_selection["Classifier"] == classifier][
+                        data = df_inner_selection[df_inner_selection["Clf"] == classifier][
                             f"{self.config_rncv['outer_scoring']}"
                         ]
                         median = np.median(data)
@@ -1814,7 +1827,7 @@ class MLPipelines(MachineLearningEstimator):
         # Save the results to a CSV file of the outer scores for each classifier
         if return_csv:
             results_path = f"{final_dataset_name}_outerloops_results.csv"
-            cols_drop = ["Samples_classification_rates", "Classifier", "Hyperparameters", "Selected_Features"]
+            cols_drop = ["Classif_rates", "Clf", "Hyp", "Sel_feat"]
             if extra_metrics is not None:
                 for metric in extra_metrics:
                     cols_drop.append(f"{metric}") 
