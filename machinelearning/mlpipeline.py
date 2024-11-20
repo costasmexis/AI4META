@@ -533,74 +533,11 @@ class MLPipelines(MachineLearningEstimator):
         info_to_db=False,
         filter_csv=None
     ):
-        # Missing values manipulation
-        if missing_values_method == "drop":
-            print(
-                "Values cannot be dropped at ncv because of inconsistent shapes. \nThe missing values with automaticly replaced by the median of each feature."
-            )
-            missing_values_method = "median"
-            
-        if self.X.isnull().values.any():
-            print(
-                f"Your Dataset contains NaN values. Some estimators does not work with NaN values.\nThe {missing_values_method} method will be used for the missing values manipulation.\n"
-            )
-            
-        if extra_metrics is not None:
-            if type(extra_metrics) is not list:
-                extra_metrics = [extra_metrics]
-            for metric in extra_metrics:
-                scoring_check(metric)
-            print('All the extra metrics are valid.')
-            if scoring not in extra_metrics:
-                extra_metrics.insert(0, scoring)
-            elif scoring in extra_metrics and extra_metrics.index(scoring) != 0:
-                # Remove it from its current position
-                extra_metrics.remove(scoring)
-                # Insert it at the first index
-                extra_metrics.insert(0, scoring)
-        else:
-            extra_metrics = [scoring]
-            
-        if class_balance not in ['auto','smote','smote_enn','adasyn','borderline_smote','tomek', None]:
-            raise ValueError("class_balance must be one of the following: 'auto','smote','smotenn','adasyn','borderline_smote','tomek', or None")
-        elif class_balance == None:
-            class_balance = 'auto'
-            print('Class balance is set to "auto"')
-            
-        # Set parameters for the nested functions of the cv process
+        # Set parameters for the nested functions of the ncv process
         self.config_rcv = locals()
         self.config_rcv.pop("self", None)
-        self.config_rcv['dataset_name'] = self.csv_dir
-        self.config_rcv['model_selection_type'] = 'rcv'
-
-        if num_features is not None:
-            print(
-                f"The num_features parameter is {num_features}."#\nThe result will be a Dataframe and a List with the freq_feat number of the most important features.\nIf the freq_feat is None, the result will be a List with all features."
-            )
-            
-        # Set available classifiers
-        if exclude is not None:
-            exclude_classes = (
-                exclude  # 'exclude' is a list of classifier names as strings
-            )
-        elif search_on is not None:
-            classes = search_on  # 'search_on' is a list of classifier names as strings
-            exclude_classes = [
-                clf for clf in self.available_clfs.keys() if clf not in classes
-            ]
-        else:
-            exclude_classes = []
-
-        # Filter classifiers based on the exclude_classes list
-        clfs = [clf for clf in self.available_clfs.keys() if clf not in exclude_classes]
-        self.config_rcv["clfs"] = clfs
-
-        # Checks for reliability of parameters
-        if (scoring not in sklearn.metrics.get_scorer_names()) and (scoring != "specificity"):
-            raise ValueError(
-                f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())} and 'specificity'"
-            )
-
+        self.config_rcv = self._parameters_check(self.config_rcv,'rcv')
+        
         # Parallelization
         trial_indices = range(rounds)
         num_cores = multiprocessing.cpu_count()
@@ -658,7 +595,7 @@ class MLPipelines(MachineLearningEstimator):
                     "Miss_vals": missing_values_method,
                     "Splits": splits,
                     "Rnds": rounds,
-                    "Class_bal": class_balance,
+                    "Class_bal": self.config_rcv['class_balance'],
                     "Scoring": scoring,
                     "In_sel": 'validation_score',
                     "Classif_rates": samples_classification_rates.tolist(),
@@ -666,7 +603,7 @@ class MLPipelines(MachineLearningEstimator):
             )
             
             results = self._input_renamed_metrics(
-                extra_metrics, results, indices
+                self.config_rcv['extra_metrics'], results, indices
             )
                                             
         print(f"Finished with {len(results)} models")
@@ -682,12 +619,12 @@ class MLPipelines(MachineLearningEstimator):
           
         # Save the results to a CSV file of the outer scores for each classifier
         if return_csv:
-            statistics_dataframe = self._return_csv(final_dataset_name, scores_dataframe, extra_metrics, filter_csv)
+            statistics_dataframe = self._return_csv(final_dataset_name, scores_dataframe, self.config_rcv['extra_metrics'], filter_csv)
 
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:
             # Plot histogram of features
-            self._histogram(scores_dataframe, final_dataset_name, freq_feat, clfs)
+            self._histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rcv['clfs'])
         
         # Plot box or violin plots of the outer cross-validation scores 
         if plot is not None:
@@ -1471,6 +1408,10 @@ class MLPipelines(MachineLearningEstimator):
                 "Values cannot be dropped at ncv because of inconsistent shapes. \nThe missing values with automaticly replaced by the median of each feature."
             )
             config['missing_values_method'] = "median"
+        elif (config['missing_values_method'] != "mean") and (config['missing_values_method'] != "median"):
+            raise ValueError(
+                "The missing values method should be 'mean' or 'median'."
+            )
         if self.X.isnull().values.any():
             print(
                 f"Your Dataset contains NaN values. Some estimators does not work with NaN values.\nThe {config['missing_values_method']} method will be used for the missing values manipulation.\n"
@@ -1521,14 +1462,14 @@ class MLPipelines(MachineLearningEstimator):
             
         else:
             if config['scoring'] not in config['extra_metrics']:
-                extra_metrics.insert(0, config['scoring'])
-            elif config['scoring'] in extra_metrics and extra_metrics.index(config['scoring']) != 0:
+                config['extra_metrics'].insert(0, config['scoring'])
+            elif config['scoring'] in config['extra_metrics'] and config['extra_metrics'].index(config['scoring']) != 0:
                 # Remove it from its current position
-                extra_metrics.remove(config['scoring'])
+                config['extra_metrics'].remove(config['scoring'])
                 # Insert it at the first index
-                extra_metrics.insert(0, config['scoring'])
+                config['extra_metrics'].insert(0, config['scoring'])
             else:
-                extra_metrics = [config['scoring']]
+                config['extra_metrics'] = [config['scoring']]
             
             config['model_selection_type'] = 'rcv'
             
@@ -1669,7 +1610,7 @@ class MLPipelines(MachineLearningEstimator):
                         "Out_cv": outer_splits,
                         "Rnds": rounds,
                         "Trials": n_trials,
-                        "Class_blnc": class_balance,
+                        "Class_blnc": self.config_rncv['class_balance'],
                         "In_scor": inner_scoring,
                         "Out_scor": outer_scoring,
                         "In_sel":inner_selection,
