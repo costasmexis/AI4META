@@ -1,48 +1,61 @@
-import optuna
+# Standard library imports
+import os
+import time
+import json
+import logging
+import multiprocessing
+from datetime import datetime
+from itertools import chain
+from collections import Counter
+from typing import Union
+from copy import copy
+
+# Numerical computing
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
-import matplotlib.pyplot as plt
+from scipy.stats import sem
+
+# Machine learning and data processing
 import sklearn
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from lightgbm import LGBMClassifier
 from sklearn.gaussian_process import GaussianProcessClassifier
-from catboost import CatBoostClassifier
 from sklearn.model_selection import StratifiedKFold
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
-from xgboost import XGBClassifier
-from sklearn.metrics import get_scorer, confusion_matrix, make_scorer
 from sklearn.feature_selection import SelectFromModel
-
-from .mlestimator import MachineLearningEstimator
-from .optuna_grid import optuna_grid, hyper_compl
-import os
-import logging
-from scipy.stats import sem
-from itertools import chain
-import time
-from threadpoolctl import threadpool_limits
-from joblib import Parallel, delayed
-import multiprocessing
-from collections import Counter
-import progressbar
-
-import psycopg2
-from psycopg2.extras import execute_values
-import json
+from sklearn.metrics import get_scorer, confusion_matrix, make_scorer
+from lightgbm import LGBMClassifier
+from catboost import CatBoostClassifier
+from xgboost import XGBClassifier
 from imblearn.combine import SMOTEENN
 from imblearn.over_sampling import SMOTE, ADASYN, BorderlineSMOTE
 from imblearn.under_sampling import TomekLinks, EditedNearestNeighbours
-from typing import Union
-import copy
-from datetime import datetime
 
+# Visualization
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+
+# Database and I/O
+import psycopg2
+from psycopg2.extras import execute_values
+
+# Optimization and multiprocessing
+import optuna
+from threadpoolctl import threadpool_limits
+from joblib import Parallel, delayed
+
+# Custom modules
+from .mlestimator import MachineLearningEstimator
+from .optuna_grid import optuna_grid, hyper_compl
+
+# Progress tracking
+import progressbar
 
 def scoring_check(scoring: str) -> None:
+    """This function is used to check if the scoring string metric is valid"""
     if (scoring not in sklearn.metrics.get_scorer_names()) and (scoring != "specificity"):
         raise ValueError(
             f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())} and specificity"
@@ -55,16 +68,20 @@ class MLPipelines(MachineLearningEstimator):
         self.config_rncv = {}
 
     def _specificity_scorer(self, estimator, X, y):
+        """_This function is used to calculate the specificity score"""
         y_pred = estimator.predict(X)
         tn, fp, fn, tp = confusion_matrix(y, y_pred).ravel()
         specificity = tn / (tn + fp)
         return specificity
+    
     def _set_result_csv_name(self, csv_dir):
         """This function is used to set the name of the result nested cv file with respect to the dataset name"""
+        # Split the name of the dataset with the ".csv" part and keep the first part
         data_name = os.path.basename(csv_dir).split(".")[0]
         return data_name
     
     def _bootstrap_ci(self, data, type='median'):
+        """This function is used to calculate the confidence interval of the mean/median using bootstraping"""
         ms = []
         for _ in range(1000):
             sample = np.random.choice(data, size=len(data), replace=True)
@@ -77,8 +94,10 @@ class MLPipelines(MachineLearningEstimator):
         return lower_bound, upper_bound
 
     def _create_model_instance(self, model_name, params):
-        """This function creates a model instance with the given parameters
-        It is used in order to prevent fittinf of an already fitted model from previous runs"""
+        """
+        This function creates a model instance with the given parameters
+        It is used in order to prevent fittinf of an already fitted model from previous runs
+        """
 
         if model_name == "RandomForestClassifier":
             if params == None:
@@ -144,7 +163,12 @@ class MLPipelines(MachineLearningEstimator):
             raise ValueError(f"Unsupported model: {model_name}")
 
     def _gso_model(self, trials, model_name, splits, method):
-        """This function selects the 'simplest' hyperparameters for the given model."""
+        """
+        This function selects the 'simplest' hyperparameters for the given model.
+        gso_1: Selects the hyperparameters that have the best train score and a train score threshold that is 85% of the best train score.
+        gso_2: Selects the hyperparameters that have the best validation score and a validation score threshold that is 85% of the best validation score.
+        Returns a list of hyperparameters
+        """
         trials_data = [
             {
                 "params": t.params,
@@ -201,7 +225,12 @@ class MLPipelines(MachineLearningEstimator):
                 return trials[0].params
 
     def _one_sem_model(self, trials, model_name, samples, splits, method):
-        """This function selects the 'simplest' hyperparameters for the given model."""
+        """
+        This function selects the 'simplest' hyperparameters for the given model.
+        one_sem: Selects the hyperparameters that resulted validation score higher than the SEM threshold and have the smallest complexity score which is calculated differently in each estimator.
+        one_sem_grd: Selects the hyperparameters that resulted validation score higher than the SEM threshold and use a grid method to select the simplest hyperparameters set.
+        Returns a list of hyperparameters
+        """
         constraints = hyper_compl[model_name]
         
         trials_data = [
@@ -227,6 +256,9 @@ class MLPipelines(MachineLearningEstimator):
         filtered_trials = [t for t in trials_data if t["value"] >= sem_threshold]
         if method == "one_sem":
             def calculate_complexity(trial, model_name, samples):
+                """
+                This function calculates the complexity of a model based on its hyperparameters for each estimator.
+                """
                 params = trial["params"]
                 if model_name in ['RandomForestClassifier', 'XGBClassifier', 'GradientBoostingClassifier', 'LGBMClassifier']:
                     max_depth = params["max_depth"]
@@ -303,7 +335,7 @@ class MLPipelines(MachineLearningEstimator):
     def _sfm(self, estimator, X_train, X_test, y_train, num_feature2_use=None, threshold="mean"):
         """
         Select features using SelectFromModel with either a predefined number of features 
-        or using the threshold if num_feature2_use is not provided.
+        or using the threshold if num_feature_use is not provided.
         """
 
         # Ensure the model is fitted
@@ -328,6 +360,11 @@ class MLPipelines(MachineLearningEstimator):
         return X_train_selected, X_test_selected, num_feature2_use
     
     def _cv_loop(self, i, avail_thr):
+        """
+        This function is used to perform the rounds loop of the cross-validation using only the default parameters. 
+        Usefull for fist insights about the estimators performance and fast for big datasets.
+        Used only in rcv_accel function.
+        """
         start = time.time()  # Count time of outer loops
         
         # Split the data into train and test
@@ -637,7 +674,7 @@ class MLPipelines(MachineLearningEstimator):
         return statistics_dataframe
 
     def _plot(self, scores_dataframe, plot, scorer, final_dataset_name):
-        
+        """ This function creates a box or violin plot of the outer cross-validation scores for each classifier """
         scores_long = scores_dataframe.explode(f"{scorer}")
         scores_long[f"{scorer}"] = scores_long[f"{scorer}"].astype(float)
         fig = go.Figure()
@@ -712,6 +749,7 @@ class MLPipelines(MachineLearningEstimator):
         fig.write_image(image_path)
               
     def _histogram(self, scores_dataframe, final_dataset_name, freq_feat, clfs):
+        """ Function to create a histogram of the selected features counts. """
         if freq_feat == None:
             freq_feat = self.X.shape[1]
         elif freq_feat > self.X.shape[1]:
@@ -766,6 +804,7 @@ class MLPipelines(MachineLearningEstimator):
             fig.write_image(save_path)
             
     def _name_outputs(self, config, results_dir):
+        """ Function to set the name of the result nested cv file with respect to the dataset name """
         try:
             dataset_name = self._set_result_csv_name(self.csv_dir)
             name_add  = self._file_name(config)
@@ -782,6 +821,7 @@ class MLPipelines(MachineLearningEstimator):
     def _filter_features(self, train_index, test_index, X, y, num_feature2_use, cvncvsel):
         """
         This function filters the features using the selected model.
+        Returns the filtered train and test sets indexes - including the normalized data and the missing values - and the selected features.
         """
         if cvncvsel == "rcv":
             config = self.config_rcv
@@ -858,8 +898,11 @@ class MLPipelines(MachineLearningEstimator):
         return X_train_selected, X_test_selected, num_feature
 
     def _inner_loop(self, train_index, test_index, X, y, avail_thr, i):
-        """This function is used to perform the inner loop of the nested cross-validation
+        """
+        This function is used to perform the inner loop of the nested cross-validation for the selection of the best hyperparameters.
         Note: Return a list because this is the desired output for the parallel loop
+        Runs only on the nested cross-validation function.
+        Supports several inner selection methods.
         """
         opt_grid = "NestedCV"
 
@@ -1055,6 +1098,11 @@ class MLPipelines(MachineLearningEstimator):
         return [results]
 
     def _outer_loop(self, i, avail_thr):
+        """
+        This function is used to make the separations of train and test data of the outer cross validation and initiates the parallilization
+        with respect to the parallelization method.
+        Uses different random seed for each round of the outer cross validation
+        """
         start = time.time()  # Count time of outer loops
 
         # Split the data into train and test
@@ -1129,6 +1177,9 @@ class MLPipelines(MachineLearningEstimator):
 
     # Function to insert new data into the updated database schema
     def _insert_data_into_db(self, scores_dataframe, config):
+        """
+        This function is used to insert new data into the database schema.
+        """
         try:
             credentials_path = os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
@@ -1314,6 +1365,7 @@ class MLPipelines(MachineLearningEstimator):
             connection.close()
             
     def _file_name(self,config):
+        """ Function to set the name of the result nested cv and rcv_accel file with respect to the dataset name """
         default_values = {
             "rounds": 10,
             "n_trials": 100,
@@ -1341,6 +1393,7 @@ class MLPipelines(MachineLearningEstimator):
         return name_add
      
     def _return_csv(self, final_dataset_name, scores_dataframe, extra_metrics=None, filter_csv=None):
+        """ Function to save the results to a csv file """
         results_path = f"{final_dataset_name}_outerloops_results.csv"
         cols_drop = ["Classif_rates", "Clf", "Hyp", "Sel_feat"]
         if extra_metrics is not None:
@@ -1361,6 +1414,7 @@ class MLPipelines(MachineLearningEstimator):
         return statistics_dataframe
     
     def _input_renamed_metrics(self, extra_metrics, results, indices):
+        """ Function to add the renamed metrics to the results dataframe """
         # Metrics dict
         metric_abbreviations = {
             'roc_auc': 'AUC',
@@ -1402,6 +1456,9 @@ class MLPipelines(MachineLearningEstimator):
         return results
 
     def _parameters_check(self, config, main_type):
+        """
+        This function checks the parameters of the pipeline and returns the final parameters config for the class pipeline.
+        """
         # Missing values manipulation
         if config['missing_values_method'] == "drop":
             print(
@@ -1426,7 +1483,7 @@ class MLPipelines(MachineLearningEstimator):
             
         if main_type == 'rncv':    
             if config['outer_scoring'] not in config['extra_metrics']:
-                extra_metrics.insert(0, config['outer_scoring'])
+                config['extra_metrics'].insert(0, config['outer_scoring'])
             elif config['outer_scoring'] in config['extra_metrics'] and config['extra_metrics'].index(config['outer_scoring']) != 0:
                 # Remove it from its current position
                 config['extra_metrics'].remove(config['outer_scoring'])
@@ -1531,11 +1588,73 @@ class MLPipelines(MachineLearningEstimator):
         return_csv: bool = True,
         filter_csv: dict = None
     ):
-        """
-        Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
-        """
+        
         
         # Set parameters for the nested functions of the ncv process
+        """
+        Perform nested cross-validation with optional feature selection and hyperparameter optimization.
+
+        Parameters
+        ----------
+        n_trials : int, optional
+            Number of trials for hyperparameter optimization, by default 100
+        rounds : int, optional
+            Number of outer cross-validation rounds, by default 10
+        exclude : str|list, optional
+            List of classifiers (or string with one classifier) to exclude from the search, by default None
+        search_on : str|list, optional
+            List of classifiers (or string with one classifier) to search for hyperparameters on, by default None
+        info_to_db : bool, optional
+            If True, the results will be added to the database, by default False
+        num_features : int|list, optional
+            Number of features to select, either a single number or a list of numbers, by default None (all features)
+        feature_selection_type : str, optional
+            Type of feature selection, either 'mrmr' or 'kbest' or 'percentile', by default 'mrmr' (if no number of features is provided its not in use)
+        feature_selection_method : str, optional
+            Method of feature selection, either 'chi2', 'mutual_info_classif', 'f_classif', by default 'chi2' (if no number of features is provided its not in use)
+        sfm : bool, optional
+            If True, the feature selection is done using the SelectFromModel class only for the estimators that support it. The rest of the estimators are using the feature_selection_type. By default False
+        freq_feat : int, optional
+            A histogram of the frequency of the (freaq_feat or all if None) features will be plotted, by default None
+        class_balance : str, optional
+            If 'auto', class balancing will be applied using 'smote', 'smote_enn', 'adasyn', 'borderline_smote', or 'tomek'. By default 'auto'
+        inner_scoring : str, optional
+            Scoring metric used in the inner cross-validation loop, by default 'matthews_corrcoef'
+        outer_scoring : str, optional
+            Scoring metric used in the outer cross-validation loop, by default 'matthews_corrcoef'
+        inner_selection_lst : list, optional
+            List of methods for selecting the hyperparameters, by default ['validation_score', 'one_sem', 'gso_1', 'gso_2', 'one_sem_grd']
+            Should be a subset of ['validation_score', 'one_sem', 'gso_1', 'gso_2', 'one_sem_grd'] to be valid.
+        extra_metrics : str|list, optional
+            List of extra metrics (or string with one metric) to calculate, by default ['recall', 'specificity', 'accuracy', 'balanced_accuracy', 
+            'precision', 'f1', 'roc_auc', 'average_precision', 'matthews_corrcoef']
+        plot : str, optional
+            Type of plot to create, either 'box' or 'violin', by default 'box'
+        inner_splits : int, optional
+            Number of splits in the inner cross-validation loop, by default 5
+        outer_splits : int, optional
+            Number of splits in the outer cross-validation loop, by default 5
+        parallel : str, optional
+            Method of parallelization, either 'thread_per_round' or 'freely_parallel', by default 'thread_per_round'
+            If the user needs resources for other procedures, it is recommended to use 'thread_per_round'
+        normalization : str, optional
+            Method of normalization, either 'minmax' or 'std' or None, by default 'minmax'
+        missing_values_method : str, optional
+            Method of handling missing values, either 'median' or 'mean' or '0' or 'drop' or None, by default 'median'
+        return_csv : bool, optional
+            If True, the results will be returned as a CSV file with the statistics of the results, by default True
+        filter_csv : dict, optional
+            Dictionary of filters to apply to the results dataframe and csv, by default None
+
+        Returns
+        -------
+        pandas.DataFrame
+            A dataframe with the results of the nested cross-validation.
+        
+            An updated database if info_to_db is True
+            Plots if plot is not None
+            Histogram of the frequency of the features if freq_feat is not None
+        """
         self.config_rncv = locals()
         self.config_rncv.pop("self", None)
         self.config_rncv = self._parameters_check(self.config_rncv,'rncv')
