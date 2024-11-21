@@ -14,6 +14,12 @@ Notes/*
 # C extensions
 *.so
 
+# Results
+Results_ncv/*
+Results/*
+Final_Model_Results/*
+exl/*
+
 # Distribution / packaging
 .Python
 build/
@@ -129,6 +135,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
+.ai4meta
 .env
 .venv
 env/
@@ -169,3 +176,10 @@ cython_debug/
 #.idea/
 
 .vscode/
+
+# Results
+Results_ncv/
+results/
+
+# Other 
+usr/*
