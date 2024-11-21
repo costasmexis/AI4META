@@ -8,7 +8,7 @@ from datetime import datetime
 from itertools import chain
 from collections import Counter
 from typing import Union
-from copy import copy
+import copy
 
 # Numerical computing
 import numpy as np
@@ -563,14 +563,74 @@ class MLPipelines(MachineLearningEstimator):
         freq_feat=None,
         normalization="minmax",
         missing_values_method="median",
-        name_add=None,
         class_balance = 'auto',
         sfm=False,
         extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1','average_precision','specificity'],
         info_to_db=False,
         filter_csv=None
     ):
-        # Set parameters for the nested functions of the ncv process
+        """
+        Accelerated version of the nested cross-validation process.
+
+        This function performs nested cross-validation faster by using parallel
+        processing. It is the same as the nested cross-validation process, but
+        it uses the joblib library to use multiple cores of the computer.
+
+        Parameters
+        ----------
+        rounds : int, optional
+            Number of rounds to perform the nested cross-validation. The
+            default is 10.
+        exclude : list, optional
+            List of estimators to exclude from the nested cross-validation.
+            The default is None.
+        search_on : str, optional
+            Estimator to search for hyperparameters. The default is None.
+        num_features : int, optional
+            Number of features to select. The default is None.
+        feature_selection_type : str, optional
+            Method to select features. The default is 'mrmr'.
+        return_csv : bool, optional
+            Whether to return the results as a CSV file. The default is True.
+        feature_selection_method : str, optional
+            Method to select features. The default is 'chi2'.
+        plot : str, optional
+            Whether to plot the results. The default is 'box'.
+        scoring : str, optional
+            Scoring method to use. The default is 'matthews_corrcoef'.
+        splits : int, optional
+            Number of splits to perform in the nested cross-validation. The
+            default is 5.
+        normalization : str, optional
+            Method of normalization, either 'minmax' or 'std' or None, by default 'minmax'
+        missing_values_method : str, optional
+            Method of handling missing values, either 'median' or 'mean' or '0' or 'drop' or None, by default 'median'
+        num_features : int|list, optional
+            Number of features to select, either a single number or a list of numbers, by default None (all features)
+        feature_selection_type : str, optional
+            Type of feature selection, either 'mrmr' or 'kbest' or 'percentile', by default 'mrmr' (if no number of features is provided its not in use)
+        feature_selection_method : str, optional
+            Method of feature selection, either 'chi2', 'mutual_info_classif', 'f_classif', by default 'chi2' (if no number of features is provided its not in use)
+        sfm : bool, optional
+            If True, the feature selection is done using the SelectFromModel class only for the estimators that support it. The rest of the estimators are using the feature_selection_type. By default False
+        freq_feat : int, optional
+            A histogram of the frequency of the (freaq_feat or all if None) features will be plotted, by default None
+        class_balance : str, optional
+            If 'auto', class balancing will be applied using 'smote', 'smote_enn', 'adasyn', 'borderline_smote', or 'tomek'. By default 'auto'
+        extra_metrics : list, optional
+            List of extra metrics to calculate. The default is
+            ['roc_auc','accuracy','balanced_accuracy','recall','precision',
+            'f1','average_precision','specificity'].
+        info_to_db : bool, optional
+            Whether to add the results to a database. The default is False.
+        filter_csv : list, optional
+            List of columns to filter from the CSV file. The default is None.
+
+        Returns
+        -------
+        results : pandas dataframe
+            Dataframe with the results of the nested cross-validation.
+        """
         self.config_rcv = locals()
         self.config_rcv.pop("self", None)
         self.config_rcv = self._parameters_check(self.config_rcv,'rcv')
@@ -1597,7 +1657,7 @@ class MLPipelines(MachineLearningEstimator):
         Parameters
         ----------
         n_trials : int, optional
-            Number of trials for hyperparameter optimization, by default 100
+            Number of optuna trials for hyperparameter optimization, by default 100
         rounds : int, optional
             Number of outer cross-validation rounds, by default 10
         exclude : str|list, optional
@@ -1644,7 +1704,7 @@ class MLPipelines(MachineLearningEstimator):
         return_csv : bool, optional
             If True, the results will be returned as a CSV file with the statistics of the results, by default True
         filter_csv : dict, optional
-            Dictionary of filters to apply to the results dataframe and csv, by default None
+            Dictionary of filters to apply to the trials of the results dataframe and csv, by default None
 
         Returns
         -------
