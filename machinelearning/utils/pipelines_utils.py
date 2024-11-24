@@ -1,5 +1,8 @@
 import sklearn
 from sklearn.metrics import get_scorer, confusion_matrix, make_scorer
+from sklearn.metrics import average_precision_score
+from sklearn.metrics import roc_auc_score
+
 import numpy as np
 from sklearn.feature_selection import SelectFromModel
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -24,7 +27,62 @@ import psycopg2
 from psycopg2.extras import execute_values
 from scipy.stats import sem
 import json
+from imblearn.combine import SMOTEENN
+from imblearn.over_sampling import SMOTE, ADASYN, BorderlineSMOTE
+from imblearn.under_sampling import TomekLinks, EditedNearestNeighbours
 
+def _class_balance(X, y, bal_type, i):
+    # Apply class balancing strategies after sfm
+    if bal_type == 'auto':
+        # No balancing is applied; use original X_train_selected and y_train
+        X_train_selected = X
+        y_train = y
+    elif bal_type['class_balance'] == 'smote':
+        X_train_selected, y_train = SMOTE(random_state=i).fit_resample(X, y)
+    elif bal_type['class_balance'] == 'smote_enn':
+        X_train_selected, y_train = SMOTEENN(random_state=i, enn=EditedNearestNeighbours()).fit_resample(X, y)
+    elif bal_type['class_balance'] == 'adasyn':
+        X_train_selected, y_train = ADASYN(random_state=i).fit_resample(X, y)
+    elif bal_type['class_balance'] == 'borderline_smote':
+        X_train_selected, y_train = BorderlineSMOTE(random_state=i).fit_resample(X, y)
+    elif bal_type['class_balance'] == 'tomek':
+        tomek = TomekLinks()
+        X_train_selected, y_train = tomek.fit_resample(X, y)
+    return X_train_selected, y_train
+
+def _calculate_metrics(config, results, clf, X_test, y_test):
+    for metric in config["extra_metrics"]:
+        if metric == 'specificity':
+            results[f"{metric}"].append(
+                _specificity_scorer(clf, X_test, y_test)
+            )
+        else:
+            # print(res_model)
+            try:                                 
+                results[f"{metric}"].append(
+                    get_scorer(metric)(clf, X_test, y_test)
+                )
+            except AttributeError:
+                # Handle metrics like roc_auc and average_precision explicitly
+                if metric in ['roc_auc', 'average_precision']:
+                    if hasattr(clf, 'predict_proba'):
+                        # Use decision_function if available
+                        y_pred = clf.predict_proba(X_test)[:, 1]
+                    else:
+                        raise AttributeError(
+                            f"Model {type(clf).__name__} does not support `predict_proba`, "
+                            f"which are required for {metric}."
+                        )
+
+                    # Compute the score using the selected y_pred
+                    if metric == 'roc_auc':
+                        score = roc_auc_score(y_test, y_pred)
+                    elif metric == 'average_precision':
+                        score = average_precision_score(y_test, y_pred)
+
+                results[f"{metric}"].append(score)
+    return results
+    
 def _scoring_check(scoring: str) -> None:
     """This function is used to check if the scoring string metric is valid"""
     if (scoring not in sklearn.metrics.get_scorer_names()) and (scoring != "specificity"):

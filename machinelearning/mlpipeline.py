@@ -18,11 +18,8 @@ from scipy.stats import sem
 import sklearn
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import get_scorer, confusion_matrix, make_scorer
-from imblearn.combine import SMOTEENN
-from imblearn.over_sampling import SMOTE, ADASYN, BorderlineSMOTE
-from imblearn.under_sampling import TomekLinks, EditedNearestNeighbours
-from sklearn.metrics import average_precision_score
-from sklearn.metrics import roc_auc_score
+# from sklearn.metrics import average_precision_score
+# from sklearn.metrics import roc_auc_score
 
 # Optimization and multiprocessing
 import optuna
@@ -88,7 +85,7 @@ class MLPipelines(MachineLearningEstimator):
                         trials_data, key=lambda x: (x["mean_train_score"]), reverse=True
                     )
 
-            # Find the best train score and set a threshold
+            # Find the best mean train score and set a threshold
             best_train_score = trials_data[0]["mean_train_score"]
             k = 0.85
             train_score_threshold = k * best_train_score
@@ -109,7 +106,7 @@ class MLPipelines(MachineLearningEstimator):
                 trials_data, key=lambda x: (x["mean_test_score"]), reverse=True
             )
 
-            # Find the best validation score and set a threshold
+            # Find the best mean validation score and set a threshold
             best_test_score = trials_data[0]["mean_test_score"]
             k = 0.85
             test_score_threshold = k * best_test_score
@@ -263,16 +260,6 @@ class MLPipelines(MachineLearningEstimator):
 
             # For each outer fold perform
             for train_index, test_index in train_test_indices:
-                # Checks for reliability of parameters
-                if isinstance(self.config_rcv["num_features"], int):
-                    feature_loop = [self.config_rcv["num_features"]]
-                elif isinstance(self.config_rcv["num_features"], list):
-                    feature_loop = self.config_rcv["num_features"]
-                elif self.config_rcv["num_features"] is None:
-                    feature_loop = [self.X.shape[1]]
-                else:
-                    raise ValueError("num_features must be an integer or a list or None")
-
                 # Initialize variables
                 results = {
                     "Classifiers": [],
@@ -283,127 +270,12 @@ class MLPipelines(MachineLearningEstimator):
                     'Samples_counts': [],
                 }
                 results.update({f"{metric}": [] for metric in self.config_rcv["extra_metrics"]})
-
-                # Fold over the number of features
-                for num_feature2_use in feature_loop:
-                    if not self.config_rcv['sfm']:
-                        X_train_selected, X_test_selected, num_feature = self._filter_features(
-                            train_index, test_index, self.X, self.y, num_feature2_use, cvncvsel='rcv'
-                        )
-                        y_train, y_test = self.y[train_index], self.y[test_index]
-                        
-                        # Apply class balancing strategies
-                        if self.config_rcv['class_balance'] == 'auto':
-                            # No balancing is applied; use original X_train_selected and y_train
-                            pass
-                        elif self.config_rcv['class_balance'] == 'smote':
-                            X_train_selected, y_train = SMOTE(random_state=i).fit_resample(X_train_selected, y_train)
-                        elif self.config_rcv['class_balance'] == 'smote_enn':
-                            X_train_selected, y_train = SMOTEENN(random_state=i, enn=EditedNearestNeighbours()).fit_resample(X_train_selected, y_train)
-                        elif self.config_rcv['class_balance'] == 'adasyn':
-                            X_train_selected, y_train = ADASYN(random_state=i ).fit_resample(X_train_selected, y_train)
-                        elif self.config_rcv['class_balance'] == 'borderline_smote':
-                            X_train_selected, y_train = BorderlineSMOTE(random_state=i).fit_resample(X_train_selected, y_train)
-                        elif self.config_rcv['class_balance'] == 'tomek':
-                            tomek = TomekLinks()
-                            X_train_selected, y_train = tomek.fit_resample(X_train_selected, y_train)
-
-                    # Check of the classifiers given list
-                    if self.config_rcv["clfs"] is None:
-                        raise ValueError("No classifier specified.")
-                    else:
-                        for estimator in self.config_rcv["clfs"]:
-                            self.name = estimator
-                            self.estimator = self.available_clfs[estimator]
-                            if (self.config_rcv["sfm"]) and ((estimator == "RandomForestClassifier") or 
-                                        (estimator == "XGBClassifier") or 
-                                        (estimator == 'GradientBoostingClassifier') or 
-                                        (estimator == "LGBMClassifier") or 
-                                        (estimator == "CatBoostClassifier")):
-                                
-                                X_train_selected, X_test_selected, num_feature = self._filter_features(
-                                    train_index, test_index, self.X, self.y, num_feature2_use=self.X.shape[1], cvncvsel='rcv'
-                                )
-                                y_train, y_test = self.y[train_index], self.y[test_index]
-
-                                # Perform feature selection using Select From Model (sfm)
-                                X_train_selected, X_test_selected, num_feature = pipelines_utils._sfm(self.estimator, X_train_selected, X_test_selected, y_train, num_feature2_use)
-
-                                # Apply class balancing strategies after sfm
-                                if self.config_rcv['class_balance'] == 'auto':
-                                    # No balancing is applied; use original X_train_selected and y_train
-                                    pass
-                                elif self.config_rcv['class_balance'] == 'smote':
-                                    X_train_selected, y_train = SMOTE(random_state=i).fit_resample(X_train_selected, y_train)
-                                elif self.config_rcv['class_balance'] == 'smote_enn':
-                                    X_train_selected, y_train = SMOTEENN(random_state=i, enn=EditedNearestNeighbours()).fit_resample(X_train_selected, y_train)
-                                elif self.config_rcv['class_balance'] == 'adasyn':
-                                    X_train_selected, y_train = ADASYN(random_state=i).fit_resample(X_train_selected, y_train)
-                                elif self.config_rcv['class_balance'] == 'borderline_smote':
-                                    X_train_selected, y_train = BorderlineSMOTE(random_state=i).fit_resample(X_train_selected, y_train)
-                                elif self.config_rcv['class_balance'] == 'tomek':
-                                    tomek = TomekLinks()
-                                    X_train_selected, y_train = tomek.fit_resample(X_train_selected, y_train)
-
-                            # Train the model
-                            clf = pipelines_utils._create_model_instance(
-                                    self.name, params=None
-                                )
-                            clf.fit(X_train_selected, y_train)
-                            
-                            # Store the results and apply one_sem method if its selected
-                            results["Estimator"].append(self.name)
-                            for metric in self.config_rcv["extra_metrics"]:
-                                if metric == 'specificity':
-                                    results[f"{metric}"].append(
-                                        pipelines_utils._specificity_scorer(clf, X_test_selected, y_test)
-                                    )
-                                else:
-                                    # For all other metrics, use get_scorer
-                                    results[f"{metric}"].append(
-                                        get_scorer(metric)(clf, X_test_selected, y_test)
-                                    )
-                            y_pred = clf.predict(X_test_selected)
-
-                            # Store the results using different names if feature selection is applied
-                            if num_feature == "full" or num_feature is None:
-                                results["Selected_Features"].append(None)
-                                results["Number_of_Features"].append(X_test_selected.shape[1])
-                                results["Way_of_Selection"].append("full")
-                                results["Classifiers"].append(f"{self.name}")
-                            else:
-                                results["Classifiers"].append(
-                                    f"{self.name}_{self.config_rcv['feature_selection_type']}_{num_feature}"
-                                )
-                                results["Selected_Features"].append(
-                                    X_train_selected.columns.tolist()
-                                )
-                                results["Number_of_Features"].append(num_feature)
-                                if (self.config_rcv["sfm"]) and ((estimator == "RandomForestClassifier") or 
-                                        (estimator == "XGBClassifier") or
-                                        (estimator == 'GradientBoostingClassifier') or
-                                        (estimator == "LGBMClassifier") or
-                                        (estimator == "CatBoostClassifier")):
-                                    results["Way_of_Selection"].append(
-                                        'sfm'
-                                    )
-                                else:
-                                    results["Way_of_Selection"].append(
-                                        self.config_rcv["feature_selection_type"]
-                                    )
-
-                            # Track predictions
-                            samples_counts = np.zeros(len(self.y))
-                            for idx, resu, pred in zip(test_index, y_test, y_pred):
-                                if pred == resu:
-                                    samples_counts[idx] += 1
-
-                            results['Samples_counts'].append(samples_counts)
-
+                
+                results = self._fit_procedure(self.config_rcv, results, train_index, test_index, i)
                 temp_list.append([results])
                 bar.update(split_index)
                 split_index += 1
-                time.sleep(1)
+                time.sleep(0.5)
 
             list_dfs = [item for sublist in temp_list for item in sublist]
             end = time.time()
@@ -518,6 +390,7 @@ class MLPipelines(MachineLearningEstimator):
          # Create results dataframe
         results = []
         df = pd.DataFrame()
+
         for item in list_dfs_flat:
             dataframe = pd.DataFrame(item)
             df = pd.concat([df, dataframe], axis=0)
@@ -597,7 +470,7 @@ class MLPipelines(MachineLearningEstimator):
 
         return statistics_dataframe
             
-    def _filter_features(self, train_index, test_index, X, y, num_feature2_use, cvncvsel):
+    def _filter_features(self, train_index, test_index, X, y, num_feature2_use, config):
         """
         This function filters the features using the selected model.
         Returns the filtered train and test sets indexes - including the normalized data and the missing values - and the selected features.
@@ -626,10 +499,6 @@ class MLPipelines(MachineLearningEstimator):
         num_feature : int or str
             The number of features selected or "full" if all features were selected.
         """
-        if cvncvsel == "rcv":
-            config = self.config_rcv
-        else:
-            config = self.config_rncv
         
         # Find the train and test sets
         X_tr, X_te = X.iloc[train_index], X.iloc[test_index]
@@ -700,7 +569,181 @@ class MLPipelines(MachineLearningEstimator):
 
         return X_train_selected, X_test_selected, num_feature
 
-    def _inner_loop(self, train_index, test_index, X, y, avail_thr, i):
+    def _fit_procedure(self, config, results, train_index, test_index, i, n_jobs=None):
+        # Loop over the number of features
+        for num_feature2_use in config["num_features"]:            
+            X_train_selected, X_test_selected, num_feature = self._filter_features(
+                train_index, test_index, self.X, self.y, num_feature2_use, config
+            )
+            y_train, y_test = self.y[train_index], self.y[test_index]
+            
+            # Apply class balancing strategies
+            X_train_selected, y_train = pipelines_utils._class_balance(X_train_selected, y_train, config["class_balance"], i)
+                                
+            # Check of the classifiers given list
+            if config["clfs"] is None:
+                raise ValueError("No classifier specified.")
+            else:
+                for estimator in config["clfs"]:
+                    # For every estimator find the best hyperparameteres
+                    self.name = estimator
+                    self.estimator = self.available_clfs[estimator]
+                    if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
+                                (estimator == "XGBClassifier") or 
+                                (estimator == 'GradientBoostingClassifier') or 
+                                (estimator == "LGBMClassifier") or 
+                                (estimator == "CatBoostClassifier")):
+                        
+                        X_train_selected, X_test_selected, num_feature = self._filter_features(
+                            train_index, test_index, self.X, self.y, self.X.shape[1], config
+                        )
+                        y_train, y_test = self.y[train_index], self.y[test_index]
+                        # Check of the classifiers given list
+                        # Perform feature selection using Select From Model (sfm)
+                        X_train_selected, X_test_selected, num_feature = pipelines_utils._sfm(self.estimator, X_train_selected, X_test_selected, y_train, num_feature2_use)
+
+                        # Apply class balancing strategies
+                        X_train_selected, y_train = pipelines_utils._class_balance(X_train_selected, y_train, config["class_balance"], i)
+                            
+                    if config['model_selection_type'] == 'rncv':
+                        opt_grid = "NestedCV"
+                        self._set_optuna_verbosity(logging.ERROR)
+                        clf = optuna.integration.OptunaSearchCV(
+                            estimator=self.estimator,
+                            scoring=config["inner_scoring"],
+                            param_distributions=optuna_grid[opt_grid][self.name],
+                            cv=config["inner_cv"],
+                            return_train_score=True,
+                            n_jobs=n_jobs,
+                            verbose=0,
+                            n_trials=config["n_trials"],
+                        )
+                        
+                        clf.fit(X_train_selected, y_train)
+                        
+                        for inner_selection in config["inner_selection_lst"]:
+                            results['Inner_selection_mthd'].append(inner_selection)
+                            # Store the results and apply one_sem method if its selected
+                            results["Estimator"].append(self.name)
+                            if inner_selection == "validation_score":
+                                
+                                res_model = copy.deepcopy(clf)
+
+                                params = res_model.best_params_
+
+                                trials = clf.trials_
+                            else:
+                                if (inner_selection == "one_sem") or (inner_selection == "one_sem_grd"):
+                                    samples = X_train_selected.shape[0]
+                                    # Find simpler parameters with the one_sem method if there are any
+                                    simple_model_params = self._one_sem_model(trials, self.name, samples, config['inner_splits'],inner_selection)
+                                elif (inner_selection == "gso_1") or (inner_selection == "gso_2"):
+                                    # Find parameters with the smaller gap score with gso_1 method if there are any
+                                    simple_model_params = self._gso_model(trials, self.name, config['inner_splits'],inner_selection)
+
+                                params = simple_model_params
+
+                                # Fit the new model
+                                new_params_clf = pipelines_utils._create_model_instance(
+                                    self.name, simple_model_params
+                                )
+                                new_params_clf.fit(X_train_selected, y_train)
+
+                                res_model = copy.deepcopy(new_params_clf)
+                                
+                            results["Hyperparameters"].append(params)
+                            
+                            # Metrics calculations
+                            results = pipelines_utils._calculate_metrics(config, results, res_model, X_test_selected, y_test)
+                            
+                            y_pred = res_model.predict(X_test_selected)
+
+                            # Store the results using different names if feature selection is applied
+                            if num_feature == "full" or num_feature is None:
+                                results["Selected_Features"].append(None)
+                                results["Number_of_Features"].append(X_test_selected.shape[1])
+                                results["Way_of_Selection"].append("full")
+                                results["Classifiers"].append(f"{self.name}")
+                            else:
+                                if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
+                                    (estimator == "XGBClassifier") or 
+                                    (estimator == 'GradientBoostingClassifier') or 
+                                    (estimator == "LGBMClassifier") or 
+                                    (estimator == "CatBoostClassifier")):
+                                    fs_type = "sfm"
+                                else:
+                                    fs_type = config["feature_selection_type"]
+                                results["Classifiers"].append(
+                                    f"{self.name}_{fs_type}_{num_feature}"
+                                )
+                                results["Selected_Features"].append(
+                                    X_train_selected.columns.tolist()
+                                )
+                                results["Number_of_Features"].append(num_feature)
+                                results["Way_of_Selection"].append(
+                                    fs_type
+                                )
+
+                            # Track predictions
+                            samples_counts = np.zeros(len(self.y))
+                            for idx, resu, pred in zip(test_index, y_test, y_pred):
+                                if pred == resu:
+                                    samples_counts[idx] += 1
+
+                            results['Samples_counts'].append(samples_counts)
+                            time.sleep(0.5)
+                            
+                    else:
+                        # Train the model
+                        res_model = pipelines_utils._create_model_instance(
+                                self.name, params=None
+                            )
+                        
+                        res_model.fit(X_train_selected, y_train)
+                        results["Estimator"].append(self.name)
+
+                        # Metrics calculations
+                        results = pipelines_utils._calculate_metrics(config, results, res_model, X_test_selected, y_test)
+                        
+                        y_pred = res_model.predict(X_test_selected)
+
+                        # Store the results using different names if feature selection is applied
+                        if num_feature == "full" or num_feature is None:
+                            results["Selected_Features"].append(None)
+                            results["Number_of_Features"].append(X_test_selected.shape[1])
+                            results["Way_of_Selection"].append("full")
+                            results["Classifiers"].append(f"{self.name}")
+                        else:
+                            if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
+                                (estimator == "XGBClassifier") or 
+                                (estimator == 'GradientBoostingClassifier') or 
+                                (estimator == "LGBMClassifier") or 
+                                (estimator == "CatBoostClassifier")):
+                                fs_type = "sfm"
+                            else:
+                                fs_type = config["feature_selection_type"]
+                            results["Classifiers"].append(
+                                f"{self.name}_{fs_type}_{num_feature}"
+                            )
+                            results["Selected_Features"].append(
+                                X_train_selected.columns.tolist()
+                            )
+                            results["Number_of_Features"].append(num_feature)
+                            results["Way_of_Selection"].append(
+                                fs_type
+                            )
+
+                        # Track predictions
+                        samples_counts = np.zeros(len(self.y))
+                        for idx, resu, pred in zip(test_index, y_test, y_pred):
+                            if pred == resu:
+                                samples_counts[idx] += 1
+
+                        results['Samples_counts'].append(samples_counts)
+                        time.sleep(0.5)
+        return results
+    
+    def _inner_loop(self, train_index, test_index, avail_thr, i):
         """
         This function is used to perform the inner loop of the nested cross-validation for the selection of the best hyperparameters.
         Note: Return a list because this is the desired output for the parallel loop
@@ -726,187 +769,9 @@ class MLPipelines(MachineLearningEstimator):
             'Inner_selection_mthd': [],
         }
         results.update({f"{metric}": [] for metric in self.config_rncv["extra_metrics"]})
-
-        # Loop over the number of features
-        for num_feature2_use in self.config_rncv["num_features"]:            
-            # if not self.config_rncv['sfm']:
-            X_train_selected, X_test_selected, num_feature = self._filter_features(
-                train_index, test_index, X, y, num_feature2_use, cvncvsel='rncv'
-            )
-            y_train, y_test = y[train_index], y[test_index]
-            
-            # Apply class balancing strategies
-            if self.config_rncv['class_balance'] == 'auto':
-                # No balancing is applied; use original X_train_selected and y_train
-                pass
-            elif self.config_rncv['class_balance'] == 'smote':
-                X_train_selected, y_train = SMOTE(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-            elif self.config_rncv['class_balance'] == 'smote_enn':
-                X_train_selected, y_train = SMOTEENN(random_state=i, n_jobs=n_jobs, enn=EditedNearestNeighbours()).fit_resample(X_train_selected, y_train)
-            elif self.config_rncv['class_balance'] == 'adasyn':
-                X_train_selected, y_train = ADASYN(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-            elif self.config_rncv['class_balance'] == 'borderline_smote':
-                X_train_selected, y_train = BorderlineSMOTE(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-            elif self.config_rncv['class_balance'] == 'tomek':
-                tomek = TomekLinks(n_jobs=n_jobs)
-                X_train_selected, y_train = tomek.fit_resample(X_train_selected, y_train)
-                                
-            # Check of the classifiers given list
-            if self.config_rncv["clfs"] is None:
-                raise ValueError("No classifier specified.")
-            else:
-                for estimator in self.config_rncv["clfs"]:
-                    # For every estimator find the best hyperparameteres
-                    self.name = estimator
-                    self.estimator = self.available_clfs[estimator]
-                    if (self.config_rncv["sfm"]) and ((estimator == "RandomForestClassifier") or 
-                                (estimator == "XGBClassifier") or 
-                                (estimator == 'GradientBoostingClassifier') or 
-                                (estimator == "LGBMClassifier") or 
-                                (estimator == "CatBoostClassifier")):
-                        
-                        X_train_selected, X_test_selected, num_feature = self._filter_features(
-                            train_index, test_index, X, y, num_feature2_use=X.shape[1], cvncvsel='rncv'
-                        )
-                        y_train, y_test = y[train_index], y[test_index]
-                        # Check of the classifiers given list
-                        # Perform feature selection using Select From Model (sfm)
-                        X_train_selected, X_test_selected, num_feature = pipelines_utils._sfm(self.estimator, X_train_selected, X_test_selected, y_train, num_feature2_use)
-
-                        # Apply class balancing strategies after sfm
-                        if self.config_rncv['class_balance'] == 'auto':
-                            # No balancing is applied; use original X_train_selected and y_train
-                            pass
-                        elif self.config_rncv['class_balance'] == 'smote':
-                            X_train_selected, y_train = SMOTE(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-                        elif self.config_rncv['class_balance'] == 'smote_enn':
-                            X_train_selected, y_train = SMOTEENN(random_state=i, n_jobs=n_jobs, enn=EditedNearestNeighbours()).fit_resample(X_train_selected, y_train)
-                        elif self.config_rncv['class_balance'] == 'adasyn':
-                            X_train_selected, y_train = ADASYN(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-                        elif self.config_rncv['class_balance'] == 'borderline_smote':
-                            X_train_selected, y_train = BorderlineSMOTE(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-                        elif self.config_rncv['class_balance'] == 'tomek':
-                            tomek = TomekLinks(n_jobs=n_jobs)
-                            X_train_selected, y_train = tomek.fit_resample(X_train_selected, y_train)
-                            
-                    self._set_optuna_verbosity(logging.ERROR)
-                    clf = optuna.integration.OptunaSearchCV(
-                        estimator=self.estimator,
-                        scoring=self.config_rncv["inner_scoring"],
-                        param_distributions=optuna_grid[opt_grid][self.name],
-                        cv=self.config_rncv["inner_cv"],
-                        return_train_score=True,
-                        n_jobs=n_jobs,
-                        verbose=0,
-                        n_trials=self.config_rncv["n_trials"],
-                    )
-                    clf.fit(X_train_selected, y_train)
-           
-                    for inner_selection in self.config_rncv["inner_selection_lst"]:
-                        results['Inner_selection_mthd'].append(inner_selection)
-                        # Store the results and apply one_sem method if its selected
-                        results["Estimator"].append(self.name)
-                        if inner_selection == "validation_score":
-                            
-                            res_model = copy.deepcopy(clf)
-
-                            params = res_model.best_params_
-
-                            trials = clf.trials_
-                        else:
-                            if (inner_selection == "one_sem") or (inner_selection == "one_sem_grd"):
-                                samples = X_train_selected.shape[0]
-                                # Find simpler parameters with the one_sem method if there are any
-                                simple_model_params = self._one_sem_model(trials, self.name, samples, self.config_rncv['inner_splits'],inner_selection)
-                            elif (inner_selection == "gso_1") or (inner_selection == "gso_2"):
-                                # Find parameters with the smaller gap score with gso_1 method if there are any
-                                simple_model_params = self._gso_model(trials, self.name, self.config_rncv['inner_splits'],inner_selection)
-
-                            params = simple_model_params
-
-                            # Fit the new model
-                            new_params_clf = pipelines_utils._create_model_instance(
-                                self.name, simple_model_params
-                            )
-                            new_params_clf.fit(X_train_selected, y_train)
-
-                            res_model = copy.deepcopy(new_params_clf)
-                            
-                        results["Hyperparameters"].append(params)
-
-                        # print('Inner selection finished')
-                        
-                        for metric in self.config_rncv["extra_metrics"]:
-                            if metric == 'specificity':
-                                results[f"{metric}"].append(
-                                    pipelines_utils._specificity_scorer(res_model, X_test_selected, y_test)
-                                )
-                            else:
-                                # print(res_model)
-                                try:                                 
-                                    results[f"{metric}"].append(
-                                        get_scorer(metric)(res_model, X_test_selected, y_test)
-                                    )
-                                except AttributeError:
-                                    # Handle metrics like roc_auc and average_precision explicitly
-                                    if metric in ['roc_auc', 'average_precision']:
-                                        if hasattr(res_model, 'predict_proba'):
-                                            # Use decision_function if available
-                                            y_pred = res_model.predict_proba(X_test_selected)[:, 1]
-                                        elif hasattr(res_model, 'decision_function'):
-                                            # Use predict_proba for metrics requiring probabilities
-                                            y_pred = res_model.decision_function(X_test_selected)
-                                        else:
-                                            raise AttributeError(
-                                                f"Model {type(res_model).__name__} does not support `predict_proba` or `decision_function`, "
-                                                f"which are required for {metric}."
-                                            )
-
-                                        # Compute the score using the selected y_pred
-                                        if metric == 'roc_auc':
-                                            score = roc_auc_score(y_test, y_pred)
-                                        elif metric == 'average_precision':
-                                            score = average_precision_score(y_test, y_pred)
-
-                                    results[f"{metric}"].append(score)
-                        
-                        # print('Before prediction')
-                        y_pred = res_model.predict(X_test_selected)
-
-                        # Store the results using different names if feature selection is applied
-                        if num_feature == "full" or num_feature is None:
-                            results["Selected_Features"].append(None)
-                            results["Number_of_Features"].append(X_test_selected.shape[1])
-                            results["Way_of_Selection"].append("full")
-                            results["Classifiers"].append(f"{self.name}")
-                        else:
-                            if (self.config_rncv["sfm"]) and ((estimator == "RandomForestClassifier") or 
-                                (estimator == "XGBClassifier") or 
-                                (estimator == 'GradientBoostingClassifier') or 
-                                (estimator == "LGBMClassifier") or 
-                                (estimator == "CatBoostClassifier")):
-                                fs_type = "sfm"
-                            else:
-                                fs_type = self.config_rncv["feature_selection_type"]
-                            results["Classifiers"].append(
-                                f"{self.name}_{fs_type}_{num_feature}"
-                            )
-                            results["Selected_Features"].append(
-                                X_train_selected.columns.tolist()
-                            )
-                            results["Number_of_Features"].append(num_feature)
-                            results["Way_of_Selection"].append(
-                                fs_type
-                            )
-
-                        # Track predictions
-                        samples_counts = np.zeros(len(self.y))
-                        for idx, resu, pred in zip(test_index, y_test, y_pred):
-                            if pred == resu:
-                                samples_counts[idx] += 1
-
-                        results['Samples_counts'].append(samples_counts)
-                        time.sleep(0.5)
+        
+        # Start fitting 
+        results = self._fit_procedure(self.config_rncv, results, train_index, test_index, i, n_jobs)
                         
         # Check for consistent list lengths
         lengths = {key: len(val) for key, val in results.items()}
@@ -962,7 +827,7 @@ class MLPipelines(MachineLearningEstimator):
                 # For each outer fold perform the inner loop
                 for train_index, test_index in train_test_indices:
                     results = self._inner_loop(
-                        train_index, test_index, self.X, self.y, avail_thr, i
+                        train_index, test_index, avail_thr, i
                     )
                     temp_list.append(results)
                     bar.update(split_index)
@@ -982,7 +847,7 @@ class MLPipelines(MachineLearningEstimator):
                 # For each outer fold perform the inner loop
                 for train_index, test_index in train_test_indices:
                     results = self._inner_loop(
-                        train_index, test_index, self.X, self.y, avail_thr, i
+                        train_index, test_index, avail_thr, i
                     )
                     temp_list.append(results)
                     bar.update(split_index)
@@ -1015,12 +880,12 @@ class MLPipelines(MachineLearningEstimator):
             )
             
         # Checks for reliability of parameters
-        if isinstance(self.config_rncv["num_features"], int):
-            self.config_rncv["num_features"] = [self.config_rncv["num_features"]]
-        elif isinstance(self.config_rncv["num_features"], list):
+        if isinstance(config["num_features"], int):
+            config["num_features"] = [config["num_features"]]
+        elif isinstance(config["num_features"], list):
             pass
-        elif self.config_rncv["num_features"] is None:
-            self.config_rncv["num_features"] = [self.X.shape[1]]
+        elif config["num_features"] is None:
+            config["num_features"] = [self.X.shape[1]]
         else:
             raise ValueError("num_features must be an integer or a list or None")
         
