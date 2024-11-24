@@ -1,10 +1,8 @@
 # Standard library imports
 import os
 import time
-import json
 import logging
 import multiprocessing
-from typing import Union
 import copy
 from collections import Counter
 from itertools import chain
@@ -17,9 +15,7 @@ from scipy.stats import sem
 # Machine learning and data processing
 import sklearn
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import get_scorer, confusion_matrix, make_scorer
-# from sklearn.metrics import average_precision_score
-# from sklearn.metrics import roc_auc_score
+from sklearn.metrics import get_scorer
 
 # Optimization and multiprocessing
 import optuna
@@ -28,8 +24,10 @@ from joblib import Parallel, delayed
 
 # Custom modules
 from .mlestimator import MachineLearningEstimator
-from .optuna_grid import optuna_grid, hyper_compl
-from .utils import pipelines_utils
+from .utils import balance_fnc, calc_hlp_fnc, inner_selection_fnc
+from .utils import database_fnc, plots_fnc, modinst_fnc
+from .utils import config_fnc
+from .utils.optuna_grid import optuna_grid
 
 # Progress tracking
 import progressbar
@@ -38,175 +36,6 @@ class MLPipelines(MachineLearningEstimator):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
         super().__init__(label, csv_dir, estimator, param_grid)
         self.config_rncv = {}
-
-
-    def _gso_model(self, trials, model_name, splits, method):
-        """
-        This function selects the 'balanced trainned' hyperparameters for the given model.
-        
-        The 'balanced trainned' hyperparameters are defined as the hyperparameters that have
-        the best train or validation score and a score threshold that is 85% of the
-        best score. The hyperparameters are selected by sorting the trials by score
-        and then filtering the trials by those that are above the score threshold.
-        The trial with the smallest average gap score is then selected.
-        
-        Parameters
-        ----------
-        trials : list of optuna.trial.Trial
-            List of trials to select the best hyperparameters from
-        model_name : str
-            Name of the model to select the hyperparameters for
-        splits : int
-            Number of splits to calculate the gap score
-        method : str
-            Method to select the hyperparameters. Can be 'gso_1' or 'gso_2'
-        
-        Returns
-        -------
-        dict
-            The selected hyperparameters as a dictionary
-        """
-        trials_data = [
-            {
-                "params": t.params,
-                "mean_test_score":  t.user_attrs.get('mean_test_score'),
-                "mean_train_score": t.user_attrs.get('mean_train_score'),
-                "test_scores": [t.user_attrs.get(f"split{i}_test_score") for i in range(splits)],
-                "train_scores": [t.user_attrs.get(f"split{i}_train_score") for i in range(splits)],
-                "gap_scores": [np.abs(t.user_attrs.get(f"split{i}_test_score") - t.user_attrs.get(f"split{i}_train_score")) for i in range(splits)]
-            }
-            for t in trials
-            if t.state == optuna.trial.TrialState.COMPLETE
-        ]
-        
-        if method == "gso_1":
-            # Sort trials by mean train score
-            trials_data = sorted(
-                        trials_data, key=lambda x: (x["mean_train_score"]), reverse=True
-                    )
-
-            # Find the best mean train score and set a threshold
-            best_train_score = trials_data[0]["mean_train_score"]
-            k = 0.85
-            train_score_threshold = k * best_train_score
-
-            # Filter trials by those that are above the test score threshold and have a train score not lower than the test score
-            filtered_trials = [t for t in trials_data if (t["mean_train_score"] >= train_score_threshold)]
-
-            # Select the trial with the smallest average gap score
-            if filtered_trials:
-                gso_1_trial = min(filtered_trials, key=lambda x: np.mean(x["gap_scores"]))
-                return gso_1_trial["params"]
-            else:
-                return trials[0].params
-            
-        elif method == "gso_2":
-            # Sort trials by mean test score
-            trials_data = sorted(
-                trials_data, key=lambda x: (x["mean_test_score"]), reverse=True
-            )
-
-            # Find the best mean validation score and set a threshold
-            best_test_score = trials_data[0]["mean_test_score"]
-            k = 0.85
-            test_score_threshold = k * best_test_score
-
-            # Filter trials by those that are above the test score threshold and have a train score not lower than the test score
-            filtered_trials = [t for t in trials_data if (t["mean_train_score"] >= test_score_threshold)]
-
-            # Select the trial with the smallest average gap score
-            if filtered_trials:
-                gso_1_trial = min(filtered_trials, key=lambda x: np.mean(x["gap_scores"]))
-                return gso_1_trial["params"]
-            else:
-                return trials[0].params
-
-    def _one_sem_model(self, trials, model_name, samples, splits, method):
-        """
-        This function selects the 'simplest' hyperparameters for the given model.
-        It does this by selecting the hyperparameters that resulted validation score higher than the SEM threshold and have the smallest complexity score which is calculated differently in each estimator.
-        
-        Parameters
-        ----------
-        trials : list of optuna.trial.Trial
-            List of trials to select from.
-        model_name : str
-            Name of the model to select hyperparameters for.
-        samples : int
-            Number of samples in the dataset.
-        splits : int
-            Number of splits in the cross-validation.
-        method : str
-            Method to use for selecting the simplest hyperparameters. Can be 'one_sem' or 'one_sem_grd'.
-        
-        Returns
-        -------
-        dict
-            Selected hyperparameters.
-        """
-        constraints = hyper_compl[model_name]
-        
-        trials_data = [
-            {
-                "params": t.params,
-                "value": t.values[0],
-                "sem": t.user_attrs["std_test_score"] / (splits**0.5),
-                "train_time": t.user_attrs["mean_fit_time"],
-            }
-            for t in trials
-            if t.state == optuna.trial.TrialState.COMPLETE
-        ]
-        trials_data = sorted(
-            trials_data, key=lambda x: (x["value"], -x["sem"]), reverse=True
-        )
-
-        # Find the best score and its SEM value
-        best_score = trials_data[0]["value"]
-        best_sem_score = trials_data[0]["sem"]
-
-        # Find the scores that will possibly return simpler models with equally good performance
-        sem_threshold = best_score - best_sem_score
-        filtered_trials = [t for t in trials_data if t["value"] >= sem_threshold]
-        if method == "one_sem":
-            # Calculate complexity for each filtered trial
-            for trial in filtered_trials:
-                trial["complexity"] = pipelines_utils._calculate_complexity(trial, model_name, samples)
-
-            # Find the trial with the smallest complexity
-            shorted_trials = sorted(filtered_trials, key=lambda x: (x["complexity"], x["train_time"]))
-            best_trial = shorted_trials[0]
-
-            return best_trial["params"]
-        elif method == "one_sem_grd":
-            # Retrieve the hyperparameter priorities for the given model type
-            hyperparams = hyper_compl[model_name]
-
-            # Iterate over the hyperparameters and their sorting orders
-            for hyper, order in hyperparams.items():
-                # Sort the models based on the current hyperparameter
-                sorted_dict = sorted(filtered_trials, key=lambda x: x['params'][hyper], reverse=not order)
-
-                # Get the best value for the current hyperparameter from the sorted list
-                best_value = sorted_dict[0]['params'][hyper]
-
-                # Find all models with the best value for the current hyperparameter
-                models_with_same_hyper = []
-                for model in sorted_dict:
-                    if model['params'][hyper] == best_value:
-                        models_with_same_hyper.append(model)
-
-                # If there is only one model with the best hyperparameter value, return it
-                if len(models_with_same_hyper) == 1:
-                    filtered_trials = [models_with_same_hyper[0]].copy()
-                    break
-                else:
-                    # Otherwise, update all_models to only include models with the best hyperparameter value
-                    filtered_trials = models_with_same_hyper.copy()
-
-            # If multiple models have the same best hyperparameter values, return the first one
-            simple_model = filtered_trials[0]
-
-            return simple_model["params"]
 
     def _cv_loop(self, i, avail_thr):
         """
@@ -369,7 +198,7 @@ class MLPipelines(MachineLearningEstimator):
         """
         self.config_rcv = locals()
         self.config_rcv.pop("self", None)
-        self.config_rcv = self._parameters_check(self.config_rcv,'rcv')
+        self.config_rcv = calc_hlp_fnc._parameters_check(self.config_rncv,'rcv', self.X, self.csv_dir, self.available_clfs)
         
         # Parallelization
         trial_indices = range(rounds)
@@ -436,7 +265,7 @@ class MLPipelines(MachineLearningEstimator):
                 }
             )
             
-            results = pipelines_utils._input_renamed_metrics(
+            results = calc_hlp_fnc._input_renamed_metrics(
                 self.config_rcv['extra_metrics'], results, indices
             )
                                             
@@ -449,24 +278,24 @@ class MLPipelines(MachineLearningEstimator):
             os.makedirs(results_dir)
 
         # Initiate name
-        final_dataset_name = pipelines_utils._name_outputs(self.config_rcv, results_dir, self.csv_dir)  
+        final_dataset_name = config_fnc._name_outputs(self.config_rcv, results_dir, self.csv_dir)  
           
         # Save the results to a CSV file of the outer scores for each classifier
         if return_csv:
-            statistics_dataframe = pipelines_utils._return_csv(final_dataset_name, scores_dataframe, self.config_rcv['extra_metrics'], filter_csv)
+            statistics_dataframe = config_fnc._return_csv(final_dataset_name, scores_dataframe, self.config_rcv['extra_metrics'], filter_csv)
 
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:
             # Plot histogram of features
-            pipelines_utils._histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rcv['clfs'], self.X.shape[1])
+            plots_fnc._histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rcv['clfs'], self.X.shape[1])
         
         # Plot box or violin plots of the outer cross-validation scores 
         if plot is not None:
-            pipelines_utils._plot(scores_dataframe, plot, self.config_rcv['scoring'], final_dataset_name)
+            plots_fnc._plot(scores_dataframe, plot, self.config_rcv['scoring'], final_dataset_name)
             
         if info_to_db:
             # Add to database
-            pipelines_utils._insert_data_into_db(scores_dataframe, self.config_rcv)
+            database_fnc._insert_data_into_db(scores_dataframe, self.config_rcv)
 
         return statistics_dataframe
             
@@ -570,6 +399,30 @@ class MLPipelines(MachineLearningEstimator):
         return X_train_selected, X_test_selected, num_feature
 
     def _fit_procedure(self, config, results, train_index, test_index, i, n_jobs=None):
+        """
+        This function is used to perform the fit procedure of the machine learning pipeline. 
+        It loops over the number of features and the classifiers given in the config dictionary.
+
+        Parameters
+        ----------
+        config : dict
+            A dictionary containing all the configuration for the machine learning pipeline.
+        results : dict
+            A dictionary containing the results of the machine learning pipeline.
+        train_index : array-like
+            The indices of the training set.
+        test_index : array-like
+            The indices of the testing set.
+        i : int
+            The current round of the cross-validation.
+        n_jobs : int or None
+            The number of jobs to run in parallel. If None, the number of jobs is set to the number of available CPU cores.
+
+        Returns
+        -------
+        results : dict
+            The results of the machine learning pipeline.
+        """
         # Loop over the number of features
         for num_feature2_use in config["num_features"]:            
             X_train_selected, X_test_selected, num_feature = self._filter_features(
@@ -578,7 +431,7 @@ class MLPipelines(MachineLearningEstimator):
             y_train, y_test = self.y[train_index], self.y[test_index]
             
             # Apply class balancing strategies
-            X_train_selected, y_train = pipelines_utils._class_balance(X_train_selected, y_train, config["class_balance"], i)
+            X_train_selected, y_train = balance_fnc._class_balance(X_train_selected, y_train, config["class_balance"], i)
                                 
             # Check of the classifiers given list
             if config["clfs"] is None:
@@ -600,10 +453,10 @@ class MLPipelines(MachineLearningEstimator):
                         y_train, y_test = self.y[train_index], self.y[test_index]
                         # Check of the classifiers given list
                         # Perform feature selection using Select From Model (sfm)
-                        X_train_selected, X_test_selected, num_feature = pipelines_utils._sfm(self.estimator, X_train_selected, X_test_selected, y_train, num_feature2_use)
+                        X_train_selected, X_test_selected, num_feature = calc_hlp_fnc._sfm(self.estimator, X_train_selected, X_test_selected, y_train, num_feature2_use)
 
                         # Apply class balancing strategies
-                        X_train_selected, y_train = pipelines_utils._class_balance(X_train_selected, y_train, config["class_balance"], i)
+                        X_train_selected, y_train = balance_fnc._class_balance(X_train_selected, y_train, config["class_balance"], i)
                             
                     if config['model_selection_type'] == 'rncv':
                         opt_grid = "NestedCV"
@@ -636,15 +489,15 @@ class MLPipelines(MachineLearningEstimator):
                                 if (inner_selection == "one_sem") or (inner_selection == "one_sem_grd"):
                                     samples = X_train_selected.shape[0]
                                     # Find simpler parameters with the one_sem method if there are any
-                                    simple_model_params = self._one_sem_model(trials, self.name, samples, config['inner_splits'],inner_selection)
+                                    simple_model_params = inner_selection_fnc._one_sem_model(trials, self.name, samples, config['inner_splits'],inner_selection)
                                 elif (inner_selection == "gso_1") or (inner_selection == "gso_2"):
                                     # Find parameters with the smaller gap score with gso_1 method if there are any
-                                    simple_model_params = self._gso_model(trials, self.name, config['inner_splits'],inner_selection)
+                                    simple_model_params = inner_selection_fnc._gso_model(trials, self.name, config['inner_splits'],inner_selection)
 
                                 params = simple_model_params
 
                                 # Fit the new model
-                                new_params_clf = pipelines_utils._create_model_instance(
+                                new_params_clf = modinst_fnc._create_model_instance(
                                     self.name, simple_model_params
                                 )
                                 new_params_clf.fit(X_train_selected, y_train)
@@ -654,7 +507,7 @@ class MLPipelines(MachineLearningEstimator):
                             results["Hyperparameters"].append(params)
                             
                             # Metrics calculations
-                            results = pipelines_utils._calculate_metrics(config, results, res_model, X_test_selected, y_test)
+                            results = calc_hlp_fnc._calculate_metrics(config, results, res_model, X_test_selected, y_test)
                             
                             y_pred = res_model.predict(X_test_selected)
 
@@ -695,7 +548,7 @@ class MLPipelines(MachineLearningEstimator):
                             
                     else:
                         # Train the model
-                        res_model = pipelines_utils._create_model_instance(
+                        res_model = modinst_fnc._create_model_instance(
                                 self.name, params=None
                             )
                         
@@ -703,7 +556,7 @@ class MLPipelines(MachineLearningEstimator):
                         results["Estimator"].append(self.name)
 
                         # Metrics calculations
-                        results = pipelines_utils._calculate_metrics(config, results, res_model, X_test_selected, y_test)
+                        results = calc_hlp_fnc._calculate_metrics(config, results, res_model, X_test_selected, y_test)
                         
                         y_pred = res_model.predict(X_test_selected)
 
@@ -859,126 +712,6 @@ class MLPipelines(MachineLearningEstimator):
         # Return the list of dataframes and the time of the outer loop
         print(f"Finished with {i+1} round after {(end-start)/3600:.2f} hours.")
         return list_dfs
-
-    def _parameters_check(self, config, main_type):
-        """
-        This function checks the parameters of the pipeline and returns the final parameters config for the class pipeline.
-        """
-        # Missing values manipulation
-        if config['missing_values_method'] == "drop":
-            print(
-                "Values cannot be dropped at ncv because of inconsistent shapes. \nThe missing values with automaticly replaced by the median of each feature."
-            )
-            config['missing_values_method'] = "median"
-        elif (config['missing_values_method'] != "mean") and (config['missing_values_method'] != "median"):
-            raise ValueError(
-                "The missing values method should be 'mean' or 'median'."
-            )
-        if self.X.isnull().values.any():
-            print(
-                f"Your Dataset contains NaN values. Some estimators does not work with NaN values.\nThe {config['missing_values_method']} method will be used for the missing values manipulation.\n"
-            )
-            
-        # Checks for reliability of parameters
-        if isinstance(config["num_features"], int):
-            config["num_features"] = [config["num_features"]]
-        elif isinstance(config["num_features"], list):
-            pass
-        elif config["num_features"] is None:
-            config["num_features"] = [self.X.shape[1]]
-        else:
-            raise ValueError("num_features must be an integer or a list or None")
-        
-        if config['extra_metrics'] is not None:
-            if type(config['extra_metrics']) is not list:
-                config['extra_metrics'] = [config['extra_metrics']]
-            for metric in config['extra_metrics']:
-                pipelines_utils._scoring_check(metric)
-            
-        if main_type == 'rncv':    
-            if config['outer_scoring'] not in config['extra_metrics']:
-                config['extra_metrics'].insert(0, config['outer_scoring'])
-            elif config['outer_scoring'] in config['extra_metrics'] and config['extra_metrics'].index(config['outer_scoring']) != 0:
-                # Remove it from its current position
-                config['extra_metrics'].remove(config['outer_scoring'])
-                # Insert it at the first index
-                config['extra_metrics'].insert(0, config['outer_scoring'])
-            elif config['outer_scoring'] in config['extra_metrics'] and config['extra_metrics'].index(config['outer_scoring']) == 0:
-                pass
-            else:
-                config['extra_metrics'] = [config['outer_scoring']]
-                
-            config['model_selection_type'] = 'rncv'
-            
-            # Checks for reliability of parameters
-            if (config['inner_scoring'] not in sklearn.metrics.get_scorer_names()) and (config['inner_scoring'] != "specificity"):
-                raise ValueError(
-                    f"Invalid inner scoring metric: {config['inner_scoring']}. Select one of the following: {list(sklearn.metrics.get_scorer_names())} and specificity"
-                )
-            if (config['outer_scoring'] not in sklearn.metrics.get_scorer_names()) and (config['outer_scoring'] != "specificity"):
-                raise ValueError(
-                    f"Invalid outer scoring metric: {config['outer_scoring']}. Select one of the following: {list(sklearn.metrics.get_scorer_names())} and specificity"
-                )
-            for inner_selection in config['inner_selection_lst']:
-                if inner_selection not in ["validation_score", "one_sem", "gso_1", "gso_2","one_sem_grd"]:
-                    raise ValueError(
-                        f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem", "one_sem_grd", "gso_1", "gso_2"]'
-                    )
-                    
-            if (config['parallel'] not in ['thread_per_round', 'freely_parallel']) and (config['parallel'] is not None):
-                raise ValueError(
-                    f'Invalid parallel method: {config["parallel"]}. Select one of the following: ["thread_per_round", "freely_parallel"]'
-            )
-            elif (config['parallel'] == None):
-                config['parallel'] = 'thread_per_round'
-                print('Parallel method is set to "thread_per_round"')
-            
-        else:
-            if config['scoring'] not in config['extra_metrics']:
-                config['extra_metrics'].insert(0, config['scoring'])
-            elif config['scoring'] in config['extra_metrics'] and config['extra_metrics'].index(config['scoring']) != 0:
-                # Remove it from its current position
-                config['extra_metrics'].remove(config['scoring'])
-                # Insert it at the first index
-                config['extra_metrics'].insert(0, config['scoring'])
-            elif config['scoring'] in config['extra_metrics'] and config['extra_metrics'].index(config['scoring']) == 0:
-                pass
-            else:
-                config['extra_metrics'] = [config['scoring']]
-            
-            config['model_selection_type'] = 'rcv'
-            
-            if (config['scoring'] not in sklearn.metrics.get_scorer_names()) and (config['scoring'] != "specificity"):
-                raise ValueError(
-                    f"Invalid scoring metric: {config['scoring']}. Select one of the following: {list(sklearn.metrics.get_scorer_names())} and specificity"
-                )
-                
-        if config['class_balance'] not in ['auto','smote','smote_enn','adasyn','borderline_smote','tomek', None]:
-            raise ValueError("class_balance must be one of the following: 'auto','smote','smotenn','adasyn','borderline_smote','tomek', or None")
-        elif config['class_balance'] == None:
-            config['class_balance'] = 'auto'
-            print('Class balance is set to "auto"')
-            
-        config['dataset_name'] = self.csv_dir
-                
-        # Set available classifiers
-        if config['search_on'] is not None:
-            classes = config['search_on']  # 'search_on' is a list of classifier names as strings
-            exclude_classes = [
-                clf for clf in self.available_clfs.keys() if clf not in classes
-            ]
-        elif config['exclude'] is not None:
-             exclude_classes = (
-                config['exclude']  # 'exclude' is a list of classifier names as strings
-            )
-        else:
-            exclude_classes = []
-
-        # Filter classifiers based on the exclude_classes list
-        clfs = [clf for clf in self.available_clfs.keys() if clf not in exclude_classes]
-        config["clfs"] = clfs
-
-        return config
     
     def nested_cv(
         self,
@@ -1074,7 +807,7 @@ class MLPipelines(MachineLearningEstimator):
         """
         self.config_rncv = locals()
         self.config_rncv.pop("self", None)
-        self.config_rncv = self._parameters_check(self.config_rncv,'rncv')
+        self.config_rncv = calc_hlp_fnc._parameters_check(self.config_rncv,'rncv', self.X, self.csv_dir, self.available_clfs)
 
         # Parallelization
         trial_indices = range(rounds)
@@ -1154,7 +887,7 @@ class MLPipelines(MachineLearningEstimator):
                     }
                 )
 
-                results = pipelines_utils._input_renamed_metrics(
+                results = calc_hlp_fnc._input_renamed_metrics(
                     self.config_rncv['extra_metrics'], results, indices
                 )
                                             
@@ -1167,24 +900,24 @@ class MLPipelines(MachineLearningEstimator):
             os.makedirs(results_dir)
 
         # Name
-        final_dataset_name = pipelines_utils._name_outputs(self.config_rncv, results_dir, self.csv_dir)  
+        final_dataset_name = config_fnc._name_outputs(self.config_rncv, results_dir, self.csv_dir)  
             
         # Save the results to a CSV file of the outer scores for each classifier
         if return_csv:
-            statistics_dataframe = pipelines_utils._return_csv(final_dataset_name, scores_dataframe, self.config_rncv['extra_metrics'], filter_csv)
+            statistics_dataframe = config_fnc._return_csv(final_dataset_name, scores_dataframe, self.config_rncv['extra_metrics'], filter_csv)
             
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:    
             # Plot histogram of features
-            pipelines_utils._histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rncv['clfs'], self.X.shape[1])
+            plots_fnc._histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rncv['clfs'], self.X.shape[1])
 
         
         # Plot box or violin plots of the outer cross-validation scores for all Inner_Selection methods
         if plot is not None:
-            pipelines_utils._plot(scores_dataframe, plot, self.config_rncv['outer_scoring'], final_dataset_name)
+            plots_fnc._plot(scores_dataframe, plot, self.config_rncv['outer_scoring'], final_dataset_name)
             
         if info_to_db:
             # Add to database
-            pipelines_utils._insert_data_into_db(scores_dataframe, self.config_rncv)
+            database_fnc._insert_data_into_db(scores_dataframe, self.config_rncv)
             
         return statistics_dataframe

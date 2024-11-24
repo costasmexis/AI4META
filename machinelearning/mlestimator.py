@@ -37,7 +37,7 @@ from tqdm import tqdm
 from xgboost import XGBClassifier
 import warnings
 
-from .optuna_grid import optuna_grid
+from .utils.optuna_grid import optuna_grid
 
 
 def scoring_check(scoring: str) -> None:
