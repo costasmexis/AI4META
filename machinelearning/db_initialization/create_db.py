@@ -5,8 +5,8 @@ import os
 
 # Construct the path to the credentials JSON file using os
 credentials_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "db_credentials",
+    os.path.dirname(os.path.abspath(__file__)),
+    ".secrets",
     "credentials.json"
 )
 
