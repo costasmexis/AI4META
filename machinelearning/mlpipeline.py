@@ -852,7 +852,6 @@ class MLPipelines(MachineLearningEstimator):
                                     pipelines_utils._specificity_scorer(res_model, X_test_selected, y_test)
                                 )
                             else:
-                                print(res_model)
                                 try:                                 
                                     results[f"{metric}"].append(
                                         get_scorer(metric)(res_model, X_test_selected, y_test)
