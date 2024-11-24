@@ -708,17 +708,7 @@ class MLPipelines(MachineLearningEstimator):
         Supports several inner selection methods.
         """
         opt_grid = "NestedCV"
-
-        # Checks for reliability of parameters
-        if isinstance(self.config_rncv["num_features"], int):
-            feature_loop = [self.config_rncv["num_features"]]
-        elif isinstance(self.config_rncv["num_features"], list):
-            feature_loop = self.config_rncv["num_features"]
-        elif self.config_rncv["num_features"] is None:
-            feature_loop = [X.shape[1]]
-        else:
-            raise ValueError("num_features must be an integer or a list or None")
-
+        
         if self.config_rncv["parallel"] == "thread_per_round":
             n_jobs = 1
         elif self.config_rncv["parallel"] == "freely_parallel":
@@ -738,7 +728,7 @@ class MLPipelines(MachineLearningEstimator):
         results.update({f"{metric}": [] for metric in self.config_rncv["extra_metrics"]})
 
         # Loop over the number of features
-        for num_feature2_use in feature_loop:            
+        for num_feature2_use in self.config_rncv["num_features"]:            
             # if not self.config_rncv['sfm']:
             X_train_selected, X_test_selected, num_feature = self._filter_features(
                 train_index, test_index, X, y, num_feature2_use, cvncvsel='rncv'
@@ -852,6 +842,7 @@ class MLPipelines(MachineLearningEstimator):
                                     pipelines_utils._specificity_scorer(res_model, X_test_selected, y_test)
                                 )
                             else:
+                                # print(res_model)
                                 try:                                 
                                     results[f"{metric}"].append(
                                         get_scorer(metric)(res_model, X_test_selected, y_test)
@@ -1022,6 +1013,16 @@ class MLPipelines(MachineLearningEstimator):
             print(
                 f"Your Dataset contains NaN values. Some estimators does not work with NaN values.\nThe {config['missing_values_method']} method will be used for the missing values manipulation.\n"
             )
+            
+        # Checks for reliability of parameters
+        if isinstance(self.config_rncv["num_features"], int):
+            self.config_rncv["num_features"] = [self.config_rncv["num_features"]]
+        elif isinstance(self.config_rncv["num_features"], list):
+            pass
+        elif self.config_rncv["num_features"] is None:
+            self.config_rncv["num_features"] = [self.X.shape[1]]
+        else:
+            raise ValueError("num_features must be an integer or a list or None")
         
         if config['extra_metrics'] is not None:
             if type(config['extra_metrics']) is not list:
