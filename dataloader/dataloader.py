@@ -70,6 +70,8 @@ class DataLoader:
         elif method in ["mean", "median", "0"]:
             fill_value = 0 if method == "0" else getattr(data, method)()
             data.fillna(fill_value, inplace=True)
+        elif method == None:
+            pass
         else:
             raise Exception("Unsupported missing values method.")
         
@@ -105,6 +107,8 @@ class DataLoader:
                 X_test = pd.DataFrame(
                     self.scaler.transform(X_test), columns=X_test.columns
                 )
+        elif method == None:
+            pass
         else:
             raise Exception("Unsupported normalization method.")
         if train_test_set:

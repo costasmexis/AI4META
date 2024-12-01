@@ -5,8 +5,8 @@ import os
 
 # Construct the path to the credentials JSON file using os
 credentials_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "db_credentials",
+    os.path.dirname(os.path.abspath(__file__)),
+    ".secrets",
     "credentials.json"
 )
 
@@ -110,7 +110,8 @@ create_tables_sql = [
         performance_id INT REFERENCES Performance_Metrics(performance_id) ON DELETE CASCADE,
         sample_rate_id INT REFERENCES Samples_Classification_Rates(sample_rate_id) ON DELETE CASCADE,
         shap_values_id INT REFERENCES Shap_Values(shap_values_id) ON DELETE CASCADE,
-        model_selection_type VARCHAR(255) 
+        model_selection_type VARCHAR(255),
+        feature_count_ids JSONB
     );
     """,
     """

@@ -1,333 +1,61 @@
-import optuna
+# Standard library imports
+import os
+import time
+import logging
+import multiprocessing
+import copy
+from collections import Counter
+from itertools import chain
+
+# Numerical computing
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
-import matplotlib.pyplot as plt
-import sklearn
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from lightgbm import LGBMClassifier
-from sklearn.gaussian_process import GaussianProcessClassifier
-from catboost import CatBoostClassifier
-from sklearn.model_selection import StratifiedKFold
-from sklearn.naive_bayes import GaussianNB
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC
-from xgboost import XGBClassifier
-from sklearn.metrics import get_scorer, confusion_matrix, make_scorer
-from sklearn.feature_selection import SelectFromModel
-
-from .mlestimator import MachineLearningEstimator
-from .optuna_grid import optuna_grid, hyper_compl
-import os
-import logging
 from scipy.stats import sem
-from itertools import chain
-import time
+
+# Machine learning and data processing
+import sklearn
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import get_scorer
+
+# Optimization and multiprocessing
+import optuna
 from threadpoolctl import threadpool_limits
 from joblib import Parallel, delayed
-import multiprocessing
-from collections import Counter
+
+# Custom modules
+from .mlestimator import MachineLearningEstimator
+from .utils import balance_fnc, calc_hlp_fnc, inner_selection_fnc
+from .utils import database_fnc, plots_fnc, modinst_fnc
+from .utils import config_fnc
+from .utils.optuna_grid import optuna_grid
+
+# Progress tracking
 import progressbar
-
-import psycopg2
-from psycopg2.extras import execute_values
-import json
-from imblearn.combine import SMOTEENN
-from imblearn.over_sampling import SMOTE, ADASYN, BorderlineSMOTE
-from imblearn.under_sampling import TomekLinks, EditedNearestNeighbours
-from typing import Union
-import copy
-from datetime import datetime
-
-
-def scoring_check(scoring: str) -> None:
-    if (scoring not in sklearn.metrics.get_scorer_names()) and (scoring != "specificity"):
-        raise ValueError(
-            f"Invalid scoring metric: {scoring}. Select one of the following: {list(sklearn.metrics.get_scorer_names())} and specificity"
-        )
-
 
 class MLPipelines(MachineLearningEstimator):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
         super().__init__(label, csv_dir, estimator, param_grid)
         self.config_rncv = {}
 
-    def _specificity_scorer(self, estimator, X, y):
-        y_pred = estimator.predict(X)
-        tn, fp, fn, tp = confusion_matrix(y, y_pred).ravel()
-        specificity = tn / (tn + fp)
-        return specificity
-    def _set_result_csv_name(self, csv_dir):
-        """This function is used to set the name of the result nested cv file with respect to the dataset name"""
-        data_name = os.path.basename(csv_dir).split(".")[0]
-        return data_name
-    
-    def _bootstrap_ci(self, data, type='median'):
-        ms = []
-        for _ in range(1000):
-            sample = np.random.choice(data, size=len(data), replace=True)
-            if type == 'median':
-                ms.append(np.median(sample))
-            elif type == 'mean':
-                ms.append(np.mean(sample))
-        lower_bound = np.percentile(ms, (1 - 0.95) / 2 * 100)
-        upper_bound = np.percentile(ms, (1 + 0.95) / 2 * 100)
-        return lower_bound, upper_bound
-
-    def _create_model_instance(self, model_name, params):
-        """This function creates a model instance with the given parameters
-        It is used in order to prevent fittinf of an already fitted model from previous runs"""
-
-        if model_name == "RandomForestClassifier":
-            if params == None:
-                return RandomForestClassifier()
-            else:
-                return RandomForestClassifier(**params)
-        elif model_name == "LogisticRegression":
-            if params == None:
-                return LogisticRegression()
-            else:
-                return LogisticRegression(**params)
-        elif model_name == "XGBClassifier":
-            if params == None:
-                return XGBClassifier()
-            else:
-                return XGBClassifier(**params)
-        elif model_name == "LGBMClassifier":
-            if params == None:
-                return LGBMClassifier(verbose=-1)
-            else:
-                return LGBMClassifier(**params)
-        elif model_name == "CatBoostClassifier":
-            if params == None:
-                return CatBoostClassifier(verbose=0)
-            else:
-                return CatBoostClassifier(**params)
-        elif model_name == "SVC":
-            if params == None:
-                return SVC()
-            else:
-                return SVC(**params)
-        elif model_name == "KNeighborsClassifier":
-            if params == None:
-                return KNeighborsClassifier()
-            else:
-                return KNeighborsClassifier(**params)
-        elif model_name == "LinearDiscriminantAnalysis":
-            if params == None:
-                return LinearDiscriminantAnalysis()
-            else:
-                return LinearDiscriminantAnalysis(**params)
-        elif model_name == "GaussianNB":
-            if params == None:
-                return GaussianNB()
-            else:
-                return GaussianNB(**params)
-        elif model_name == "GradientBoostingClassifier":
-            if params == None:
-                return GradientBoostingClassifier()
-            else:
-                return GradientBoostingClassifier(**params)
-        elif model_name == "GaussianProcessClassifier":
-            if params == None:
-                return GaussianProcessClassifier()
-            else:
-                return GaussianProcessClassifier(**params)
-        elif model_name == "ElasticNet":
-            if params == None:
-                return LogisticRegression(penalty="elasticnet", solver="saga", l1_ratio=0.5)
-            else:
-                return LogisticRegression(**params)
-        else:
-            raise ValueError(f"Unsupported model: {model_name}")
-
-    def _gso_model(self, trials, model_name, splits, method):
-        """This function selects the 'simplest' hyperparameters for the given model."""
-        trials_data = [
-            {
-                "params": t.params,
-                "mean_test_score":  t.user_attrs.get('mean_test_score'),
-                "mean_train_score": t.user_attrs.get('mean_train_score'),
-                "test_scores": [t.user_attrs.get(f"split{i}_test_score") for i in range(splits)],
-                "train_scores": [t.user_attrs.get(f"split{i}_train_score") for i in range(splits)],
-                "gap_scores": [np.abs(t.user_attrs.get(f"split{i}_test_score") - t.user_attrs.get(f"split{i}_train_score")) for i in range(splits)]
-            }
-            for t in trials
-            if t.state == optuna.trial.TrialState.COMPLETE
-        ]
-        
-        if method == "gso_1":
-            # Sort trials by mean train score
-            trials_data = sorted(
-                        trials_data, key=lambda x: (x["mean_train_score"]), reverse=True
-                    )
-
-            # Find the best train score and set a threshold
-            best_train_score = trials_data[0]["mean_train_score"]
-            k = 0.85
-            train_score_threshold = k * best_train_score
-
-            # Filter trials by those that are above the test score threshold and have a train score not lower than the test score
-            filtered_trials = [t for t in trials_data if (t["mean_train_score"] >= train_score_threshold)]
-
-            # Select the trial with the smallest average gap score
-            if filtered_trials:
-                gso_1_trial = min(filtered_trials, key=lambda x: np.mean(x["gap_scores"]))
-                return gso_1_trial["params"]
-            else:
-                return trials[0].params
-            
-        elif method == "gso_2":
-            # Sort trials by mean test score
-            trials_data = sorted(
-                trials_data, key=lambda x: (x["mean_test_score"]), reverse=True
-            )
-
-            # Find the best validation score and set a threshold
-            best_test_score = trials_data[0]["mean_test_score"]
-            k = 0.85
-            test_score_threshold = k * best_test_score
-
-            # Filter trials by those that are above the test score threshold and have a train score not lower than the test score
-            filtered_trials = [t for t in trials_data if (t["mean_train_score"] >= test_score_threshold)]
-
-            # Select the trial with the smallest average gap score
-            if filtered_trials:
-                gso_1_trial = min(filtered_trials, key=lambda x: np.mean(x["gap_scores"]))
-                return gso_1_trial["params"]
-            else:
-                return trials[0].params
-
-    def _one_sem_model(self, trials, model_name, samples, splits, method):
-        """This function selects the 'simplest' hyperparameters for the given model."""
-        constraints = hyper_compl[model_name]
-        
-        trials_data = [
-            {
-                "params": t.params,
-                "value": t.values[0],
-                "sem": t.user_attrs["std_test_score"] / (splits**0.5),
-                "train_time": t.user_attrs["mean_fit_time"],
-            }
-            for t in trials
-            if t.state == optuna.trial.TrialState.COMPLETE
-        ]
-        trials_data = sorted(
-            trials_data, key=lambda x: (x["value"], -x["sem"]), reverse=True
-        )
-
-        # Find the best score and its SEM value
-        best_score = trials_data[0]["value"]
-        best_sem_score = trials_data[0]["sem"]
-
-        # Find the scores that will possibly return simpler models with equally good performance
-        sem_threshold = best_score - best_sem_score
-        filtered_trials = [t for t in trials_data if t["value"] >= sem_threshold]
-        if method == "one_sem":
-            def calculate_complexity(trial, model_name, samples):
-                params = trial["params"]
-                if model_name in ['RandomForestClassifier', 'XGBClassifier', 'GradientBoostingClassifier', 'LGBMClassifier']:
-                    max_depth = params["max_depth"]
-                    if model_name == 'RandomForestClassifier' or model_name == 'GradientBoostingClassifier':
-                        actual_depth = min((samples / params["min_samples_leaf"]), max_depth)
-                    elif model_name == 'XGBClassifier':
-                        actual_depth = max_depth  # Assuming XGBClassifier does not use min_samples_leaf
-                    elif model_name == 'LGBMClassifier':
-                        actual_depth = min((samples / params["min_child_samples"]), max_depth)
-                    complexity = params["n_estimators"] * (2 ** (actual_depth - 1))
-                elif model_name == 'CatBoostClassifier':
-                    max_depth = params["depth"]
-                    actual_depth = min((samples / params["min_data_in_leaf"]), max_depth)
-                    complexity = params["n_estimators"] * (2 ** (actual_depth - 1))#*params["iterations"]
-                elif model_name == 'LogisticRegression' or model_name == 'ElasticNet':
-                    complexity = params["C"] * params["max_iter"]
-                elif model_name == 'SVC':
-                    if params["kernel"] == 'poly':
-                        complexity = params["C"] * params["degree"]
-                    else:
-                        complexity = params["C"]
-                elif model_name == 'KNeighborsClassifier':
-                    complexity = params["leaf_size"]
-                elif model_name == 'LinearDiscriminantAnalysis':
-                    complexity = params["shrinkage"]
-                elif model_name == 'GaussianNB':
-                    complexity = params["var_smoothing"]
-                elif model_name == 'GaussianProcessClassifier':
-                    complexity = params["max_iter_predict"]*params["n_restarts_optimizer"]
-                else:
-                    complexity = float('inf')  # If model not recognized, set high complexity
-                return complexity
-
-            # Calculate complexity for each filtered trial
-            for trial in filtered_trials:
-                trial["complexity"] = calculate_complexity(trial, model_name, samples)
-
-            # Find the trial with the smallest complexity
-            shorted_trials = sorted(filtered_trials, key=lambda x: (x["complexity"], x["train_time"]))
-            best_trial = shorted_trials[0]
-
-            return best_trial["params"]
-        elif method == "one_sem_grd":
-            # Retrieve the hyperparameter priorities for the given model type
-            hyperparams = hyper_compl[model_name]
-
-            # Iterate over the hyperparameters and their sorting orders
-            for hyper, order in hyperparams.items():
-                # Sort the models based on the current hyperparameter
-                sorted_dict = sorted(filtered_trials, key=lambda x: x['params'][hyper], reverse=not order)
-
-                # Get the best value for the current hyperparameter from the sorted list
-                best_value = sorted_dict[0]['params'][hyper]
-
-                # Find all models with the best value for the current hyperparameter
-                models_with_same_hyper = []
-                for model in sorted_dict:
-                    if model['params'][hyper] == best_value:
-                        models_with_same_hyper.append(model)
-
-                # If there is only one model with the best hyperparameter value, return it
-                if len(models_with_same_hyper) == 1:
-                    filtered_trials = [models_with_same_hyper[0]].copy()
-                    break
-                else:
-                    # Otherwise, update all_models to only include models with the best hyperparameter value
-                    filtered_trials = models_with_same_hyper.copy()
-
-            # If multiple models have the same best hyperparameter values, return the first one
-            simple_model = filtered_trials[0]
-
-            return simple_model["params"]
-          
-    def _sfm(self, estimator, X_train, X_test, y_train, num_feature2_use=None, threshold="mean"):
-        """
-        Select features using SelectFromModel with either a predefined number of features 
-        or using the threshold if num_feature2_use is not provided.
-        """
-
-        # Ensure the model is fitted
-        estimator.fit(X_train, y_train)
-        if  num_feature2_use is None:
-            # Create the SelectFromModel object using the provided threshold
-            sfm = SelectFromModel(estimator, threshold=threshold)
-        else: 
-            sfm = SelectFromModel(estimator, max_features=num_feature2_use)
-
-        # Fit the model to select important features
-        sfm.fit(X_train, y_train)
-        
-        # get a boolean list the selected features
-        selected_features = sfm.get_support(indices=True)
-        selected_columns = X_train.columns[selected_features].to_list()
-        
-        # Select the features based on either the threshold or top num_feature2_use
-        X_train_selected = X_train[selected_columns]
-        X_test_selected = X_test[selected_columns]
-
-        return X_train_selected, X_test_selected, num_feature2_use
-    
     def _cv_loop(self, i, avail_thr):
+        """
+        This function is used to perform the rounds loop of the cross-validation using only the default parameters. 
+        It is useful for first insights about the estimators performance and is fast for big datasets.
+        It is used only in rcv_accel function.
+
+        Parameters
+        ----------
+        i : int
+            The current round of the cross-validation.
+
+        avail_thr : int
+            The number of available threads for parallelization.
+
+        Returns
+        -------
+        list_dfs : list of pandas DataFrames
+            A list of dataframes containing the results of the cross-validation.
+        """
         start = time.time()  # Count time of outer loops
         
         # Split the data into train and test
@@ -361,17 +89,6 @@ class MLPipelines(MachineLearningEstimator):
 
             # For each outer fold perform
             for train_index, test_index in train_test_indices:
-
-                # Checks for reliability of parameters
-                if isinstance(self.config_rcv["num_features"], int):
-                    feature_loop = [self.config_rcv["num_features"]]
-                elif isinstance(self.config_rcv["num_features"], list):
-                    feature_loop = self.config_rcv["num_features"]
-                elif self.config_rcv["num_features"] is None:
-                    feature_loop = [self.X.shape[1]]
-                else:
-                    raise ValueError("num_features must be an integer or a list or None")
-
                 # Initialize variables
                 results = {
                     "Classifiers": [],
@@ -382,127 +99,12 @@ class MLPipelines(MachineLearningEstimator):
                     'Samples_counts': [],
                 }
                 results.update({f"{metric}": [] for metric in self.config_rcv["extra_metrics"]})
-
-                # Fold over the number of features
-                for num_feature2_use in feature_loop:
-                    if not self.config_rcv['sfm']:
-                        X_train_selected, X_test_selected, num_feature = self._filter_features(
-                            train_index, test_index, self.X, self.y, num_feature2_use, cvncvsel='rcv'
-                        )
-                        y_train, y_test = self.y[train_index], self.y[test_index]
-                        
-                        # Apply class balancing strategies
-                        if self.config_rcv['class_balance'] == 'auto':
-                            # No balancing is applied; use original X_train_selected and y_train
-                            pass
-                        elif self.config_rcv['class_balance'] == 'smote':
-                            X_train_selected, y_train = SMOTE(random_state=i).fit_resample(X_train_selected, y_train)
-                        elif self.config_rcv['class_balance'] == 'smote_enn':
-                            X_train_selected, y_train = SMOTEENN(random_state=i, enn=EditedNearestNeighbours()).fit_resample(X_train_selected, y_train)
-                        elif self.config_rcv['class_balance'] == 'adasyn':
-                            X_train_selected, y_train = ADASYN(random_state=i ).fit_resample(X_train_selected, y_train)
-                        elif self.config_rcv['class_balance'] == 'borderline_smote':
-                            X_train_selected, y_train = BorderlineSMOTE(random_state=i).fit_resample(X_train_selected, y_train)
-                        elif self.config_rcv['class_balance'] == 'tomek':
-                            tomek = TomekLinks()
-                            X_train_selected, y_train = tomek.fit_resample(X_train_selected, y_train)
-
-                    # Check of the classifiers given list
-                    if self.config_rcv["clfs"] is None:
-                        raise ValueError("No classifier specified.")
-                    else:
-                        for estimator in self.config_rcv["clfs"]:
-                            self.name = estimator
-                            self.estimator = self.available_clfs[estimator]
-                            if (self.config_rcv["sfm"]) and ((estimator == "RandomForestClassifier") or 
-                                        (estimator == "XGBClassifier") or 
-                                        (estimator == 'GradientBoostingClassifier') or 
-                                        (estimator == "LGBMClassifier") or 
-                                        (estimator == "CatBoostClassifier")):
-                                
-                                X_train_selected, X_test_selected, num_feature = self._filter_features(
-                                    train_index, test_index, self.X, self.y, num_feature2_use=self.X.shape[1], cvncvsel='rcv'
-                                )
-                                y_train, y_test = self.y[train_index], self.y[test_index]
-
-                                # Perform feature selection using Select From Model (sfm)
-                                X_train_selected, X_test_selected, num_feature = self._sfm(self.estimator, X_train_selected, X_test_selected, y_train, num_feature2_use)
-
-                                # Apply class balancing strategies after sfm
-                                if self.config_rcv['class_balance'] == 'auto':
-                                    # No balancing is applied; use original X_train_selected and y_train
-                                    pass
-                                elif self.config_rcv['class_balance'] == 'smote':
-                                    X_train_selected, y_train = SMOTE(random_state=i).fit_resample(X_train_selected, y_train)
-                                elif self.config_rcv['class_balance'] == 'smote_enn':
-                                    X_train_selected, y_train = SMOTEENN(random_state=i, enn=EditedNearestNeighbours()).fit_resample(X_train_selected, y_train)
-                                elif self.config_rcv['class_balance'] == 'adasyn':
-                                    X_train_selected, y_train = ADASYN(random_state=i).fit_resample(X_train_selected, y_train)
-                                elif self.config_rcv['class_balance'] == 'borderline_smote':
-                                    X_train_selected, y_train = BorderlineSMOTE(random_state=i).fit_resample(X_train_selected, y_train)
-                                elif self.config_rcv['class_balance'] == 'tomek':
-                                    tomek = TomekLinks()
-                                    X_train_selected, y_train = tomek.fit_resample(X_train_selected, y_train)
-
-                            # Train the model
-                            clf = self._create_model_instance(
-                                    self.name, params=None
-                                )
-                            clf.fit(X_train_selected, y_train)
-                            
-                            # Store the results and apply one_sem method if its selected
-                            results["Estimator"].append(self.name)
-                            for metric in self.config_rcv["extra_metrics"]:
-                                if metric == 'specificity':
-                                    results[f"{metric}"].append(
-                                        self._specificity_scorer(clf, X_test_selected, y_test)
-                                    )
-                                else:
-                                    # For all other metrics, use get_scorer
-                                    results[f"{metric}"].append(
-                                        get_scorer(metric)(clf, X_test_selected, y_test)
-                                    )
-                            y_pred = clf.predict(X_test_selected)
-
-                            # Store the results using different names if feature selection is applied
-                            if num_feature == "full" or num_feature is None:
-                                results["Selected_Features"].append(None)
-                                results["Number_of_Features"].append(X_test_selected.shape[1])
-                                results["Way_of_Selection"].append("full")
-                                results["Classifiers"].append(f"{self.name}")
-                            else:
-                                results["Classifiers"].append(
-                                    f"{self.name}_{self.config_rcv['feature_selection_type']}_{num_feature}"
-                                )
-                                results["Selected_Features"].append(
-                                    X_train_selected.columns.tolist()
-                                )
-                                results["Number_of_Features"].append(num_feature)
-                                if (self.config_rcv["sfm"]) and ((estimator == "RandomForestClassifier") or 
-                                        (estimator == "XGBClassifier") or
-                                        (estimator == 'GradientBoostingClassifier') or
-                                        (estimator == "LGBMClassifier") or
-                                        (estimator == "CatBoostClassifier")):
-                                    results["Way_of_Selection"].append(
-                                        'sfm'
-                                    )
-                                else:
-                                    results["Way_of_Selection"].append(
-                                        self.config_rcv["feature_selection_type"]
-                                    )
-
-                            # Track predictions
-                            samples_counts = np.zeros(len(self.y))
-                            for idx, resu, pred in zip(test_index, y_test, y_pred):
-                                if pred == resu:
-                                    samples_counts[idx] += 1
-
-                            results['Samples_counts'].append(samples_counts)
-
+                
+                results = self._fit_procedure(self.config_rcv, results, train_index, test_index, i)
                 temp_list.append([results])
                 bar.update(split_index)
                 split_index += 1
-                time.sleep(1)
+                time.sleep(0.5)
 
             list_dfs = [item for sublist in temp_list for item in sublist]
             end = time.time()
@@ -526,17 +128,77 @@ class MLPipelines(MachineLearningEstimator):
         freq_feat=None,
         normalization="minmax",
         missing_values_method="median",
-        name_add=None,
         class_balance = 'auto',
         sfm=False,
         extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1','average_precision','specificity'],
         info_to_db=False,
         filter_csv=None
     ):
-        # Set parameters for the nested functions of the ncv process
+        """
+        Accelerated version of the nested cross-validation process.
+
+        This function performs nested cross-validation faster by using parallel
+        processing. It is the same as the nested cross-validation process, but
+        it uses the joblib library to use multiple cores of the computer.
+
+        Parameters
+        ----------
+        rounds : int, optional
+            Number of rounds to perform the nested cross-validation. The
+            default is 10.
+        exclude : list, optional
+            List of estimators to exclude from the nested cross-validation.
+            The default is None.
+        search_on : str, optional
+            Estimator to search for hyperparameters. The default is None.
+        num_features : int, optional
+            Number of features to select. The default is None.
+        feature_selection_type : str, optional
+            Method to select features. The default is 'mrmr'.
+        return_csv : bool, optional
+            Whether to return the results as a CSV file. The default is True.
+        feature_selection_method : str, optional
+            Method to select features. The default is 'chi2'.
+        plot : str, optional
+            Whether to plot the results. The default is 'box'.
+        scoring : str, optional
+            Scoring method to use. The default is 'matthews_corrcoef'.
+        splits : int, optional
+            Number of splits to perform in the nested cross-validation. The
+            default is 5.
+        normalization : str, optional
+            Method of normalization, either 'minmax' or 'std' or None, by default 'minmax'
+        missing_values_method : str, optional
+            Method of handling missing values, either 'median' or 'mean' or '0' or 'drop' or None, by default 'median'
+        num_features : int|list, optional
+            Number of features to select, either a single number or a list of numbers, by default None (all features)
+        feature_selection_type : str, optional
+            Type of feature selection, either 'mrmr' or 'kbest' or 'percentile', by default 'mrmr' (if no number of features is provided its not in use)
+        feature_selection_method : str, optional
+            Method of feature selection, either 'chi2', 'mutual_info_classif', 'f_classif', by default 'chi2' (if no number of features is provided its not in use)
+        sfm : bool, optional
+            If True, the feature selection is done using the SelectFromModel class only for the estimators that support it. The rest of the estimators are using the feature_selection_type. By default False
+        freq_feat : int, optional
+            A histogram of the frequency of the (freaq_feat or all if None) features will be plotted, by default None
+        class_balance : str, optional
+            If 'auto', class balancing will be applied using 'smote', 'smote_enn', 'adasyn', 'borderline_smote', or 'tomek'. By default 'auto'
+        extra_metrics : list, optional
+            List of extra metrics to calculate. The default is
+            ['roc_auc','accuracy','balanced_accuracy','recall','precision',
+            'f1','average_precision','specificity'].
+        info_to_db : bool, optional
+            Whether to add the results to a database. The default is False.
+        filter_csv : list, optional
+            List of columns to filter from the CSV file. The default is None.
+
+        Returns
+        -------
+        results : pandas dataframe
+            Dataframe with the results of the nested cross-validation.
+        """
         self.config_rcv = locals()
         self.config_rcv.pop("self", None)
-        self.config_rcv = self._parameters_check(self.config_rcv,'rcv')
+        self.config_rcv = calc_hlp_fnc._parameters_check(self.config_rncv,'rcv', self.X, self.csv_dir, self.available_clfs)
         
         # Parallelization
         trial_indices = range(rounds)
@@ -557,6 +219,7 @@ class MLPipelines(MachineLearningEstimator):
          # Create results dataframe
         results = []
         df = pd.DataFrame()
+
         for item in list_dfs_flat:
             dataframe = pd.DataFrame(item)
             df = pd.concat([df, dataframe], axis=0)
@@ -602,7 +265,7 @@ class MLPipelines(MachineLearningEstimator):
                 }
             )
             
-            results = self._input_renamed_metrics(
+            results = calc_hlp_fnc._input_renamed_metrics(
                 self.config_rcv['extra_metrics'], results, indices
             )
                                             
@@ -615,178 +278,56 @@ class MLPipelines(MachineLearningEstimator):
             os.makedirs(results_dir)
 
         # Initiate name
-        final_dataset_name = self._name_outputs(self.config_rcv, results_dir)  
+        final_dataset_name = config_fnc._name_outputs(self.config_rcv, results_dir, self.csv_dir)  
           
         # Save the results to a CSV file of the outer scores for each classifier
         if return_csv:
-            statistics_dataframe = self._return_csv(final_dataset_name, scores_dataframe, self.config_rcv['extra_metrics'], filter_csv)
+            statistics_dataframe = config_fnc._return_csv(final_dataset_name, scores_dataframe, self.config_rcv['extra_metrics'], filter_csv)
 
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:
             # Plot histogram of features
-            self._histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rcv['clfs'])
+            plots_fnc._histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rcv['clfs'], self.X.shape[1])
         
         # Plot box or violin plots of the outer cross-validation scores 
         if plot is not None:
-            self._plot(scores_dataframe, plot, self.config_rcv['scoring'], final_dataset_name)
+            plots_fnc._plot(scores_dataframe, plot, self.config_rcv['scoring'], final_dataset_name)
             
         if info_to_db:
             # Add to database
-            self._insert_data_into_db(scores_dataframe, self.config_rcv)
+            database_fnc._insert_data_into_db(scores_dataframe, self.config_rcv)
 
         return statistics_dataframe
-
-    def _plot(self, scores_dataframe, plot, scorer, final_dataset_name):
-        
-        scores_long = scores_dataframe.explode(f"{scorer}")
-        scores_long[f"{scorer}"] = scores_long[f"{scorer}"].astype(float)
-        fig = go.Figure()
-        
-        classifiers = scores_long["Clf"].unique()
-
-        if plot == "box":
-            # Add box plots for each classifier within each Inner_Selection method
-            for classifier in classifiers:
-                data = scores_long[scores_long["Clf"] == classifier][
-                    f"{scorer}"
-                ]
-                median = np.median(data)
-                fig.add_trace(
-                    go.Box(
-                        y=data,
-                        name=f"{classifier} (Median: {median:.2f})",
-                        boxpoints="all",
-                        jitter=0.3,
-                        pointpos=-1.8,
-                    )
-                )
-
-                # Calculate and add 95% CI for the median
-                lower, upper = self._bootstrap_ci(data, type='median')
-                fig.add_trace(
-                    go.Scatter(
-                        x=[f"{classifier} (Median: {median:.2f})",
-                        f"{classifier} (Median: {median:.2f})"],
-                        y=[lower, upper],
-                        mode="lines",
-                        line=dict(color="black", dash="dash"),
-                        showlegend=False,
-                    )
-                )
-
-        elif plot == "violin":
-            for classifier in classifiers:
-                data = scores_long[scores_long["Clf"] == classifier][
-                    f"{scorer}"
-                ]
-                median = np.median(data)
-                fig.add_trace(
-                    go.Violin(
-                        y=data,
-                        name=f"{classifier} (Median: {median:.2f})",
-                        box_visible=False,
-                        points="all",
-                        jitter=0.3,
-                        pointpos=-1.8,
-                    )
-                )
-        else:
-            raise ValueError(
-                f'The "{plot}" is not a valid option for plotting. Choose between "box" or "violin".'
-            )
-
-        # Update layout for better readability
-        fig.update_layout(
-            autosize = False,
-            width=1500,
-            height=1200,
-            title="Model Selection Results by Classifier",
-            yaxis_title=f"Scores {scorer}",
-            xaxis_title="Classifier",
-            xaxis_tickangle=-45,
-            template="plotly_white",
-        )
-        
-        # Save the figure as an image in the "Results" directory
-        image_path = f"{final_dataset_name}_model_selection_plot.png"
-        fig.write_image(image_path)
-              
-    def _histogram(self, scores_dataframe, final_dataset_name, freq_feat, clfs):
-        if freq_feat == None:
-            freq_feat = self.X.shape[1]
-        elif freq_feat > self.X.shape[1]:
-            freq_feat = self.X.shape[1]
             
-        # Plot histogram of features
-        feature_counts = Counter()
-        for idx, row in scores_dataframe.iterrows():
-            if row["Sel_way"] != "full":  # If no features were selected, skip
-                features = list(
-                    chain.from_iterable(
-                        [list(index_obj) for index_obj in row["Sel_feat"]]
-                    )
-                )
-                feature_counts.update(features)
-
-        sorted_features_counts = feature_counts.most_common()
-
-        if len(sorted_features_counts) == 0:
-            print("No features were selected.")
-        else:
-            features, counts = zip(*sorted_features_counts[:freq_feat])
-            counts = [x / len(clfs) for x in counts]  # Normalize counts
-            print(f"Selected {freq_feat} features")
-
-            # Create the bar chart using Plotly
-            fig = go.Figure()
-
-            # Add bars to the figure
-            fig.add_trace(go.Bar(
-                x=features,
-                y=counts,
-                marker=dict(color="skyblue"),
-                text=[f"{count:.2f}" for count in counts],  # Show normalized counts as text
-                textposition='auto'
-            ))
-
-            # Set axis labels and title
-            fig.update_layout(
-                title="Histogram of Selected Features",
-                xaxis_title="Features",
-                yaxis_title="Counts",
-                xaxis_tickangle=-90,  # Rotate x-ticks to avoid overlap
-                bargap=0.2,
-                template="plotly_white",
-                width=min(max(1000, freq_feat * 20), 2000),  # Dynamically adjust plot width
-                height=700  # Set plot height
-            )
-
-            # Save the plot to 'Results/histogram.png'
-            save_path = f"{final_dataset_name}_histogram.png"
-            fig.write_image(save_path)
-            
-    def _name_outputs(self, config, results_dir):
-        try:
-            dataset_name = self._set_result_csv_name(self.csv_dir)
-            name_add  = self._file_name(config)
-            results_name = f"{dataset_name}_{name_add}_{config['model_selection_type']}"
-            final_dataset_name = os.path.join(results_dir, results_name)
-        except Exception as e:
-            name_add = self._file_name(config)
-            results_name = f"results_{name_add}_{config['model_selection_type']}"
-            final_dataset_name = os.path.join(
-                results_dir, results_name
-            )
-        return final_dataset_name
-            
-    def _filter_features(self, train_index, test_index, X, y, num_feature2_use, cvncvsel):
+    def _filter_features(self, train_index, test_index, X, y, num_feature2_use, config):
         """
         This function filters the features using the selected model.
+        Returns the filtered train and test sets indexes - including the normalized data and the missing values - and the selected features.
+        
+        Parameters
+        ----------
+        train_index : array-like
+            The indices of the samples in the training set.
+        test_index : array-like
+            The indices of the samples in the test set.
+        X : pandas DataFrame
+            The features of the dataset.
+        y : pandas Series
+            The target variable of the dataset.
+        num_feature2_use : int
+            The number of features to select.
+        cvncvsel : str
+            Whether to use the config for nested cv or recursive nested cv.
+        
+        Returns
+        -------
+        X_train_selected : pandas DataFrame
+            The filtered training set.
+        X_test_selected : pandas DataFrame
+            The filtered test set.
+        num_feature : int or str
+            The number of features selected or "full" if all features were selected.
         """
-        if cvncvsel == "rcv":
-            config = self.config_rcv
-        else:
-            config = self.config_rncv
         
         # Find the train and test sets
         X_tr, X_te = X.iloc[train_index], X.iloc[test_index]
@@ -857,157 +398,166 @@ class MLPipelines(MachineLearningEstimator):
 
         return X_train_selected, X_test_selected, num_feature
 
-    def _inner_loop(self, train_index, test_index, X, y, avail_thr, i):
-        """This function is used to perform the inner loop of the nested cross-validation
-        Note: Return a list because this is the desired output for the parallel loop
+    def _fit_procedure(self, config, results, train_index, test_index, i, n_jobs=None):
         """
-        opt_grid = "NestedCV"
+        This function is used to perform the fit procedure of the machine learning pipeline. 
+        It loops over the number of features and the classifiers given in the config dictionary.
 
-        # Checks for reliability of parameters
-        if isinstance(self.config_rncv["num_features"], int):
-            feature_loop = [self.config_rncv["num_features"]]
-        elif isinstance(self.config_rncv["num_features"], list):
-            feature_loop = self.config_rncv["num_features"]
-        elif self.config_rncv["num_features"] is None:
-            feature_loop = [X.shape[1]]
-        else:
-            raise ValueError("num_features must be an integer or a list or None")
+        Parameters
+        ----------
+        config : dict
+            A dictionary containing all the configuration for the machine learning pipeline.
+        results : dict
+            A dictionary containing the results of the machine learning pipeline.
+        train_index : array-like
+            The indices of the training set.
+        test_index : array-like
+            The indices of the testing set.
+        i : int
+            The current round of the cross-validation.
+        n_jobs : int or None
+            The number of jobs to run in parallel. If None, the number of jobs is set to the number of available CPU cores.
 
-        if self.config_rncv["parallel"] == "thread_per_round":
-            n_jobs = 1
-        elif self.config_rncv["parallel"] == "freely_parallel":
-            n_jobs = avail_thr
-
-        # Initialize variables
-        results = {
-            "Classifiers": [],
-            "Selected_Features": [],
-            "Number_of_Features": [],
-            "Hyperparameters": [],
-            "Way_of_Selection": [],
-            "Estimator": [],
-            'Samples_counts': [],
-            'Inner_selection_mthd': [],
-        }
-        results.update({f"{metric}": [] for metric in self.config_rncv["extra_metrics"]})
-
+        Returns
+        -------
+        results : dict
+            The results of the machine learning pipeline.
+        """
         # Loop over the number of features
-        for num_feature2_use in feature_loop:            
-            # if not self.config_rncv['sfm']:
+        for num_feature2_use in config["num_features"]:            
             X_train_selected, X_test_selected, num_feature = self._filter_features(
-                train_index, test_index, X, y, num_feature2_use, cvncvsel='rncv'
+                train_index, test_index, self.X, self.y, num_feature2_use, config
             )
-            y_train, y_test = y[train_index], y[test_index]
+            y_train, y_test = self.y[train_index], self.y[test_index]
             
             # Apply class balancing strategies
-            if self.config_rncv['class_balance'] == 'auto':
-                # No balancing is applied; use original X_train_selected and y_train
-                pass
-            elif self.config_rncv['class_balance'] == 'smote':
-                X_train_selected, y_train = SMOTE(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-            elif self.config_rncv['class_balance'] == 'smote_enn':
-                X_train_selected, y_train = SMOTEENN(random_state=i, n_jobs=n_jobs, enn=EditedNearestNeighbours()).fit_resample(X_train_selected, y_train)
-            elif self.config_rncv['class_balance'] == 'adasyn':
-                X_train_selected, y_train = ADASYN(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-            elif self.config_rncv['class_balance'] == 'borderline_smote':
-                X_train_selected, y_train = BorderlineSMOTE(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-            elif self.config_rncv['class_balance'] == 'tomek':
-                tomek = TomekLinks(n_jobs=n_jobs)
-                X_train_selected, y_train = tomek.fit_resample(X_train_selected, y_train)
+            X_train_selected, y_train = balance_fnc._class_balance(X_train_selected, y_train, config["class_balance"], i)
                                 
             # Check of the classifiers given list
-            if self.config_rncv["clfs"] is None:
+            if config["clfs"] is None:
                 raise ValueError("No classifier specified.")
             else:
-                for estimator in self.config_rncv["clfs"]:
+                for estimator in config["clfs"]:
                     # For every estimator find the best hyperparameteres
                     self.name = estimator
                     self.estimator = self.available_clfs[estimator]
-                    if (self.config_rncv["sfm"]) and ((estimator == "RandomForestClassifier") or 
+                    if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
                                 (estimator == "XGBClassifier") or 
                                 (estimator == 'GradientBoostingClassifier') or 
                                 (estimator == "LGBMClassifier") or 
                                 (estimator == "CatBoostClassifier")):
                         
                         X_train_selected, X_test_selected, num_feature = self._filter_features(
-                            train_index, test_index, X, y, num_feature2_use=X.shape[1], cvncvsel='rncv'
+                            train_index, test_index, self.X, self.y, self.X.shape[1], config
                         )
-                        y_train, y_test = y[train_index], y[test_index]
-
+                        y_train, y_test = self.y[train_index], self.y[test_index]
+                        # Check of the classifiers given list
                         # Perform feature selection using Select From Model (sfm)
-                        X_train_selected, X_test_selected, num_feature = self._sfm(self.estimator, X_train_selected, X_test_selected, y_train, num_feature2_use)
+                        X_train_selected, X_test_selected, num_feature = calc_hlp_fnc._sfm(self.estimator, X_train_selected, X_test_selected, y_train, num_feature2_use)
 
-                        # Apply class balancing strategies after sfm
-                        if self.config_rncv['class_balance'] == 'auto':
-                            # No balancing is applied; use original X_train_selected and y_train
-                            pass
-                        elif self.config_rncv['class_balance'] == 'smote':
-                            X_train_selected, y_train = SMOTE(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-                        elif self.config_rncv['class_balance'] == 'smote_enn':
-                            X_train_selected, y_train = SMOTEENN(random_state=i, n_jobs=n_jobs, enn=EditedNearestNeighbours()).fit_resample(X_train_selected, y_train)
-                        elif self.config_rncv['class_balance'] == 'adasyn':
-                            X_train_selected, y_train = ADASYN(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-                        elif self.config_rncv['class_balance'] == 'borderline_smote':
-                            X_train_selected, y_train = BorderlineSMOTE(random_state=i, n_jobs=n_jobs).fit_resample(X_train_selected, y_train)
-                        elif self.config_rncv['class_balance'] == 'tomek':
-                            tomek = TomekLinks(n_jobs=n_jobs)
-                            X_train_selected, y_train = tomek.fit_resample(X_train_selected, y_train)
+                        # Apply class balancing strategies
+                        X_train_selected, y_train = balance_fnc._class_balance(X_train_selected, y_train, config["class_balance"], i)
                             
-                    self._set_optuna_verbosity(logging.ERROR)
-                    clf = optuna.integration.OptunaSearchCV(
-                        estimator=self.estimator,
-                        scoring=self.config_rncv["inner_scoring"],
-                        param_distributions=optuna_grid[opt_grid][self.name],
-                        cv=self.config_rncv["inner_cv"],
-                        return_train_score=True,
-                        n_jobs=n_jobs,
-                        verbose=0,
-                        n_trials=self.config_rncv["n_trials"],
-                    )
-                    clf.fit(X_train_selected, y_train)
-           
-                    for inner_selection in self.config_rncv["inner_selection_lst"]:
-                        results['Inner_selection_mthd'].append(inner_selection)
-                        # Store the results and apply one_sem method if its selected
-                        results["Estimator"].append(self.name)
-                        if inner_selection == "validation_score":
-                            
-                            res_model = copy.deepcopy(clf)
-
-                            params = res_model.best_params_
-
-                        else:
-                            trials = clf.trials_
-                            if (inner_selection == "one_sem") or (inner_selection == "one_sem_grd"):
-                                samples = X_train_selected.shape[0]
-                                # Find simpler parameters with the one_sem method if there are any
-                                simple_model_params = self._one_sem_model(trials, self.name, samples, self.config_rncv['inner_splits'],inner_selection)
-                            elif (inner_selection == "gso_1") or (inner_selection == "gso_2"):
-                                # Find parameters with the smaller gap score with gso_1 method if there are any
-                                simple_model_params = self._gso_model(trials, self.name, self.config_rncv['inner_splits'],inner_selection)
-
-                            params = simple_model_params
-
-                            # Fit the new model
-                            new_params_clf = self._create_model_instance(
-                                self.name, simple_model_params
-                            )
-                            new_params_clf.fit(X_train_selected, y_train)
-
-                            res_model = copy.deepcopy(new_params_clf)
-                            
-                        results["Hyperparameters"].append(params)
+                    if config['model_selection_type'] == 'rncv':
+                        opt_grid = "NestedCV"
+                        self._set_optuna_verbosity(logging.ERROR)
+                        clf = optuna.integration.OptunaSearchCV(
+                            estimator=self.estimator,
+                            scoring=config["inner_scoring"],
+                            param_distributions=optuna_grid[opt_grid][self.name],
+                            cv=config["inner_cv"],
+                            return_train_score=True,
+                            n_jobs=n_jobs,
+                            verbose=0,
+                            n_trials=config["n_trials"],
+                        )
                         
-                        for metric in self.config_rncv["extra_metrics"]:
-                            if metric == 'specificity':
-                                results[f"{metric}"].append(
-                                    self._specificity_scorer(res_model, X_test_selected, y_test)
-                                )
+                        clf.fit(X_train_selected, y_train)
+                        
+                        for inner_selection in config["inner_selection_lst"]:
+                            results['Inner_selection_mthd'].append(inner_selection)
+                            # Store the results and apply one_sem method if its selected
+                            results["Estimator"].append(self.name)
+                            if inner_selection == "validation_score":
+                                
+                                res_model = copy.deepcopy(clf)
+
+                                params = res_model.best_params_
+
+                                trials = clf.trials_
                             else:
-                                results[f"{metric}"].append(
-                                    get_scorer(metric)(res_model, X_test_selected, y_test)
+                                if (inner_selection == "one_sem") or (inner_selection == "one_sem_grd"):
+                                    samples = X_train_selected.shape[0]
+                                    # Find simpler parameters with the one_sem method if there are any
+                                    simple_model_params = inner_selection_fnc._one_sem_model(trials, self.name, samples, config['inner_splits'],inner_selection)
+                                elif (inner_selection == "gso_1") or (inner_selection == "gso_2"):
+                                    # Find parameters with the smaller gap score with gso_1 method if there are any
+                                    simple_model_params = inner_selection_fnc._gso_model(trials, self.name, config['inner_splits'],inner_selection)
+
+                                params = simple_model_params
+
+                                # Fit the new model
+                                new_params_clf = modinst_fnc._create_model_instance(
+                                    self.name, simple_model_params
+                                )
+                                new_params_clf.fit(X_train_selected, y_train)
+
+                                res_model = copy.deepcopy(new_params_clf)
+                                
+                            results["Hyperparameters"].append(params)
+                            
+                            # Metrics calculations
+                            results = calc_hlp_fnc._calculate_metrics(config, results, res_model, X_test_selected, y_test)
+                            
+                            y_pred = res_model.predict(X_test_selected)
+
+                            # Store the results using different names if feature selection is applied
+                            if num_feature == "full" or num_feature is None:
+                                results["Selected_Features"].append(None)
+                                results["Number_of_Features"].append(X_test_selected.shape[1])
+                                results["Way_of_Selection"].append("full")
+                                results["Classifiers"].append(f"{self.name}")
+                            else:
+                                if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
+                                    (estimator == "XGBClassifier") or 
+                                    (estimator == 'GradientBoostingClassifier') or 
+                                    (estimator == "LGBMClassifier") or 
+                                    (estimator == "CatBoostClassifier")):
+                                    fs_type = "sfm"
+                                else:
+                                    fs_type = config["feature_selection_type"]
+                                results["Classifiers"].append(
+                                    f"{self.name}_{fs_type}_{num_feature}"
+                                )
+                                results["Selected_Features"].append(
+                                    X_train_selected.columns.tolist()
+                                )
+                                results["Number_of_Features"].append(num_feature)
+                                results["Way_of_Selection"].append(
+                                    fs_type
                                 )
 
+                            # Track predictions
+                            samples_counts = np.zeros(len(self.y))
+                            for idx, resu, pred in zip(test_index, y_test, y_pred):
+                                if pred == resu:
+                                    samples_counts[idx] += 1
+
+                            results['Samples_counts'].append(samples_counts)
+                            time.sleep(0.5)
+                            
+                    else:
+                        # Train the model
+                        res_model = modinst_fnc._create_model_instance(
+                                self.name, params=None
+                            )
+                        
+                        res_model.fit(X_train_selected, y_train)
+                        results["Estimator"].append(self.name)
+
+                        # Metrics calculations
+                        results = calc_hlp_fnc._calculate_metrics(config, results, res_model, X_test_selected, y_test)
+                        
                         y_pred = res_model.predict(X_test_selected)
 
                         # Store the results using different names if feature selection is applied
@@ -1017,14 +567,14 @@ class MLPipelines(MachineLearningEstimator):
                             results["Way_of_Selection"].append("full")
                             results["Classifiers"].append(f"{self.name}")
                         else:
-                            if (self.config_rncv["sfm"]) and ((estimator == "RandomForestClassifier") or 
+                            if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
                                 (estimator == "XGBClassifier") or 
                                 (estimator == 'GradientBoostingClassifier') or 
                                 (estimator == "LGBMClassifier") or 
                                 (estimator == "CatBoostClassifier")):
                                 fs_type = "sfm"
                             else:
-                                fs_type = self.config_rncv["feature_selection_type"]
+                                fs_type = config["feature_selection_type"]
                             results["Classifiers"].append(
                                 f"{self.name}_{fs_type}_{num_feature}"
                             )
@@ -1044,6 +594,37 @@ class MLPipelines(MachineLearningEstimator):
 
                         results['Samples_counts'].append(samples_counts)
                         time.sleep(0.5)
+        return results
+    
+    def _inner_loop(self, train_index, test_index, avail_thr, i):
+        """
+        This function is used to perform the inner loop of the nested cross-validation for the selection of the best hyperparameters.
+        Note: Return a list because this is the desired output for the parallel loop
+        Runs only on the nested cross-validation function.
+        Supports several inner selection methods.
+        """
+        opt_grid = "NestedCV"
+        
+        if self.config_rncv["parallel"] == "thread_per_round":
+            n_jobs = 1
+        elif self.config_rncv["parallel"] == "freely_parallel":
+            n_jobs = avail_thr
+
+        # Initialize variables
+        results = {
+            "Classifiers": [],
+            "Selected_Features": [],
+            "Number_of_Features": [],
+            "Hyperparameters": [],
+            "Way_of_Selection": [],
+            "Estimator": [],
+            'Samples_counts': [],
+            'Inner_selection_mthd': [],
+        }
+        results.update({f"{metric}": [] for metric in self.config_rncv["extra_metrics"]})
+        
+        # Start fitting 
+        results = self._fit_procedure(self.config_rncv, results, train_index, test_index, i, n_jobs)
                         
         # Check for consistent list lengths
         lengths = {key: len(val) for key, val in results.items()}
@@ -1055,6 +636,11 @@ class MLPipelines(MachineLearningEstimator):
         return [results]
 
     def _outer_loop(self, i, avail_thr):
+        """
+        This function is used to make the separations of train and test data of the outer cross validation and initiates the parallilization
+        with respect to the parallelization method.
+        Uses different random seed for each round of the outer cross validation
+        """
         start = time.time()  # Count time of outer loops
 
         # Split the data into train and test
@@ -1094,7 +680,7 @@ class MLPipelines(MachineLearningEstimator):
                 # For each outer fold perform the inner loop
                 for train_index, test_index in train_test_indices:
                     results = self._inner_loop(
-                        train_index, test_index, self.X, self.y, avail_thr, i
+                        train_index, test_index, avail_thr, i
                     )
                     temp_list.append(results)
                     bar.update(split_index)
@@ -1114,7 +700,7 @@ class MLPipelines(MachineLearningEstimator):
                 # For each outer fold perform the inner loop
                 for train_index, test_index in train_test_indices:
                     results = self._inner_loop(
-                        train_index, test_index, self.X, self.y, avail_thr, i
+                        train_index, test_index, avail_thr, i
                     )
                     temp_list.append(results)
                     bar.update(split_index)
@@ -1126,384 +712,7 @@ class MLPipelines(MachineLearningEstimator):
         # Return the list of dataframes and the time of the outer loop
         print(f"Finished with {i+1} round after {(end-start)/3600:.2f} hours.")
         return list_dfs
-
-    # Function to insert new data into the updated database schema
-    def _insert_data_into_db(self, scores_dataframe, config):
-        try:
-            credentials_path = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)),
-                "db_credentials",
-                "credentials.json"
-            )
-            
-            with open(credentials_path, "r") as file:
-                db_credentials = json.load(file)
-
-            # Establish a connection to the PostgreSQL database
-            connection = psycopg2.connect(
-                dbname=db_credentials["db_name"],
-                user=db_credentials["db_user"],
-                password=db_credentials["db_password"],
-                host=db_credentials["db_host"],
-                port=db_credentials["db_port"]
-            )
-            cursor = connection.cursor()
-            
-        except Exception as e:
-            print(f"Error connecting to database: {e}")
-            return
-        
-        try:
-            # Insert dataset
-            dataset_query = """
-                INSERT INTO Datasets (dataset_name)
-                VALUES (%s) ON CONFLICT (dataset_name) DO NOTHING RETURNING dataset_id;
-            """
-            cursor.execute(dataset_query, (config['dataset_name'],))
-            dataset_id = cursor.fetchone()
-
-            if dataset_id is None:
-                cursor.execute("SELECT dataset_id FROM Datasets WHERE dataset_name = %s;", (config['dataset_name'],))
-                dataset_id = cursor.fetchone()[0]
-            else:
-                dataset_id = dataset_id[0]
-                
-            # Insert job parameters
-            if config['model_selection_type'] == 'rncv':
-                job_parameters_query = """
-                    INSERT INTO Job_Parameters (
-                        n_trials, rounds, feature_selection_type, feature_selection_method, 
-                        inner_scoring, outer_scoring, inner_splits, outer_splits, normalization, 
-                        missing_values_method, class_balance
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    RETURNING job_id;
-                """
-                cursor.execute(
-                    job_parameters_query,
-                    (
-                        config['n_trials'], config['rounds'], config['feature_selection_type'],
-                        config['feature_selection_method'], config['inner_scoring'], config['outer_scoring'],
-                        config['inner_splits'], config['outer_splits'], config['normalization'],
-                        config['missing_values_method'], config['class_balance']
-                    )
-                )
-            else: 
-                job_parameters_query = """
-                    INSERT INTO Job_Parameters (
-                        rounds, feature_selection_type, feature_selection_method, 
-                        outer_scoring, outer_splits, normalization, 
-                        missing_values_method, class_balance
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    RETURNING job_id;
-                """
-                cursor.execute(
-                    job_parameters_query,
-                    (
-                        config['rounds'], config['feature_selection_type'],
-                        config['feature_selection_method'],config['scoring'],
-                        config['splits'], config['normalization'],
-                        config['missing_values_method'], config['class_balance']
-                    )
-                )
-                
-            job_id = cursor.fetchone()[0]
-
-            # Insert classifiers and associated data
-            for _, row in scores_dataframe.iterrows():
-                # Check if the classifier combination already exists
-                check_query = """
-                    SELECT classifier_id FROM Classifiers
-                    WHERE estimator = %s AND inner_selection = %s;
-                """
-                cursor.execute(check_query, (row["Est"], row["In_sel"]))
-                classifier_id = cursor.fetchone()
-
-                if classifier_id:
-                    classifier_id = classifier_id[0]
-                else:
-                    classifier_query = """
-                        INSERT INTO Classifiers (estimator, inner_selection)
-                        VALUES (%s, %s) RETURNING classifier_id;
-                    """
-                    cursor.execute(classifier_query, (row["Est"], row["In_sel"]))
-                    classifier_id = cursor.fetchone()[0]
-
-                # Insert hyperparameters
-                hyperparameters_query = """
-                    INSERT INTO Hyperparameters (hyperparameters)
-                    VALUES (%s) RETURNING hyperparameter_id;
-                """
-                hyperparameters = row["Hyp"]
-                if isinstance(hyperparameters, np.ndarray):
-                    hyperparameters = [dict(item) for item in hyperparameters]
-                cursor.execute(hyperparameters_query, (json.dumps(hyperparameters),))
-                hyperparameter_id = cursor.fetchone()[0]
-
-                # Insert feature selection data
-                feature_selection_query = """
-                    INSERT INTO Feature_Selection (way_of_selection, numbers_of_features)
-                    VALUES (%s, %s) RETURNING selection_id;
-                """
-                cursor.execute(feature_selection_query, (row["Sel_way"], row["Fs_num"]))
-                selection_id = cursor.fetchone()[0]
-
-                # Insert performance metrics
-                performance_metrics_query = """
-                    INSERT INTO Performance_Metrics (matthews_corrcoef, roc_auc, accuracy, balanced_accuracy, recall, precision, f1, specificity, average_precision)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING performance_id;
-                """
-                metrics = [
-                    json.dumps(metric.tolist() if isinstance(metric, np.ndarray) else metric)
-                    for metric in [row.get(metric) for metric in config['extra_metrics']]
-                ]
-                cursor.execute(performance_metrics_query, metrics)
-                performance_id = cursor.fetchone()[0]
-
-                # Insert samples classification rates
-                samples_classification_query = """
-                    INSERT INTO Samples_Classification_Rates (samples_classification_rates)
-                    VALUES (%s) RETURNING sample_rate_id;
-                """
-                cursor.execute(samples_classification_query, (json.dumps(row["Classif_rates"]),))
-                sample_rate_id = cursor.fetchone()[0]
-
-                # Insert data into job combinations
-                job_combinations_query = """
-                    INSERT INTO Job_Combinations (
-                        job_id, classifier_id, dataset_id, selection_id, hyperparameter_id, performance_id, sample_rate_id, model_selection_type
-                    )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    RETURNING combination_id;
-                """
-                cursor.execute(
-                    job_combinations_query,
-                    (job_id, classifier_id, dataset_id, selection_id, hyperparameter_id, performance_id, sample_rate_id, config['model_selection_type'])
-                )
-                combination_id = cursor.fetchone()[0]
-
-                # Insert feature counts
-                if row["Sel_feat"] is not None:
-                    selected_features = row["Sel_feat"]
-                    if isinstance(selected_features, np.ndarray):
-                        selected_features = selected_features.tolist()
-
-                    if any(isinstance(i, list) for i in selected_features):
-                        selected_features = [item for sublist in selected_features for item in sublist]
-
-                    # Count occurrences of each feature
-                    feature_counts = Counter([feature for feature in selected_features if feature])
-                    feature_counts_query = """
-                        INSERT INTO Feature_Counts (feature_name, count, combination_id)
-                        VALUES %s;
-                    """
-                    
-                    # Prepare feature values with combination_id included
-                    feature_values = [(feat, count, combination_id) for feat, count in feature_counts.items()]
-                    execute_values(cursor, feature_counts_query, feature_values)
-
-            # Commit the transaction
-            connection.commit()
-            print("Data inserted into the database successfully.")
-        except Exception as e:
-            connection.rollback()
-            print(f"An error occurred while inserting data into the database: {e}")
-        finally:
-            cursor.close()
-            connection.close()
-            
-    def _file_name(self,config):
-        default_values = {
-            "rounds": 10,
-            "n_trials": 100,
-            "feature_selection_type": "mrmr",
-            "feature_selection_method": "chi2",
-            "inner_scoring": "matthews_corrcoef",
-            "outer_scoring": "matthews_corrcoef",
-            "inner_splits": 5,
-            "outer_splits": 5,
-            "normalization": "minmax",
-            "class_balance": "auto",    
-            "sfm": False,
-            "missing_values": "median",
-            "num_features": None,
-            "scoring": "matthews_corrcoef",
-            "splits": 5
-            
-        }
-        name_add = ""
-        for conf in config:
-            if conf in default_values.keys():
-                if config[conf] != default_values[conf]:
-                    name_add += f"_{conf}_{config[conf]}"
-        name_add += f"_{datetime.now().strftime('%Y%m%d_%H%M')}"
-        return name_add
-     
-    def _return_csv(self, final_dataset_name, scores_dataframe, extra_metrics=None, filter_csv=None):
-        results_path = f"{final_dataset_name}_outerloops_results.csv"
-        cols_drop = ["Classif_rates", "Clf", "Hyp", "Sel_feat"]
-        if extra_metrics is not None:
-            for metric in extra_metrics:
-                cols_drop.append(f"{metric}") 
-        statistics_dataframe = scores_dataframe.drop(cols_drop, axis=1)
-        if filter_csv != None:
-            try:
-                for mtrc_stat in filter_csv:
-                    if 'h' in filter_csv[mtrc_stat]:
-                        statistics_dataframe = statistics_dataframe[statistics_dataframe[mtrc_stat] >= filter_csv[mtrc_stat]['h']]
-                    elif 'l' in filter_csv[mtrc_stat]:
-                        statistics_dataframe = statistics_dataframe[statistics_dataframe[mtrc_stat] <= filter_csv[mtrc_stat]['l']]
-            except Exception as e:
-                print(f'An error occurred while filtering the final csv file: {e}\nThe final csv file will not be filtered.')
-        statistics_dataframe.to_csv(results_path, index=False)
-        print(f"Statistics results saved to {results_path}")
-        return statistics_dataframe
     
-    def _input_renamed_metrics(self, extra_metrics, results, indices):
-        # Metrics dict
-        metric_abbreviations = {
-            'roc_auc': 'AUC',
-            'accuracy': 'ACC',
-            'balanced_accuracy': 'BAL_ACC',
-            'recall': 'REC',
-            'precision': 'PREC',
-            'f1': 'F1',
-            'average_precision': 'AVG_PREC',
-            'specificity': 'SPEC',
-            'matthews_corrcoef': 'MCC'
-        }
-        
-        # Add metrics
-        for metric in extra_metrics:
-            qck_mtrc = metric_abbreviations[f"{metric}"]
-            metric_values = indices[f"{metric}"].values
-
-            results[-1][f"{metric}"] = metric_values  # If this stores an array, keep it as-is
-
-            # Round metrics to 3 decimal places
-            results[-1][f"{qck_mtrc}_mean"] = round(np.mean(metric_values), 3)
-            results[-1][f"{qck_mtrc}_std"] = round(np.std(metric_values), 3)
-            results[-1][f"{qck_mtrc}_sem"] = round(sem(metric_values), 3)
-            # Compute lower and upper percentage values and round to 3 decimal places
-            lower_percentile = np.percentile(metric_values, 5)
-            upper_percentile = np.percentile(metric_values, 95)
-            results[-1][f"{qck_mtrc}_lowerCI"] = round(lower_percentile, 3)
-            results[-1][f"{qck_mtrc}_upperCI"] = round(upper_percentile, 3)
-            results[-1][f"{qck_mtrc}_med"] = round(np.median(metric_values), 3)
-            # Bootstrap confidence intervals for median and mean
-            lomed, upmed = self._bootstrap_ci(metric_values, type='median')
-            lomean, upmean = self._bootstrap_ci(metric_values, type='mean')
-            results[-1][f"{qck_mtrc}_lomean"] = round(lomean, 3)
-            results[-1][f"{qck_mtrc}_upmean"] = round(upmean, 3)
-            results[-1][f"{qck_mtrc}_lomed"] = round(lomed, 3)
-            results[-1][f"{qck_mtrc}_upmed"] = round(upmed, 3)
-        
-        return results
-
-    def _parameters_check(self, config, main_type):
-        # Missing values manipulation
-        if config['missing_values_method'] == "drop":
-            print(
-                "Values cannot be dropped at ncv because of inconsistent shapes. \nThe missing values with automaticly replaced by the median of each feature."
-            )
-            config['missing_values_method'] = "median"
-        elif (config['missing_values_method'] != "mean") and (config['missing_values_method'] != "median"):
-            raise ValueError(
-                "The missing values method should be 'mean' or 'median'."
-            )
-        if self.X.isnull().values.any():
-            print(
-                f"Your Dataset contains NaN values. Some estimators does not work with NaN values.\nThe {config['missing_values_method']} method will be used for the missing values manipulation.\n"
-            )
-        
-        if config['extra_metrics'] is not None:
-            if type(config['extra_metrics']) is not list:
-                config['extra_metrics'] = [config['extra_metrics']]
-            for metric in config['extra_metrics']:
-                scoring_check(metric)
-            print('All the extra metrics are valid.')
-            
-        if main_type == 'rncv':    
-            if config['outer_scoring'] not in config['extra_metrics']:
-                extra_metrics.insert(0, config['outer_scoring'])
-            elif config['outer_scoring'] in config['extra_metrics'] and config['extra_metrics'].index(config['outer_scoring']) != 0:
-                # Remove it from its current position
-                config['extra_metrics'].remove(config['outer_scoring'])
-                # Insert it at the first index
-                config['extra_metrics'].insert(0, config['outer_scoring'])
-            else:
-                config['extra_metrics'] = [config['outer_scoring']]
-                
-            config['model_selection_type'] = 'rncv'
-            
-            # Checks for reliability of parameters
-            if (config['inner_scoring'] not in sklearn.metrics.get_scorer_names()) and (config['inner_scoring'] != "specificity"):
-                raise ValueError(
-                    f"Invalid inner scoring metric: {config['inner_scoring']}. Select one of the following: {list(sklearn.metrics.get_scorer_names())} and specificity"
-                )
-            if (config['outer_scoring'] not in sklearn.metrics.get_scorer_names()) and (config['outer_scoring'] != "specificity"):
-                raise ValueError(
-                    f"Invalid outer scoring metric: {config['outer_scoring']}. Select one of the following: {list(sklearn.metrics.get_scorer_names())} and specificity"
-                )
-            for inner_selection in config['inner_selection_lst']:
-                if inner_selection not in ["validation_score", "one_sem", "gso_1", "gso_2","one_sem_grd"]:
-                    raise ValueError(
-                        f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem", "one_sem_grd", "gso_1", "gso_2"]'
-                    )
-                    
-            if (config['parallel'] not in ['thread_per_round', 'freely_parallel']) and (config['parallel'] is not None):
-                raise ValueError(
-                    f'Invalid parallel method: {config["parallel"]}. Select one of the following: ["thread_per_round", "freely_parallel"]'
-            )
-            elif (config['parallel'] == None):
-                config['parallel'] = 'thread_per_round'
-                print('Parallel method is set to "thread_per_round"')
-            
-        else:
-            if config['scoring'] not in config['extra_metrics']:
-                config['extra_metrics'].insert(0, config['scoring'])
-            elif config['scoring'] in config['extra_metrics'] and config['extra_metrics'].index(config['scoring']) != 0:
-                # Remove it from its current position
-                config['extra_metrics'].remove(config['scoring'])
-                # Insert it at the first index
-                config['extra_metrics'].insert(0, config['scoring'])
-            else:
-                config['extra_metrics'] = [config['scoring']]
-            
-            config['model_selection_type'] = 'rcv'
-            
-            if (config['scoring'] not in sklearn.metrics.get_scorer_names()) and (config['scoring'] != "specificity"):
-                raise ValueError(
-                    f"Invalid scoring metric: {config['scoring']}. Select one of the following: {list(sklearn.metrics.get_scorer_names())} and specificity"
-                )
-                
-        if config['class_balance'] not in ['auto','smote','smote_enn','adasyn','borderline_smote','tomek', None]:
-            raise ValueError("class_balance must be one of the following: 'auto','smote','smotenn','adasyn','borderline_smote','tomek', or None")
-        elif config['class_balance'] == None:
-            config['class_balance'] = 'auto'
-            print('Class balance is set to "auto"')
-            
-        config['dataset_name'] = self.csv_dir
-                
-        # Set available classifiers
-        if config['search_on'] is not None:
-            classes = config['search_on']  # 'search_on' is a list of classifier names as strings
-            exclude_classes = [
-                clf for clf in self.available_clfs.keys() if clf not in classes
-            ]
-        elif config['exclude'] is not None:
-             exclude_classes = (
-                config['exclude']  # 'exclude' is a list of classifier names as strings
-            )
-        else:
-            exclude_classes = []
-
-        # Filter classifiers based on the exclude_classes list
-        clfs = [clf for clf in self.available_clfs.keys() if clf not in exclude_classes]
-        config["clfs"] = clfs
-
-        return config
     def nested_cv(
         self,
         n_trials: int = 100,
@@ -1531,14 +740,74 @@ class MLPipelines(MachineLearningEstimator):
         return_csv: bool = True,
         filter_csv: dict = None
     ):
-        """
-        Perform model selection using Nested Cross Validation and visualize the selected features' frequency.
-        """
         
-        # Set parameters for the nested functions of the ncv process
+        """
+        Perform nested cross-validation with optional feature selection and hyperparameter optimization.
+
+        Parameters
+        ----------
+        n_trials : int, optional
+            Number of optuna trials for hyperparameter optimization, by default 100
+        rounds : int, optional
+            Number of outer cross-validation rounds, by default 10
+        exclude : str|list, optional
+            List of classifiers (or string with one classifier) to exclude from the search, by default None
+        search_on : str|list, optional
+            List of classifiers (or string with one classifier) to search for hyperparameters on, by default None
+        info_to_db : bool, optional
+            If True, the results will be added to the database, by default False
+        num_features : int|list, optional
+            Number of features to select, either a single number or a list of numbers, by default None (all features)
+        feature_selection_type : str, optional
+            Type of feature selection, either 'mrmr' or 'kbest' or 'percentile', by default 'mrmr' (if no number of features is provided its not in use)
+        feature_selection_method : str, optional
+            Method of feature selection, either 'chi2', 'mutual_info_classif', 'f_classif', by default 'chi2' (if no number of features is provided its not in use)
+        sfm : bool, optional
+            If True, the feature selection is done using the SelectFromModel class only for the estimators that support it. The rest of the estimators are using the feature_selection_type. By default False
+        freq_feat : int, optional
+            A histogram of the frequency of the (freaq_feat or all if None) features will be plotted, by default None
+        class_balance : str, optional
+            If 'auto', class balancing will be applied using 'smote', 'smote_enn', 'adasyn', 'borderline_smote', or 'tomek'. By default 'auto'
+        inner_scoring : str, optional
+            Scoring metric used in the inner cross-validation loop, by default 'matthews_corrcoef'
+        outer_scoring : str, optional
+            Scoring metric used in the outer cross-validation loop, by default 'matthews_corrcoef'
+        inner_selection_lst : list, optional
+            List of methods for selecting the hyperparameters, by default ['validation_score', 'one_sem', 'gso_1', 'gso_2', 'one_sem_grd']
+            Should be a subset of ['validation_score', 'one_sem', 'gso_1', 'gso_2', 'one_sem_grd'] to be valid.
+        extra_metrics : str|list, optional
+            List of extra metrics (or string with one metric) to calculate, by default ['recall', 'specificity', 'accuracy', 'balanced_accuracy', 
+            'precision', 'f1', 'roc_auc', 'average_precision', 'matthews_corrcoef']
+        plot : str, optional
+            Type of plot to create, either 'box' or 'violin', by default 'box'
+        inner_splits : int, optional
+            Number of splits in the inner cross-validation loop, by default 5
+        outer_splits : int, optional
+            Number of splits in the outer cross-validation loop, by default 5
+        parallel : str, optional
+            Method of parallelization, either 'thread_per_round' or 'freely_parallel', by default 'thread_per_round'
+            If the user needs resources for other procedures, it is recommended to use 'thread_per_round'
+        normalization : str, optional
+            Method of normalization, either 'minmax' or 'std' or None, by default 'minmax'
+        missing_values_method : str, optional
+            Method of handling missing values, either 'median' or 'mean' or '0' or 'drop' or None, by default 'median'
+        return_csv : bool, optional
+            If True, the results will be returned as a CSV file with the statistics of the results, by default True
+        filter_csv : dict, optional
+            Dictionary of filters to apply to the trials of the results dataframe and csv, by default None
+
+        Returns
+        -------
+        pandas.DataFrame
+            A dataframe with the results of the nested cross-validation.
+        
+            An updated database if info_to_db is True
+            Plots if plot is not None
+            Histogram of the frequency of the features if freq_feat is not None
+        """
         self.config_rncv = locals()
         self.config_rncv.pop("self", None)
-        self.config_rncv = self._parameters_check(self.config_rncv,'rncv')
+        self.config_rncv = calc_hlp_fnc._parameters_check(self.config_rncv,'rncv', self.X, self.csv_dir, self.available_clfs)
 
         # Parallelization
         trial_indices = range(rounds)
@@ -1618,7 +887,7 @@ class MLPipelines(MachineLearningEstimator):
                     }
                 )
 
-                results = self._input_renamed_metrics(
+                results = calc_hlp_fnc._input_renamed_metrics(
                     self.config_rncv['extra_metrics'], results, indices
                 )
                                             
@@ -1631,24 +900,24 @@ class MLPipelines(MachineLearningEstimator):
             os.makedirs(results_dir)
 
         # Name
-        final_dataset_name = self._name_outputs(self.config_rncv, results_dir)  
+        final_dataset_name = config_fnc._name_outputs(self.config_rncv, results_dir, self.csv_dir)  
             
         # Save the results to a CSV file of the outer scores for each classifier
         if return_csv:
-            statistics_dataframe = self._return_csv(final_dataset_name, scores_dataframe, self.config_rncv['extra_metrics'], filter_csv)
+            statistics_dataframe = config_fnc._return_csv(final_dataset_name, scores_dataframe, self.config_rncv['extra_metrics'], filter_csv)
             
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:    
             # Plot histogram of features
-            self._histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rncv['clfs'])
+            plots_fnc._histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rncv['clfs'], self.X.shape[1])
 
         
         # Plot box or violin plots of the outer cross-validation scores for all Inner_Selection methods
         if plot is not None:
-            self._plot(scores_dataframe, plot, self.config_rncv['outer_scoring'], final_dataset_name)
+            plots_fnc._plot(scores_dataframe, plot, self.config_rncv['outer_scoring'], final_dataset_name)
             
         if info_to_db:
             # Add to database
-            self._insert_data_into_db(scores_dataframe, self.config_rncv)
+            database_fnc._insert_data_into_db(scores_dataframe, self.config_rncv)
             
         return statistics_dataframe
