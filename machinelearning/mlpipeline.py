@@ -258,7 +258,7 @@ class MLPipelines(MachineLearningEstimator):
                     "Miss_vals": missing_values_method,
                     "Splits": splits,
                     "Rnds": rounds,
-                    "Class_bal": self.config_rcv['class_balance'],
+                    "Class_blnc": self.config_rcv['class_balance'],
                     "Scoring": scoring,
                     "In_sel": 'validation_score',
                     "Classif_rates": samples_classification_rates.tolist(),
