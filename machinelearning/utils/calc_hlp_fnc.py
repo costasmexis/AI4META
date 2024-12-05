@@ -213,7 +213,7 @@ def _parameters_check(config, main_type, X, csv_dir, available_clfs):
                 f"Invalid scoring metric: {config['scoring']}. Select one of the following: {list(get_scorer_names())} and specificity"
             )
             
-    if config['class_balance'] not in ['auto','smote','smote_enn','adasyn','borderline_smote','tomek', None]:
+    if config['class_balance'] not in ['auto','smote','borderline_smote','tomek', None]:
         raise ValueError("class_balance must be one of the following: 'auto','smote','smotenn','adasyn','borderline_smote','tomek', or None")
     elif config['class_balance'] == None:
         config['class_balance'] = 'auto'
