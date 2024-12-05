@@ -181,7 +181,7 @@ class MLPipelines(MachineLearningEstimator):
         freq_feat : int, optional
             A histogram of the frequency of the (freaq_feat or all if None) features will be plotted, by default None
         class_balance : str, optional
-            If 'auto', class balancing will be applied using 'smote', 'smote_enn', 'adasyn', 'borderline_smote', or 'tomek'. By default 'auto'
+            If 'auto', class balancing will be applied using 'smote', 'borderline_smote', or 'tomek'. By default 'auto'
         extra_metrics : list, optional
             List of extra metrics to calculate. The default is
             ['roc_auc','accuracy','balanced_accuracy','recall','precision',
@@ -198,14 +198,14 @@ class MLPipelines(MachineLearningEstimator):
         """
         self.config_rcv = locals()
         self.config_rcv.pop("self", None)
-        self.config_rcv = calc_hlp_fnc._parameters_check(self.config_rncv,'rcv', self.X, self.csv_dir, self.available_clfs)
+        self.config_rcv = calc_hlp_fnc._parameters_check(self.config_rcv,'rcv', self.X, self.csv_dir, self.available_clfs)
         
         # Parallelization
         trial_indices = range(rounds)
         num_cores = multiprocessing.cpu_count()
         if num_cores < rounds:
             use_cores = num_cores
-        else:
+        else:   
             use_cores = rounds
         avail_thr = max(1, num_cores // rounds)
 
@@ -374,7 +374,7 @@ class MLPipelines(MachineLearningEstimator):
             if isinstance(num_feature2_use, int):
                 if (
                     num_feature2_use == 100 or num_feature2_use == self.X.shape[1]
-                ):  # TODO: check how to write it better
+                ):  
                     X_train_selected = X_train
                     X_test_selected = X_test
                     num_feature = "full"
@@ -767,7 +767,7 @@ class MLPipelines(MachineLearningEstimator):
         freq_feat : int, optional
             A histogram of the frequency of the (freaq_feat or all if None) features will be plotted, by default None
         class_balance : str, optional
-            If 'auto', class balancing will be applied using 'smote', 'smote_enn', 'adasyn', 'borderline_smote', or 'tomek'. By default 'auto'
+            If 'auto', class balancing will be applied using 'smote', 'borderline_smote', or 'tomek'. By default 'auto'
         inner_scoring : str, optional
             Scoring metric used in the inner cross-validation loop, by default 'matthews_corrcoef'
         outer_scoring : str, optional
@@ -910,7 +910,6 @@ class MLPipelines(MachineLearningEstimator):
         if num_features is not None:    
             # Plot histogram of features
             plots_fnc._histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rncv['clfs'], self.X.shape[1])
-
         
         # Plot box or violin plots of the outer cross-validation scores for all Inner_Selection methods
         if plot is not None:
