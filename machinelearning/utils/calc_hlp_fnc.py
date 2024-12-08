@@ -3,6 +3,7 @@ from sklearn.feature_selection import SelectFromModel
 from scipy.stats import sem
 from sklearn.metrics import get_scorer, confusion_matrix, get_scorer_names
 from sklearn.metrics import average_precision_score, roc_auc_score
+from .translators import METRIC_ADDREVIATIONS
 
 def _calculate_metrics(config, results, clf, X_test, y_test):
     for metric in config["extra_metrics"]:
@@ -120,7 +121,7 @@ def _sfm(estimator, X_train, X_test, y_train, num_feature2_use=None, threshold="
 
     return X_train_selected, X_test_selected, num_feature2_use
  
-def _parameters_check(config, main_type, X, csv_dir, available_clfs):
+def _parameters_check(config, main_type, X, csv_dir, label, available_clfs):
     """
     This function checks the parameters of the pipeline and returns the final parameters config for the class pipeline.
     """
@@ -220,6 +221,8 @@ def _parameters_check(config, main_type, X, csv_dir, available_clfs):
         print('Class balance is set to "auto"')
         
     config['dataset_name'] = csv_dir
+    config['dataset_label'] = label
+    config['features_name'] = None if config['num_features'] == [X.shape[1]] else config['num_features']
             
     # Set available classifiers
     if config['search_on'] is not None:
@@ -259,17 +262,7 @@ def _input_renamed_metrics( extra_metrics, results, indices):
         Updated results with renamed metrics.
     """
     # Metric abbreviation mapping
-    metric_abbreviations = {
-        'roc_auc': 'AUC',
-        'accuracy': 'ACC',
-        'balanced_accuracy': 'BAL_ACC',
-        'recall': 'REC',
-        'precision': 'PREC',
-        'f1': 'F1',
-        'average_precision': 'AVG_PREC',
-        'specificity': 'SPEC',
-        'matthews_corrcoef': 'MCC'
-    }
+    metric_abbreviations = METRIC_ADDREVIATIONS
     
     # Iterate over each metric and calculate statistics
     for metric in extra_metrics:

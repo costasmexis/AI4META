@@ -9,15 +9,15 @@ import plotly.graph_objects as go
 import shap
 import sklearn
 import sklearn.metrics as metrics
-from catboost import CatBoostClassifier
+# from catboost import CatBoostClassifier
 from dataloader import DataLoader
-from lightgbm import LGBMClassifier
+# from lightgbm import LGBMClassifier
 from optuna.samplers import TPESampler
 from plotly.subplots import make_subplots
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.linear_model import LogisticRegression,Lasso
+# from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+# from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+# from sklearn.gaussian_process import GaussianProcessClassifier
+# from sklearn.linear_model import LogisticRegression,Lasso
 from sklearn.metrics import make_scorer
 
 
@@ -28,16 +28,16 @@ from sklearn.model_selection import (
     train_test_split,
     StratifiedShuffleSplit
 )
-
-from sklearn.naive_bayes import GaussianNB
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC
+# from xgboost import XGBClassifier
+# from sklearn.naive_bayes import GaussianNB
+# from sklearn.neighbors import KNeighborsClassifier
+# from sklearn.svm import SVC
 from sklearn.utils import resample
 from tqdm import tqdm
-from xgboost import XGBClassifier
 import warnings
 
 from .utils.optuna_grid import optuna_grid
+from .utils.translators import AVAILABLE_CLFS
 
 
 def scoring_check(scoring: str) -> None:
@@ -58,21 +58,7 @@ class MachineLearningEstimator(DataLoader):
         self.best_estimator = None
         self.scoring = None
         self.model_selection_way = None
-
-        self.available_clfs = {
-            "RandomForestClassifier": RandomForestClassifier(),
-            "GradientBoostingClassifier": GradientBoostingClassifier(),
-            "LinearDiscriminantAnalysis": LinearDiscriminantAnalysis(),
-            "LogisticRegression": LogisticRegression(),
-            "ElasticNet": LogisticRegression(penalty="elasticnet", solver="saga"),
-            "XGBClassifier": XGBClassifier(),
-            "GaussianNB": GaussianNB(),
-            "KNeighborsClassifier": KNeighborsClassifier(),
-            "SVC": SVC(),
-            "LGBMClassifier": LGBMClassifier(),
-            "GaussianProcessClassifier": GaussianProcessClassifier(),
-            "CatBoostClassifier": CatBoostClassifier(),
-        }
+        self.available_clfs = AVAILABLE_CLFS
 
         # Checking if estimator is valid
         if self.estimator is not None:

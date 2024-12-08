@@ -1,10 +1,6 @@
 # Standard library imports
 import os
-import time
-import logging
 import multiprocessing
-import copy
-from collections import Counter
 from itertools import chain
 
 # Numerical computing
@@ -12,106 +8,19 @@ import numpy as np
 import pandas as pd
 from scipy.stats import sem
 
-# Machine learning and data processing
-import sklearn
-from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import get_scorer
-
 # Optimization and multiprocessing
-import optuna
 from threadpoolctl import threadpool_limits
 from joblib import Parallel, delayed
 
 # Custom modules
 from .mlestimator import MachineLearningEstimator
-from .utils import balance_fnc, calc_hlp_fnc, inner_selection_fnc
-from .utils import database_fnc, plots_fnc, modinst_fnc
-from .utils import config_fnc
-from .utils.optuna_grid import optuna_grid
-
-# Progress tracking
-import progressbar
+from .utils import balance_fnc, calc_hlp_fnc, inner_selection_fnc, plots_fnc, modinst_fnc
+from .utils.mlp_utls import config_fnc, cv_default, database_fnc, ncv_inout
 
 class MLPipelines(MachineLearningEstimator):
     def __init__(self, label, csv_dir, estimator=None, param_grid=None):
         super().__init__(label, csv_dir, estimator, param_grid)
         self.config_rncv = {}
-
-    def _cv_loop(self, i, avail_thr):
-        """
-        This function is used to perform the rounds loop of the cross-validation using only the default parameters. 
-        It is useful for first insights about the estimators performance and is fast for big datasets.
-        It is used only in rcv_accel function.
-
-        Parameters
-        ----------
-        i : int
-            The current round of the cross-validation.
-
-        avail_thr : int
-            The number of available threads for parallelization.
-
-        Returns
-        -------
-        list_dfs : list of pandas DataFrames
-            A list of dataframes containing the results of the cross-validation.
-        """
-        start = time.time()  # Count time of outer loops
-        
-        # Split the data into train and test
-        self.config_rcv["cv_splits"] = StratifiedKFold(
-            n_splits=self.config_rcv["splits"], shuffle=True, random_state=i
-        )
-
-        train_test_indices = list(self.config_rcv["cv_splits"].split(self.X, self.y))
-
-        # Store the results in a list od dataframes
-        list_dfs = []
-
-        # Initiate the progress bar
-        widgets = [
-            progressbar.Percentage(),
-            " ",
-            progressbar.GranularBar(),
-            " ",
-            progressbar.Timer(),
-            " ",
-            progressbar.ETA(),
-        ]
-
-        temp_list = []
-        with progressbar.ProgressBar(
-            prefix=f"Round {i+1} of CV:",
-            max_value=self.config_rcv["splits"],
-            widgets=widgets,
-        ) as bar:
-            split_index = 0
-
-            # For each outer fold perform
-            for train_index, test_index in train_test_indices:
-                # Initialize variables
-                results = {
-                    "Classifiers": [],
-                    "Selected_Features": [],
-                    "Number_of_Features": [],
-                    "Way_of_Selection": [],
-                    "Estimator": [],
-                    'Samples_counts': [],
-                }
-                results.update({f"{metric}": [] for metric in self.config_rcv["extra_metrics"]})
-                
-                results = self._fit_procedure(self.config_rcv, results, train_index, test_index, i)
-                temp_list.append([results])
-                bar.update(split_index)
-                split_index += 1
-                time.sleep(0.5)
-
-            list_dfs = [item for sublist in temp_list for item in sublist]
-            end = time.time()
-
-        # Return the list of dataframes and the time fold
-        print(f"Finished with {i+1} round after {(end-start)/3600:.2f} hours.")
-        return list_dfs 
 
     def rcv_accel(        
         self,
@@ -198,7 +107,7 @@ class MLPipelines(MachineLearningEstimator):
         """
         self.config_rcv = locals()
         self.config_rcv.pop("self", None)
-        self.config_rcv = calc_hlp_fnc._parameters_check(self.config_rcv,'rcv', self.X, self.csv_dir, self.available_clfs)
+        self.config_rcv = calc_hlp_fnc._parameters_check(self.config_rcv,'rcv', self.X, self.csv_dir, self.label, self.available_clfs)
         
         # Parallelization
         trial_indices = range(rounds)
@@ -211,7 +120,7 @@ class MLPipelines(MachineLearningEstimator):
 
         with threadpool_limits():
             list_dfs = Parallel(n_jobs=use_cores,verbose=0)(
-                delayed(self._cv_loop)(i,avail_thr) for i in trial_indices
+                delayed(cv_default._cv_loop)(self.X, self.y, self.config_rcv,i,avail_thr) for i in trial_indices
             )
 
         list_dfs_flat = list(chain.from_iterable(list_dfs))
@@ -295,424 +204,10 @@ class MLPipelines(MachineLearningEstimator):
             
         if info_to_db:
             # Add to database
-            database_fnc._insert_data_into_db(scores_dataframe, self.config_rcv)
+            database_fnc._insert_data_into_sqlite_db(scores_dataframe, self.config_rcv)
 
         return statistics_dataframe
-            
-    def _filter_features(self, train_index, test_index, X, y, num_feature2_use, config):
-        """
-        This function filters the features using the selected model.
-        Returns the filtered train and test sets indexes - including the normalized data and the missing values - and the selected features.
-        
-        Parameters
-        ----------
-        train_index : array-like
-            The indices of the samples in the training set.
-        test_index : array-like
-            The indices of the samples in the test set.
-        X : pandas DataFrame
-            The features of the dataset.
-        y : pandas Series
-            The target variable of the dataset.
-        num_feature2_use : int
-            The number of features to select.
-        cvncvsel : str
-            Whether to use the config for nested cv or recursive nested cv.
-        
-        Returns
-        -------
-        X_train_selected : pandas DataFrame
-            The filtered training set.
-        X_test_selected : pandas DataFrame
-            The filtered test set.
-        num_feature : int or str
-            The number of features selected or "full" if all features were selected.
-        """
-        
-        # Find the train and test sets
-        X_tr, X_te = X.iloc[train_index], X.iloc[test_index]
-        y_train, _ = y[train_index], y[test_index]
 
-        X_train, X_test = self.normalize(
-            X=X_tr,
-            train_test_set=True,
-            X_test=X_te,
-            method=config["normalization"],
-        )
-
-        # Manipulate the missing values for both train and test sets
-        X_train = self.missing_values(
-            data=X_train, method=config["missing_values_method"]
-        )
-        X_test = self.missing_values(
-            data=X_test, method=config["missing_values_method"]
-        )
-
-        # Find the feature selection type and apply it to the train and test sets
-        if config["feature_selection_type"] != "percentile":
-            if isinstance(num_feature2_use, int):
-                if num_feature2_use < X_train.shape[1]:
-                    self.selected_features = self.feature_selection(
-                        X=X_train,
-                        y=y_train,
-                        method=config["feature_selection_type"],
-                        num_features=num_feature2_use,
-                        inner_method=config["feature_selection_method"],
-                    )
-                    X_train_selected = X_train[self.selected_features]
-                    X_test_selected = X_test[self.selected_features]
-                    num_feature = num_feature2_use
-                elif num_feature2_use == X_train.shape[1]:
-                    X_train_selected = X_train
-                    X_test_selected = X_test
-                    num_feature = "full"
-                else:
-                    raise ValueError(
-                        "num_features must be an integer less than the number of features in the dataset"
-                    )
-        elif config["feature_selection_type"] == "percentile":
-            if isinstance(num_feature2_use, int):
-                if (
-                    num_feature2_use == 100 or num_feature2_use == self.X.shape[1]
-                ):  
-                    X_train_selected = X_train
-                    X_test_selected = X_test
-                    num_feature = "full"
-                elif num_feature2_use < 100 and num_feature2_use > 0:
-                    self.selected_features = self.feature_selection(
-                        X=X_train,
-                        y=y_train,
-                        method=config["feature_selection_type"],
-                        inner_method=config["feature_selection_method"],
-                        num_features=num_feature2_use,
-                    )
-                    X_train_selected = X_train[self.selected_features]
-                    X_test_selected = X_test[self.selected_features]
-                    num_feature = num_feature2_use
-                else:
-                    raise ValueError(
-                        "num_features must be an integer less or equal than 100 and hugher thatn 0"
-                    )
-        else:
-            raise ValueError("num_features must be an integer or a list or None")
-
-        return X_train_selected, X_test_selected, num_feature
-
-    def _fit_procedure(self, config, results, train_index, test_index, i, n_jobs=None):
-        """
-        This function is used to perform the fit procedure of the machine learning pipeline. 
-        It loops over the number of features and the classifiers given in the config dictionary.
-
-        Parameters
-        ----------
-        config : dict
-            A dictionary containing all the configuration for the machine learning pipeline.
-        results : dict
-            A dictionary containing the results of the machine learning pipeline.
-        train_index : array-like
-            The indices of the training set.
-        test_index : array-like
-            The indices of the testing set.
-        i : int
-            The current round of the cross-validation.
-        n_jobs : int or None
-            The number of jobs to run in parallel. If None, the number of jobs is set to the number of available CPU cores.
-
-        Returns
-        -------
-        results : dict
-            The results of the machine learning pipeline.
-        """
-        # Loop over the number of features
-        for num_feature2_use in config["num_features"]:            
-            X_train_selected, X_test_selected, num_feature = self._filter_features(
-                train_index, test_index, self.X, self.y, num_feature2_use, config
-            )
-            y_train, y_test = self.y[train_index], self.y[test_index]
-            
-            # Apply class balancing strategies
-            X_train_selected, y_train = balance_fnc._class_balance(X_train_selected, y_train, config["class_balance"], i)
-                                
-            # Check of the classifiers given list
-            if config["clfs"] is None:
-                raise ValueError("No classifier specified.")
-            else:
-                for estimator in config["clfs"]:
-                    # For every estimator find the best hyperparameteres
-                    self.name = estimator
-                    self.estimator = self.available_clfs[estimator]
-                    if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
-                                (estimator == "XGBClassifier") or 
-                                (estimator == 'GradientBoostingClassifier') or 
-                                (estimator == "LGBMClassifier") or 
-                                (estimator == "CatBoostClassifier")):
-                        
-                        X_train_selected, X_test_selected, num_feature = self._filter_features(
-                            train_index, test_index, self.X, self.y, self.X.shape[1], config
-                        )
-                        y_train, y_test = self.y[train_index], self.y[test_index]
-                        # Check of the classifiers given list
-                        # Perform feature selection using Select From Model (sfm)
-                        X_train_selected, X_test_selected, num_feature = calc_hlp_fnc._sfm(self.estimator, X_train_selected, X_test_selected, y_train, num_feature2_use)
-
-                        # Apply class balancing strategies
-                        X_train_selected, y_train = balance_fnc._class_balance(X_train_selected, y_train, config["class_balance"], i)
-                            
-                    if config['model_selection_type'] == 'rncv':
-                        opt_grid = "NestedCV"
-                        self._set_optuna_verbosity(logging.ERROR)
-                        clf = optuna.integration.OptunaSearchCV(
-                            estimator=self.estimator,
-                            scoring=config["inner_scoring"],
-                            param_distributions=optuna_grid[opt_grid][self.name],
-                            cv=config["inner_cv"],
-                            return_train_score=True,
-                            n_jobs=n_jobs,
-                            verbose=0,
-                            n_trials=config["n_trials"],
-                        )
-                        
-                        clf.fit(X_train_selected, y_train)
-                        
-                        for inner_selection in config["inner_selection_lst"]:
-                            results['Inner_selection_mthd'].append(inner_selection)
-                            # Store the results and apply one_sem method if its selected
-                            results["Estimator"].append(self.name)
-                            if inner_selection == "validation_score":
-                                
-                                res_model = copy.deepcopy(clf)
-
-                                params = res_model.best_params_
-
-                                trials = clf.trials_
-                            else:
-                                if (inner_selection == "one_sem") or (inner_selection == "one_sem_grd"):
-                                    samples = X_train_selected.shape[0]
-                                    # Find simpler parameters with the one_sem method if there are any
-                                    simple_model_params = inner_selection_fnc._one_sem_model(trials, self.name, samples, config['inner_splits'],inner_selection)
-                                elif (inner_selection == "gso_1") or (inner_selection == "gso_2"):
-                                    # Find parameters with the smaller gap score with gso_1 method if there are any
-                                    simple_model_params = inner_selection_fnc._gso_model(trials, self.name, config['inner_splits'],inner_selection)
-
-                                params = simple_model_params
-
-                                # Fit the new model
-                                new_params_clf = modinst_fnc._create_model_instance(
-                                    self.name, simple_model_params
-                                )
-                                new_params_clf.fit(X_train_selected, y_train)
-
-                                res_model = copy.deepcopy(new_params_clf)
-                                
-                            results["Hyperparameters"].append(params)
-                            
-                            # Metrics calculations
-                            results = calc_hlp_fnc._calculate_metrics(config, results, res_model, X_test_selected, y_test)
-                            
-                            y_pred = res_model.predict(X_test_selected)
-
-                            # Store the results using different names if feature selection is applied
-                            if num_feature == "full" or num_feature is None:
-                                results["Selected_Features"].append(None)
-                                results["Number_of_Features"].append(X_test_selected.shape[1])
-                                results["Way_of_Selection"].append("full")
-                                results["Classifiers"].append(f"{self.name}")
-                            else:
-                                if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
-                                    (estimator == "XGBClassifier") or 
-                                    (estimator == 'GradientBoostingClassifier') or 
-                                    (estimator == "LGBMClassifier") or 
-                                    (estimator == "CatBoostClassifier")):
-                                    fs_type = "sfm"
-                                else:
-                                    fs_type = config["feature_selection_type"]
-                                results["Classifiers"].append(
-                                    f"{self.name}_{fs_type}_{num_feature}"
-                                )
-                                results["Selected_Features"].append(
-                                    X_train_selected.columns.tolist()
-                                )
-                                results["Number_of_Features"].append(num_feature)
-                                results["Way_of_Selection"].append(
-                                    fs_type
-                                )
-
-                            # Track predictions
-                            samples_counts = np.zeros(len(self.y))
-                            for idx, resu, pred in zip(test_index, y_test, y_pred):
-                                if pred == resu:
-                                    samples_counts[idx] += 1
-
-                            results['Samples_counts'].append(samples_counts)
-                            time.sleep(0.5)
-                            
-                    else:
-                        # Train the model
-                        res_model = modinst_fnc._create_model_instance(
-                                self.name, params=None
-                            )
-                        
-                        res_model.fit(X_train_selected, y_train)
-                        results["Estimator"].append(self.name)
-
-                        # Metrics calculations
-                        results = calc_hlp_fnc._calculate_metrics(config, results, res_model, X_test_selected, y_test)
-                        
-                        y_pred = res_model.predict(X_test_selected)
-
-                        # Store the results using different names if feature selection is applied
-                        if num_feature == "full" or num_feature is None:
-                            results["Selected_Features"].append(None)
-                            results["Number_of_Features"].append(X_test_selected.shape[1])
-                            results["Way_of_Selection"].append("full")
-                            results["Classifiers"].append(f"{self.name}")
-                        else:
-                            if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
-                                (estimator == "XGBClassifier") or 
-                                (estimator == 'GradientBoostingClassifier') or 
-                                (estimator == "LGBMClassifier") or 
-                                (estimator == "CatBoostClassifier")):
-                                fs_type = "sfm"
-                            else:
-                                fs_type = config["feature_selection_type"]
-                            results["Classifiers"].append(
-                                f"{self.name}_{fs_type}_{num_feature}"
-                            )
-                            results["Selected_Features"].append(
-                                X_train_selected.columns.tolist()
-                            )
-                            results["Number_of_Features"].append(num_feature)
-                            results["Way_of_Selection"].append(
-                                fs_type
-                            )
-
-                        # Track predictions
-                        samples_counts = np.zeros(len(self.y))
-                        for idx, resu, pred in zip(test_index, y_test, y_pred):
-                            if pred == resu:
-                                samples_counts[idx] += 1
-
-                        results['Samples_counts'].append(samples_counts)
-                        time.sleep(0.5)
-        return results
-    
-    def _inner_loop(self, train_index, test_index, avail_thr, i):
-        """
-        This function is used to perform the inner loop of the nested cross-validation for the selection of the best hyperparameters.
-        Note: Return a list because this is the desired output for the parallel loop
-        Runs only on the nested cross-validation function.
-        Supports several inner selection methods.
-        """
-        opt_grid = "NestedCV"
-        
-        if self.config_rncv["parallel"] == "thread_per_round":
-            n_jobs = 1
-        elif self.config_rncv["parallel"] == "freely_parallel":
-            n_jobs = avail_thr
-
-        # Initialize variables
-        results = {
-            "Classifiers": [],
-            "Selected_Features": [],
-            "Number_of_Features": [],
-            "Hyperparameters": [],
-            "Way_of_Selection": [],
-            "Estimator": [],
-            'Samples_counts': [],
-            'Inner_selection_mthd': [],
-        }
-        results.update({f"{metric}": [] for metric in self.config_rncv["extra_metrics"]})
-        
-        # Start fitting 
-        results = self._fit_procedure(self.config_rncv, results, train_index, test_index, i, n_jobs)
-                        
-        # Check for consistent list lengths
-        lengths = {key: len(val) for key, val in results.items()}
-
-        if len(set(lengths.values())) > 1:
-            print("Inconsistent lengths in results:", lengths)
-            raise ValueError("Inconsistent lengths in results dictionary")
-
-        return [results]
-
-    def _outer_loop(self, i, avail_thr):
-        """
-        This function is used to make the separations of train and test data of the outer cross validation and initiates the parallilization
-        with respect to the parallelization method.
-        Uses different random seed for each round of the outer cross validation
-        """
-        start = time.time()  # Count time of outer loops
-
-        # Split the data into train and test
-        self.config_rncv["inner_cv"] = StratifiedKFold(
-            n_splits=self.config_rncv["inner_splits"], shuffle=True, random_state=i
-        )
-        self.config_rncv["outer_cv"] = StratifiedKFold(
-            n_splits=self.config_rncv["outer_splits"], shuffle=True, random_state=i
-        )
-
-        train_test_indices = list(self.config_rncv["outer_cv"].split(self.X, self.y))
-
-        # Store the results in a list od dataframes
-        list_dfs = []
-
-        # Initiate the progress bar
-        widgets = [
-            progressbar.Percentage(),
-            " ",
-            progressbar.GranularBar(),
-            " ",
-            progressbar.Timer(),
-            " ",
-            progressbar.ETA(),
-        ]
-        
-        # Find the parallelization method
-        if self.config_rncv["parallel"] == "freely_parallel":
-            temp_list = []
-            with progressbar.ProgressBar(
-                prefix=f"Outer fold of {i+1} round:",
-                max_value=self.config_rncv["outer_splits"],
-                widgets=widgets,
-            ) as bar:
-                split_index = 0
-
-                # For each outer fold perform the inner loop
-                for train_index, test_index in train_test_indices:
-                    results = self._inner_loop(
-                        train_index, test_index, avail_thr, i
-                    )
-                    temp_list.append(results)
-                    bar.update(split_index)
-                    split_index += 1
-                    time.sleep(1)
-                list_dfs = [item for sublist in temp_list for item in sublist]
-                end = time.time()
-        else:
-            temp_list = []
-            with progressbar.ProgressBar(
-                prefix=f"Outer fold of {i+1} round:",
-                max_value=self.config_rncv["outer_splits"],
-                widgets=widgets,
-            ) as bar:
-                split_index = 0
-
-                # For each outer fold perform the inner loop
-                for train_index, test_index in train_test_indices:
-                    results = self._inner_loop(
-                        train_index, test_index, avail_thr, i
-                    )
-                    temp_list.append(results)
-                    bar.update(split_index)
-                    split_index += 1
-                    time.sleep(1)
-                list_dfs = [item for sublist in temp_list for item in sublist]
-                end = time.time()
-
-        # Return the list of dataframes and the time of the outer loop
-        print(f"Finished with {i+1} round after {(end-start)/3600:.2f} hours.")
-        return list_dfs
-    
     def nested_cv(
         self,
         n_trials: int = 100,
@@ -807,8 +302,8 @@ class MLPipelines(MachineLearningEstimator):
         """
         self.config_rncv = locals()
         self.config_rncv.pop("self", None)
-        self.config_rncv = calc_hlp_fnc._parameters_check(self.config_rncv,'rncv', self.X, self.csv_dir, self.available_clfs)
-
+        self.config_rncv = calc_hlp_fnc._parameters_check(self.config_rncv,'rncv', self.X, self.csv_dir, self.label, self.available_clfs)
+        
         # Parallelization
         trial_indices = range(rounds)
         num_cores = multiprocessing.cpu_count()
@@ -822,12 +317,12 @@ class MLPipelines(MachineLearningEstimator):
             avail_thr = 1
             with threadpool_limits(limits=avail_thr):
                 list_dfs = Parallel(n_jobs=use_cores, verbose=0)(
-                    delayed(self._outer_loop)(i, avail_thr) for i in trial_indices
+                    delayed(ncv_inout._outer_loop)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices
                 )
         else: 
             with threadpool_limits():
                 list_dfs = Parallel(n_jobs=use_cores, verbose=0)(
-                    delayed(self._outer_loop)(i, avail_thr) for i in trial_indices
+                    delayed(ncv_inout._outer_loop)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices
                 )
 
         list_dfs_flat = list(chain.from_iterable(list_dfs))
@@ -917,6 +412,6 @@ class MLPipelines(MachineLearningEstimator):
             
         if info_to_db:
             # Add to database
-            database_fnc._insert_data_into_db(scores_dataframe, self.config_rncv)
+            database_fnc._insert_data_into_sqlite_db(scores_dataframe, self.config_rncv)
             
         return statistics_dataframe
