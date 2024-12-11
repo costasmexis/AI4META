@@ -91,9 +91,8 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
             cursor.execute(
                 job_parameters_select_query,
                 (
-                    config['n_trials'], config['rounds'], config['feature_selection_type'],
-                    config['feature_selection_method'], config['inner_scoring'], config['outer_scoring'],
-                    config['inner_splits'], config['outer_splits'], config['normalization'],
+                    config['rounds'], config['feature_selection_type'], config['feature_selection_method'],
+                    config['outer_scoring'], config['outer_splits'], config['normalization'],
                     config['missing_values_method'], config['class_balance']
                 )
             )
@@ -186,30 +185,50 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
             
             print(row["Sel_feat"])
             print(type(row["Sel_feat"]))
-            print(row["Sel_feat"].size)
 
-            # Insert feature counts
-            if all(val is None for val in row["Sel_feat"]) and (row["Sel_feat"].size > 0):
-                selected_features = row["Sel_feat"]
+            if config['model_selection_type'] == 'rncv':
+                if row["Sel_feat"] is not None:
+                    # Convert numpy array to a list if necessary
+                    if isinstance(selected_features, np.ndarray):
+                        selected_features = selected_features.tolist()
 
-                # Convert numpy array to a list if necessary
-                if isinstance(selected_features, np.ndarray):
-                    selected_features = selected_features.tolist()
+                    # Flatten nested lists if needed
+                    if any(isinstance(i, list) for i in selected_features):
+                        selected_features = [item for sublist in selected_features for item in sublist]
 
-                # Flatten nested lists if needed
-                if any(isinstance(i, list) for i in selected_features):
-                    selected_features = [item for sublist in selected_features for item in sublist]
+                    # Count occurrences of each feature
+                    feature_counts = Counter(selected_features)
+                    for feature, count in feature_counts.items():
+                        if feature is None:
+                            continue
+                        feature_counts_query = """
+                            INSERT INTO Feature_Counts (feature_name, count, combination_id)
+                            VALUES (?, ?, ?);
+                        """
+                        cursor.execute(feature_counts_query, (feature, count, combination_id))
+            else:
+                # Insert feature counts
+                if all(val is None for val in row["Sel_feat"]) and (row["Sel_feat"].size > 0):
+                    selected_features = row["Sel_feat"]
 
-                # Count occurrences of each feature
-                feature_counts = Counter(selected_features)
-                for feature, count in feature_counts.items():
-                    if feature is None:
-                        continue
-                    feature_counts_query = """
-                        INSERT INTO Feature_Counts (feature_name, count, combination_id)
-                        VALUES (?, ?, ?);
-                    """
-                    cursor.execute(feature_counts_query, (feature, count, combination_id))
+                    # Convert numpy array to a list if necessary
+                    if isinstance(selected_features, np.ndarray):
+                        selected_features = selected_features.tolist()
+
+                    # Flatten nested lists if needed
+                    if any(isinstance(i, list) for i in selected_features):
+                        selected_features = [item for sublist in selected_features for item in sublist]
+
+                    # Count occurrences of each feature
+                    feature_counts = Counter(selected_features)
+                    for feature, count in feature_counts.items():
+                        if feature is None:
+                            continue
+                        feature_counts_query = """
+                            INSERT INTO Feature_Counts (feature_name, count, combination_id)
+                            VALUES (?, ?, ?);
+                        """
+                        cursor.execute(feature_counts_query, (feature, count, combination_id))
 
         # Commit the transaction
         connection.commit()
