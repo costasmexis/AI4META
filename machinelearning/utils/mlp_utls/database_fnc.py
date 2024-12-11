@@ -6,10 +6,11 @@ import numpy as np
 from collections import Counter
 import sqlite3
 
-def _insert_data_into_sqlite_db(scores_dataframe, config, db_path="Database/ai4meta.db"):
+def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta.db"):
     """
     This function is used to insert new data into the SQLite database schema.
     """
+    db_path = "Database/" + database_name
     try:
         # Establish a connection to the SQLite database
         connection = sqlite3.connect(db_path)

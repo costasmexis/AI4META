@@ -16,7 +16,10 @@ def initialize_database(db_file, create_table_queries):
 
 # Specify the SQLite database file inside the "database" folder
 database_folder = "Database"
-database_file = os.path.join(database_folder, "ai4meta.db")
+db_name = input("Enter the desired name for the database (default: ai4meta.db): ")
+if not db_name:
+    db_name = "ai4meta.db"
+database_file = os.path.join(database_folder, db_name)
 
 # Initialize the database
 initialize_database(database_file, CREATE_TABLE_SQL)

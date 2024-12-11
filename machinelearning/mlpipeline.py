@@ -18,9 +18,10 @@ from .utils import balance_fnc, calc_hlp_fnc, inner_selection_fnc, plots_fnc, mo
 from .utils.mlp_utls import config_fnc, cv_default, database_fnc, ncv_inout
 
 class MLPipelines(MachineLearningEstimator):
-    def __init__(self, label, csv_dir, estimator=None, param_grid=None):
-        super().__init__(label, csv_dir, estimator, param_grid)
-        self.config_rncv = {}
+    def __init__(self, label, csv_dir, database_name=None, estimator=None, param_grid=None):
+        if database_name is None:
+            database_name = "ai4meta.db"
+        super().__init__(label, csv_dir, database_name, estimator, param_grid)
 
     def rcv_accel(        
         self,
@@ -204,7 +205,7 @@ class MLPipelines(MachineLearningEstimator):
             
         if info_to_db:
             # Add to database
-            database_fnc._insert_data_into_sqlite_db(scores_dataframe, self.config_rcv)
+            database_fnc._insert_data_into_sqlite_db(scores_dataframe, self.config_rcv, self.database_name)
 
         return statistics_dataframe
 
@@ -412,6 +413,6 @@ class MLPipelines(MachineLearningEstimator):
             
         if info_to_db:
             # Add to database
-            database_fnc._insert_data_into_sqlite_db(scores_dataframe, self.config_rncv)
+            database_fnc._insert_data_into_sqlite_db(scores_dataframe, self.config_rncv, database_name=self.database_name)
             
         return statistics_dataframe

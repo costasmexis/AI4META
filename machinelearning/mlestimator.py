@@ -48,8 +48,9 @@ def scoring_check(scoring: str) -> None:
 
 
 class MachineLearningEstimator(DataLoader):
-    def __init__(self, label, csv_dir, estimator=None, param_grid=None):
+    def __init__(self, label, csv_dir, database_name=None, estimator=None, param_grid=None):
         super().__init__(label, csv_dir)
+        self.database_name = database_name
         self.estimator = estimator
         self.name = estimator.__class__.__name__
         self.param_grid = param_grid
