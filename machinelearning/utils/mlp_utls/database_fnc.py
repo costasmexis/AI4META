@@ -87,14 +87,25 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
                 AND outer_scoring = ? AND outer_splits = ? AND normalization = ?
                 AND missing_values_method = ? AND class_balance = ?;
         """
-        cursor.execute(
-            job_parameters_select_query,
-            (
-                config['rounds'], config['feature_selection_type'], config['feature_selection_method'],
-                config['outer_scoring'], config['outer_splits'], config['normalization'],
-                config['missing_values_method'], config['class_balance']
+        if config['model_selection_type'] == 'rncv':
+            cursor.execute(
+                job_parameters_select_query,
+                (
+                    config['n_trials'], config['rounds'], config['feature_selection_type'],
+                    config['feature_selection_method'], config['inner_scoring'], config['outer_scoring'],
+                    config['inner_splits'], config['outer_splits'], config['normalization'],
+                    config['missing_values_method'], config['class_balance']
+                )
             )
-        )
+        else:
+            cursor.execute(
+                job_parameters_select_query,
+                (
+                    config['rounds'], config['feature_selection_type'], config['feature_selection_method'],
+                    config['scoring'], config['splits'], config['normalization'],
+                    config['missing_values_method'], config['class_balance']
+                )
+            )
 
         job_id_result = cursor.fetchone()
         job_id = job_id_result[0]
@@ -172,9 +183,13 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
                 (job_id, classifier_id, dataset_id, selection_id, hyperparameter_id, performance_id, sample_rate_id, config['model_selection_type'])
             )
             combination_id = cursor.lastrowid
+            
+            print(row["Sel_feat"])
+            print(type(row["Sel_feat"]))
+            print(row["Sel_feat"].size)
 
             # Insert feature counts
-            if row["Sel_feat"] is not None and row["Sel_feat"].size > 0:
+            if all(val is None for val in row["Sel_feat"]) and (row["Sel_feat"].size > 0):
                 selected_features = row["Sel_feat"]
 
                 # Convert numpy array to a list if necessary
@@ -188,6 +203,8 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
                 # Count occurrences of each feature
                 feature_counts = Counter(selected_features)
                 for feature, count in feature_counts.items():
+                    if feature is None:
+                        continue
                     feature_counts_query = """
                         INSERT INTO Feature_Counts (feature_name, count, combination_id)
                         VALUES (?, ?, ?);
