@@ -38,7 +38,7 @@ class MLPipelines(MachineLearningEstimator):
         freq_feat=None,
         normalization="minmax",
         missing_values_method="median",
-        class_balance = 'auto',
+        class_balance = None,
         sfm=False,
         extra_metrics=['roc_auc','accuracy','balanced_accuracy','recall','precision','f1','average_precision','specificity'],
         info_to_db=False,
@@ -91,7 +91,7 @@ class MLPipelines(MachineLearningEstimator):
         freq_feat : int, optional
             A histogram of the frequency of the (freaq_feat or all if None) features will be plotted, by default None
         class_balance : str, optional
-            If 'auto', class balancing will be applied using 'smote', 'borderline_smote', or 'tomek'. By default 'auto'
+            If not None, class balancing will be applied using 'smote', 'borderline_smote', or 'tomek'. By default None
         extra_metrics : list, optional
             List of extra metrics to calculate. The default is
             ['roc_auc','accuracy','balanced_accuracy','recall','precision',
@@ -163,7 +163,7 @@ class MLPipelines(MachineLearningEstimator):
                     else None,
                     "Fs_num": Numbers_of_Features,
                     "Sel_way": Way_of_Selection,
-                    "Fs_inner": feature_selection_method,
+                    "Fs_inner": 'none' if Way_of_Selection=='none' else feature_selection_method,
                     "Norm": normalization,
                     "Miss_vals": missing_values_method,
                     "Splits": splits,
@@ -191,8 +191,8 @@ class MLPipelines(MachineLearningEstimator):
         final_dataset_name = config_fnc._name_outputs(self.config_rcv, results_dir, self.csv_dir)  
           
         # Save the results to a CSV file of the outer scores for each classifier
-        if return_csv:
-            statistics_dataframe = config_fnc._return_csv(final_dataset_name, scores_dataframe, self.config_rcv['extra_metrics'], filter_csv)
+        # if return_csv:
+        statistics_dataframe = config_fnc._return_csv(final_dataset_name, scores_dataframe, self.config_rcv['extra_metrics'], filter_csv, return_csv)
 
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:
@@ -221,7 +221,7 @@ class MLPipelines(MachineLearningEstimator):
         feature_selection_method: str = "chi2",
         sfm: bool = False,
         freq_feat: int = None,
-        class_balance: str = 'auto',
+        class_balance: str = None,
         inner_scoring: str = "matthews_corrcoef",
         outer_scoring: str = "matthews_corrcoef",
         inner_selection_lst: list = ["validation_score", "one_sem", "gso_1", "gso_2", "one_sem_grd"],
@@ -263,7 +263,7 @@ class MLPipelines(MachineLearningEstimator):
         freq_feat : int, optional
             A histogram of the frequency of the (freaq_feat or all if None) features will be plotted, by default None
         class_balance : str, optional
-            If 'auto', class balancing will be applied using 'smote', 'borderline_smote', or 'tomek'. By default 'auto'
+            If not None, class balancing will be applied using 'smote', 'borderline_smote', or 'tomek'. By default None
         inner_scoring : str, optional
             Scoring metric used in the inner cross-validation loop, by default 'matthews_corrcoef'
         outer_scoring : str, optional
@@ -364,7 +364,7 @@ class MLPipelines(MachineLearningEstimator):
                             "Hyperparameters"
                         ].values,
                         "Sel_way": Way_of_Selection,
-                        "Fs_inner": feature_selection_method,
+                        "Fs_inner": 'none' if Way_of_Selection=='none' else feature_selection_method,
                         "Fs_num": Numbers_of_Features,
                         "Sel_feat": filtered_features
                         if num_features is not None
@@ -399,8 +399,8 @@ class MLPipelines(MachineLearningEstimator):
         final_dataset_name = config_fnc._name_outputs(self.config_rncv, results_dir, self.csv_dir)  
             
         # Save the results to a CSV file of the outer scores for each classifier
-        if return_csv:
-            statistics_dataframe = config_fnc._return_csv(final_dataset_name, scores_dataframe, self.config_rncv['extra_metrics'], filter_csv)
+        # if return_csv:
+        statistics_dataframe = config_fnc._return_csv(final_dataset_name, scores_dataframe, self.config_rncv['extra_metrics'], filter_csv, return_csv)
             
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:    

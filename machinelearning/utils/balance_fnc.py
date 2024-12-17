@@ -5,7 +5,7 @@ from imblearn.under_sampling import TomekLinks, EditedNearestNeighbours
 
 def _class_balance(X, y, bal_type, i):
     # Apply class balancing strategies after sfm
-    if bal_type == 'auto':
+    if bal_type == 'None':
         # No balancing is applied; use original X_train_selected and y_train
         X_train_selected = X
         y_train = y

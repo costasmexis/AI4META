@@ -27,7 +27,7 @@ def _filter_features(train_index, test_index, X, y, num_feature2_use, config):
     X_test_selected : pandas DataFrame
         The filtered test set.
     num_feature : int or str
-        The number of features selected or "full" if all features were selected.
+        The number of features selected or "none" if all features were selected.
     """
     
     data_loader = DataLoader(label=config["dataset_label"], csv_dir=config["dataset_name"])
@@ -68,7 +68,7 @@ def _filter_features(train_index, test_index, X, y, num_feature2_use, config):
             elif num_feature2_use == X_train.shape[1]:
                 X_train_selected = X_train
                 X_test_selected = X_test
-                num_feature = "full"
+                num_feature = "none"
             else:
                 raise ValueError(
                     "num_features must be an integer less than the number of features in the dataset"
@@ -80,7 +80,7 @@ def _filter_features(train_index, test_index, X, y, num_feature2_use, config):
             ):  
                 X_train_selected = X_train
                 X_test_selected = X_test
-                num_feature = "full"
+                num_feature = "none"
             elif num_feature2_use < 100 and num_feature2_use > 0:
                 selected_features = data_loader.feature_selection(
                     X=X_train,

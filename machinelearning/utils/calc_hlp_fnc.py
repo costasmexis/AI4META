@@ -214,11 +214,11 @@ def _parameters_check(config, main_type, X, csv_dir, label, available_clfs):
                 f"Invalid scoring metric: {config['scoring']}. Select one of the following: {list(get_scorer_names())} and specificity"
             )
             
-    if config['class_balance'] not in ['auto','smote','borderline_smote','tomek', None]:
-        raise ValueError("class_balance must be one of the following: 'auto','smote','smotenn','adasyn','borderline_smote','tomek', or None")
+    if config['class_balance'] not in ['smote','borderline_smote','tomek', None]:
+        raise ValueError("class_balance must be one of the following: 'smote','smotenn','adasyn','borderline_smote','tomek', or None")
     elif config['class_balance'] == None:
-        config['class_balance'] = 'auto'
-        print('Class balance is set to "auto"')
+        config['class_balance'] = 'None'
+        print('No class balancing will be applied')
         
     config['dataset_name'] = csv_dir
     config['dataset_label'] = label
@@ -279,20 +279,21 @@ def _input_renamed_metrics( extra_metrics, results, indices):
         results[-1][f"{qck_mtrc}_std"] = round(np.std(metric_values), 3)
         results[-1][f"{qck_mtrc}_sem"] = round(sem(metric_values), 3)
 
-        # Compute and store the 5th and 95th percentiles
-        lower_percentile = np.percentile(metric_values, 5)
-        upper_percentile = np.percentile(metric_values, 95)
-        results[-1][f"{qck_mtrc}_lowerCI"] = round(lower_percentile, 3)
-        results[-1][f"{qck_mtrc}_upperCI"] = round(upper_percentile, 3)
-
         # Calculate and store the median
         results[-1][f"{qck_mtrc}_med"] = round(np.median(metric_values), 3)
-
         # Bootstrap confidence intervals for median and mean
         lomed, upmed = _bootstrap_ci(metric_values, type='median')
         lomean, upmean = _bootstrap_ci(metric_values, type='mean')
+
         results[-1][f"{qck_mtrc}_lomean"] = round(lomean, 3)
         results[-1][f"{qck_mtrc}_upmean"] = round(upmean, 3)
+        # # Compute and store the 5th and 95th percentiles
+        # lower_percentile = np.percentile(metric_values, 5)
+        # upper_percentile = np.percentile(metric_values, 95)
+        # results[-1][f"{qck_mtrc}_lowerCI"] = round(lower_percentile, 3)
+        # results[-1][f"{qck_mtrc}_upperCI"] = round(upper_percentile, 3)
+
+        
         results[-1][f"{qck_mtrc}_lomed"] = round(lomed, 3)
         results[-1][f"{qck_mtrc}_upmed"] = round(upmed, 3)
     

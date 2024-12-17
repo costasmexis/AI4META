@@ -1,7 +1,7 @@
 import os 
 from datetime import datetime
 
-def _return_csv(final_dataset_name, scores_dataframe, extra_metrics=None, filter_csv=None):
+def _return_csv(final_dataset_name, scores_dataframe, extra_metrics=None, filter_csv=None, save_csv=False):
     """
     Function to save the results to a csv file
 
@@ -23,6 +23,12 @@ def _return_csv(final_dataset_name, scores_dataframe, extra_metrics=None, filter
     """
     results_path = f"{final_dataset_name}_outerloops_results.csv"
     cols_drop = ["Classif_rates", "Clf", "Hyp", "Sel_feat"]
+
+    if 'Out_scor' in scores_dataframe.columns:
+        cols_drop.append("Out_scor")
+    if 'Scoring' in scores_dataframe.columns:
+        cols_drop.append("Scoring")
+
     if extra_metrics is not None:
         for metric in extra_metrics:
             cols_drop.append(f"{metric}") 
@@ -37,8 +43,9 @@ def _return_csv(final_dataset_name, scores_dataframe, extra_metrics=None, filter
                     statistics_dataframe = statistics_dataframe[statistics_dataframe[mtrc_stat] <= filter_csv[mtrc_stat]['l']]
         except Exception as e:
             print(f'An error occurred while filtering the final csv file: {e}\nThe final csv file will not be filtered.')
-    statistics_dataframe.to_csv(results_path, index=False)
-    print(f"Statistics results saved to {results_path}")
+    if save_csv:
+        statistics_dataframe.to_csv(results_path, index=False)
+        print(f"Statistics results saved to {results_path}")
     return statistics_dataframe
 
 def _file_name(config):
@@ -66,7 +73,7 @@ def _file_name(config):
         "inner_splits": 5,
         "outer_splits": 5,
         "normalization": "minmax",
-        "class_balance": "auto",    
+        "class_balance": 'None',    
         "sfm": False,
         "missing_values": "median",
         "features_name": None,
