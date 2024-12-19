@@ -1,7 +1,7 @@
 from dataloader import DataLoader
 from sklearn.feature_selection import SelectFromModel
 
-def _filter_features(X, y, num_feature2_use, config, train_index = None, test_index = None, features_names_list = None):
+def _preprocess(X, y, num_feature2_use, config, train_index = None, test_index = None, features_names_list = None):
     
     data_loader = DataLoader(label=config["dataset_label"], csv_dir=config["dataset_name"])
     

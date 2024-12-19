@@ -9,7 +9,9 @@ from sklearn.model_selection import (
     StratifiedShuffleSplit
 )
 import copy
+
 from machinelearning.utils.calc_fnc import _calc_shap
+from machinelearning.utils.balance_fnc import _class_balance
 
 def _evaluate(
     X, y, best_model, best_params, config
@@ -54,7 +56,7 @@ def _evaluate(
         extra_metrics_scores = _oob_validation(X, y, best_model, config['extra_metrics'])#, calculate_shap=False)
     
     elif config['evaluation'] == "train_test":
-        extra_metrics_scores = _train_test_validation(X, y, best_model, config['extra_metrics'])#, calculate_shap=False)
+        extra_metrics_scores = _train_test_validation(X, y, best_model, config['class_balance'], config['extra_metrics'])#, calculate_shap=False)
                 
     local_data_full_outer = pd.DataFrame(extra_metrics_scores)
 
@@ -107,11 +109,7 @@ def _bootstrap_validation(
         X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
         model_bootstrap.fit(X_train_res, y_train_res)
         y_pred = model_bootstrap.predict(X_test)
-        
-        # # Calculate the main scoring metric
-        # score = metrics.get_scorer(config['scoring'])._score_func(y_test, y_pred)
-        # bootstrap_scores.append(score)
-        
+
         # Calculate and store extra metrics
         if extra_metrics is not None:
             for extra in extra_metrics:
@@ -140,11 +138,7 @@ def _oob_validation(
         
         model_oob = copy.deepcopy(model)
         model_oob = model_oob.fit(X_train, y_train)
-        
         y_pred = model_oob.predict(X_test)
-    
-        # score = metrics.get_scorer(self.scoring)._score_func(y_test, y_pred)
-        # oob_scores.append(score)
         
         # Calculate and store extra metrics
         if extra_metrics is not None:
@@ -154,25 +148,19 @@ def _oob_validation(
 
     return  extra_metrics_scores#, oob_scores,
 
-
-def _train_test_validation(X, y, model, extra_metrics=None):
+def _train_test_validation(X, y, model, class_balance_method, extra_metrics=None):
     tt_prop_scores = []
     extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
     sss = StratifiedShuffleSplit(n_splits=100, test_size=0.3, random_state=0)
 
     for i, (train_index, test_index) in tqdm(enumerate(sss.split(X, y)), desc="TT prop validation"):
         # Use .iloc for DataFrame X and NumPy indexing for array y
-        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
-        y_train, y_test = y[train_index], y[test_index]
+        X_train, y_train = _class_balance(X.iloc[train_index], y[train_index], class_balance_method), _class_balance(X.iloc[test_index], y[test_index], class_balance_method)
+        X_test, y_test = X.iloc[test_index], y[test_index]
 
         # Deepcopy the model and fit it on the train set
-        model_tt_prop = copy.deepcopy(model)
-        model_tt_prop = model_tt_prop.fit(X_train, y_train)  
+        model_tt_prop = model.fit(X_train, y_train)  
         y_pred = model_tt_prop.predict(X_test)
-
-        # # Evaluate the primary metric
-        # score = metrics.get_scorer(self.scoring)._score_func(y_test, y_pred)
-        # tt_prop_scores.append(score)
 
         # Calculate and store extra metrics
         if extra_metrics is not None:

@@ -236,6 +236,15 @@ def _parameters_check(config, main_type, X, csv_dir, label, available_clfs):
         # Filter classifiers based on the exclude_classes list
         clfs = [clf for clf in available_clfs.keys() if clf not in exclude_classes]
         config["clfs"] = clfs
+    else: 
+        if config['param_grid'] is None:
+            config['param_grid'] = 'None'
+        else:
+            config['param_grid'] = str(config['param_grid'])
+        if config['features_names_list'] is None:
+            config['features_names_list'] = 'None'
+        else:
+            config['features_names_list'] = str(config['features_names_list'])
     return config  
  
 def _input_renamed_metrics( extra_metrics, results, indices):

@@ -1,15 +1,18 @@
 import os
 import json
 import numpy as np
-# import psycopg2
-# from psycopg2.extras import execute_values
+import pandas as pd
 from collections import Counter
 import sqlite3
 
-def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta.db"):
+def _save_to_db(scores_dataframe, config, database_name="ai4meta.db"):
     """
     This function is used to insert new data into the SQLite database schema.
     """
+    refine_df = pd.DataFrame()
+    for metric in scores_dataframe.columns:
+        refine_df[metric] = scores_dataframe[metric].tolist()
+
     db_path = "Database/" + database_name
     try:
         # Establish a connection to the SQLite database
@@ -59,7 +62,7 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
                     config['missing_values_method'], config['class_balance']
                 )
             )
-        else:
+        elif config['model_selection_type'] == 'rcv':
             job_parameters_query = """
                 INSERT INTO Job_Parameters (
                     rounds, feature_selection_type, feature_selection_method, 
@@ -78,6 +81,25 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
                     config['missing_values_method'], config['class_balance']
                 )
             )
+        else:
+            job_parameters_query = """
+                INSERT INTO Job_Parameters (
+                    n_trials, rounds, feature_selection_type, feature_selection_method, 
+                    outer_scoring, outer_splits, normalization, evaluation_mthd, features_names_list,
+                    missing_values_method, class_balance, param_grid
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT DO NOTHING;
+            """
+            cursor.execute(
+                job_parameters_query,
+                (
+                    config['n_trials'], config['rounds'], config['feature_selection_type'],
+                    config['feature_selection_method'], config['scoring'], config['splits'], 
+                    config['normalization'], config['evaluation'], config['features_names_list'],
+                    config['missing_values_method'], config['class_balance'], config['param_grid']
+                )
+            )
 
         # Fetch the job_id
         job_parameters_select_query = """
@@ -85,7 +107,8 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
             WHERE 
                 rounds = ? AND feature_selection_type = ? AND feature_selection_method = ?
                 AND outer_scoring = ? AND outer_splits = ? AND normalization = ?
-                AND missing_values_method = ? AND class_balance = ?;
+                AND missing_values_method = ? AND class_balance = ? AND evaluation_mthd = ?
+                AND features_names_list = ? AND param_grid = ?;
         """
         if config['model_selection_type'] == 'rncv':
             cursor.execute(
@@ -93,16 +116,26 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
                 (
                     config['rounds'], config['feature_selection_type'], config['feature_selection_method'],
                     config['outer_scoring'], config['outer_splits'], config['normalization'],
-                    config['missing_values_method'], config['class_balance']
+                    config['missing_values_method'], config['class_balance'], None, None, None
                 )
             )
-        else:
+        elif config['model_selection_type'] == 'rcv':
             cursor.execute(
                 job_parameters_select_query,
                 (
                     config['rounds'], config['feature_selection_type'], config['feature_selection_method'],
                     config['scoring'], config['splits'], config['normalization'],
-                    config['missing_values_method'], config['class_balance']
+                    config['missing_values_method'], config['class_balance'], None, None, None
+                )
+            )
+        else: 
+            cursor.execute(
+                job_parameters_select_query,
+                (
+                    config['rounds'], config['feature_selection_type'],config['feature_selection_method'], 
+                    config['scoring'], config['splits'], config['normalization'],    
+                    config['missing_values_method'], config['class_balance'], config['evaluation'],
+                    config['features_names_list'], config['param_grid']
                 )
             )
 
@@ -110,13 +143,13 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
         job_id = job_id_result[0]
 
         # Insert classifiers and associated data
-        for _, row in scores_dataframe.iterrows():
+        for _, row in refine_df.iterrows():
             # Check if the classifier combination already exists
             check_query = """
                 SELECT classifier_id FROM Classifiers
                 WHERE estimator = ? AND inner_selection = ?;
             """
-            cursor.execute(check_query, (row["Est"], row["In_sel"]))
+            cursor.execute(check_query, (config["estimator_name"], config["inner_selection"]))
             classifier_result = cursor.fetchone()
 
             if classifier_result:
@@ -126,7 +159,7 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
                     INSERT INTO Classifiers (estimator, inner_selection)
                     VALUES (?, ?);
                 """
-                cursor.execute(classifier_query, (row["Est"], row["In_sel"]))
+                cursor.execute(classifier_query, (config["estimator_name"], config["inner_selection"]))
                 classifier_id = cursor.lastrowid
 
             # Insert hyperparameters
@@ -134,7 +167,7 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
                 INSERT INTO Hyperparameters (hyperparameters)
                 VALUES (?);
             """
-            hyperparameters = row["Hyp"]
+            hyperparameters = config["hyperparameters"]
             if isinstance(hyperparameters, np.ndarray):  # Convert numpy arrays to lists
                 hyperparameters = hyperparameters.tolist()
             cursor.execute(hyperparameters_query, (json.dumps(hyperparameters),))
@@ -145,7 +178,7 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
                 INSERT INTO Feature_Selection (way_of_selection, numbers_of_features)
                 VALUES (?, ?);
             """
-            cursor.execute(feature_selection_query, (row["Sel_way"], row["Fs_num"]))
+            cursor.execute(feature_selection_query, (config["feature_selection_type"], config["num_features"]))
             selection_id = cursor.lastrowid
 
             # Insert performance metrics
@@ -156,7 +189,7 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
                 INSERT INTO Performance_Metrics ({metrics_to_add})
                 VALUES ({count_q}) RETURNING performance_id;
             """
-            
+
             metrics = [
                 json.dumps(
                     metric.tolist() if isinstance(metric, np.ndarray) else metric
@@ -165,14 +198,6 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
             ]
             cursor.execute(performance_metrics_query, metrics)
             performance_id = cursor.lastrowid
-
-            # Insert samples classification rates
-            samples_classification_query = """
-                INSERT INTO Samples_Classification_Rates (samples_classification_rates)
-                VALUES (?);
-            """
-            cursor.execute(samples_classification_query, (json.dumps(row["Classif_rates"]),))
-            sample_rate_id = cursor.lastrowid
 
             # Insert data into job combinations
             job_combinations_query = """
@@ -183,35 +208,9 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
             """
             cursor.execute(
                 job_combinations_query,
-                (job_id, classifier_id, dataset_id, selection_id, hyperparameter_id, performance_id, sample_rate_id, config['model_selection_type'])
+                (job_id, classifier_id, dataset_id, selection_id, hyperparameter_id, performance_id, None, config['model_selection_type'])
             )
             combination_id = cursor.lastrowid
-
-            if config['features_name'] == None:
-                continue
-            else:
-                # Insert feature counts
-                if all(val is None for val in row["Sel_feat"]) and (row["Sel_feat"].size > 0):
-                    selected_features = row["Sel_feat"]
-
-                    # Convert numpy array to a list if necessary
-                    if isinstance(selected_features, np.ndarray):
-                        selected_features = selected_features.tolist()
-
-                    # Flatten nested lists if needed
-                    if any(isinstance(i, list) for i in selected_features):
-                        selected_features = [item for sublist in selected_features for item in sublist]
-
-                    # Count occurrences of each feature
-                    feature_counts = Counter(selected_features)
-                    for feature, count in feature_counts.items():
-                        if feature is None:
-                            continue
-                        feature_counts_query = """
-                            INSERT INTO Feature_Counts (feature_name, count, combination_id)
-                            VALUES (?, ?, ?);
-                        """
-                        cursor.execute(feature_counts_query, (feature, count, combination_id))
 
         # Commit the transaction
         connection.commit()

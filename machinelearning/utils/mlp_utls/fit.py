@@ -8,7 +8,7 @@ from machinelearning.utils.calc_fnc import _calculate_metrics
 from machinelearning.utils.inner_selection_fnc import _one_sem_model, _gso_model
 from machinelearning.utils.balance_fnc import _class_balance
 from machinelearning.utils.modinst_fnc import _create_model_instance
-from machinelearning.utils.filter_ftrs import _filter_features, _sfm
+from machinelearning.utils.filter_ftrs import _preprocess, _sfm
 from machinelearning.utils.optuna_grid import optuna_grid
 from machinelearning.utils.translators import AVAILABLE_CLFS
 
@@ -44,7 +44,7 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
     """
     # Loop over the number of features
     for num_feature2_use in config["num_features"]:            
-        X_train_selected, X_test_selected, num_feature = _filter_features(
+        X_train_selected, X_test_selected, num_feature = _preprocess(
             X, y, num_feature2_use, config, train_index=train_index, test_index=test_index 
         )
         y_train, y_test = y[train_index], y[test_index]
@@ -66,7 +66,7 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
                             (estimator == "LGBMClassifier") or 
                             (estimator == "CatBoostClassifier")) and (num_feature2_use != X.shape[1]):
                     
-                    X_train_selected, X_test_selected, num_feature = _filter_features(
+                    X_train_selected, X_test_selected, num_feature = _preprocess(
                         X, y, X.shape[1], config, train_index=train_index, test_index=test_index 
                     )
                     y_train, y_test = y[train_index], y[test_index]

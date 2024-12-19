@@ -201,7 +201,7 @@ class MLPipelines(MachineLearningEstimator):
         
         # Plot box or violin plots of the outer cross-validation scores 
         if plot is not None:
-            plots_fnc._plot(scores_dataframe, plot, self.config_rcv['scoring'], final_dataset_name)
+            plots_fnc._plot_per_clf(scores_dataframe, plot, self.config_rcv['scoring'], final_dataset_name)
             
         if info_to_db:
             # Add to database
@@ -409,7 +409,7 @@ class MLPipelines(MachineLearningEstimator):
         
         # Plot box or violin plots of the outer cross-validation scores for all Inner_Selection methods
         if plot is not None:
-            plots_fnc._plot(scores_dataframe, plot, self.config_rncv['outer_scoring'], final_dataset_name)
+            plots_fnc._plot_per_clf(scores_dataframe, plot, self.config_rncv['outer_scoring'], final_dataset_name)
             
         if info_to_db:
             # Add to database

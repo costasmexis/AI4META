@@ -18,11 +18,13 @@ import warnings
 from machinelearning.utils.optuna_grid import optuna_grid
 from machinelearning.utils.translators import AVAILABLE_CLFS
 from machinelearning.utils.calc_fnc import _parameters_check
-from machinelearning.utils.filter_ftrs import _filter_features
+from machinelearning.utils.filter_ftrs import _preprocess
 from machinelearning.utils.balance_fnc import _class_balance
 from machinelearning.utils.modinst_fnc import _create_model_instance
 from machinelearning.utils.inner_selection_fnc import _one_sem_model, _gso_model
 from machinelearning.utils.mle_utils.evaluation import _evaluate
+from machinelearning.utils.plots_fnc import _plot_per_metric
+from machinelearning.utils.mle_utils.database_fnc import _save_to_db
 
 class MachineLearningEstimator(DataLoader):
     def __init__(self, label, csv_dir, database_name=None, estimator=None, param_grid=None):
@@ -449,8 +451,6 @@ class MachineLearningEstimator(DataLoader):
 
     def bayesian_search(
         self,
-        # X=None,
-        # y=None,
         scoring="matthews_corrcoef",
         features_names_list=None,
         rounds=10,
@@ -522,7 +522,7 @@ class MachineLearningEstimator(DataLoader):
         self.config_cv.pop("self", None)
         self.config_cv = _parameters_check(self.config_cv, self.model_selection_way, self.X, self.csv_dir, self.label, self.available_clfs)
 
-        X, _, num_feature = _filter_features(self.X, self.y, self.config_cv['num_features'], self.config_cv)
+        X, _, num_feature = _preprocess(self.X, self.y, self.config_cv['num_features'], self.config_cv, features_names_list = features_names_list)
 
         if param_grid is None:
             self.param_grid = optuna_grid["NestedCV"]
@@ -559,7 +559,6 @@ class MachineLearningEstimator(DataLoader):
         )
         
         clf.fit(X, self.y)
-        # study = clf.study_
         model_trials = clf.trials_
 
         if (inner_selection == "one_sem") or (inner_selection == "one_sem_grd"):
@@ -572,46 +571,28 @@ class MachineLearningEstimator(DataLoader):
         else:
             simple_model_params = clf.best_params_
         
+        # Initiate the best model
         best_params = simple_model_params
-        
+        self.config_cv['hyperparameters'] = best_params
         best_model = _create_model_instance(estimator_name, best_params)
-
         self.best_estimator = best_model
-                    
-        # for trial in study.trials:
-        #     # Check if the trial parameters match the selected parameters
-        #     if trial.params == simple_model_params:
-        #         matching_score = trial.value  # Extract the score of the matching trial
-        #         break    
-        
-        # best_score = clf.best_score_
-        
-        # if estimator_name == 'ElasticNet':
-        #     print(f"Estimator: LogisticRegression with ElasticNet penalty")
-        # else:
-        #     print(f"Estimator: {estimator_name}")
-        # print(f"Best parameters: {best_params}")
-        
-        # if inner_selection == "validation_score":
-        #     print(f"Best trials score: {matching_score}.")
-        # else:
-        #     if matching_score == best_score:
-        #         print(f"Best trials score: {best_score}. Using {inner_selection} th best score is the same.")
-        #     else:
-        #         print(f"Best trials score wiuth validation method: {best_score}. Using {inner_selection} th best score is {matching_score}.")
 
         scores_df, shaps_array = _evaluate(X, self.y, best_model, best_params, self.config_cv)
-        return 'SUCCESS'
 
         if boxplot:
-            _eval_boxplot(estimator_name, eval_df, splits, evaluation)
+            _plot_per_metric(scores_df, estimator_name, inner_selection, evaluation)
+        
+        if info_to_db:
+            print('INFO TO DB')
+            print(self.config_cv)
+            print(scores_df.columns)
+            _save_to_db(scores_df, self.config_cv)
 
         if calculate_shap and (evaluation == 'cv_rounds'):
             self.shap_values = shaps_array
-            return self.best_estimator, eval_df, shaps_array
-        else:
-            return self.best_estimator, eval_df
 
+        print('Model created and it is selected with the best parameters')
+        return scores_df
         
 
 
