@@ -9,9 +9,11 @@ def _save_to_db(scores_dataframe, config, database_name="ai4meta.db"):
     """
     This function is used to insert new data into the SQLite database schema.
     """
-    refine_df = pd.DataFrame()
+    refine_df = pd.DataFrame(index=[0], columns=scores_dataframe.columns, dtype=object)
+
     for metric in scores_dataframe.columns:
-        refine_df[metric] = scores_dataframe[metric].tolist()
+        refine_df.at[0, metric] = list(scores_dataframe[metric].values)
+
 
     db_path = "Database/" + database_name
     try:
