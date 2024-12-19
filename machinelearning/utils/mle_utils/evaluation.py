@@ -58,7 +58,7 @@ def _evaluate(
                 
     local_data_full_outer = pd.DataFrame(extra_metrics_scores)
 
-    return best_model, local_data_full_outer, x_shap
+    return local_data_full_outer, x_shap
 
 def _cv_rounds_validation(X, y, model, config, x_shap):
     extra_metrics_scores = {extra: [] for extra in config['extra_metrics']} if config['extra_metrics'] else {}    

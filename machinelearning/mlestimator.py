@@ -522,7 +522,7 @@ class MachineLearningEstimator(DataLoader):
         self.config_cv.pop("self", None)
         self.config_cv = _parameters_check(self.config_cv, self.model_selection_way, self.X, self.csv_dir, self.label, self.available_clfs)
 
-        X, y, num_feature = _filter_features(self.X, self.y, self.config_cv['num_features'], self.config_cv)
+        X, _, num_feature = _filter_features(self.X, self.y, self.config_cv['num_features'], self.config_cv)
 
         if param_grid is None:
             self.param_grid = optuna_grid["NestedCV"]
@@ -543,7 +543,7 @@ class MachineLearningEstimator(DataLoader):
             print(f"Warning: {processors} processors are not available. Using 1 processor instead.")
             processors = 1
         
-        custom_cv_splits = StratifiedKFold(n_splits=splits, shuffle=True).split(X, y)
+        custom_cv_splits = StratifiedKFold(n_splits=splits, shuffle=True).split(X, self.y)
 
         clf = optuna.integration.OptunaSearchCV(
             estimator=self.available_clfs[estimator_name],
@@ -558,8 +558,8 @@ class MachineLearningEstimator(DataLoader):
             subsample=0.7*X.shape[0]*(splits-1)/splits,
         )
         
-        clf.fit(X, y)
-        study = clf.study_
+        clf.fit(X, self.y)
+        # study = clf.study_
         model_trials = clf.trials_
 
         if (inner_selection == "one_sem") or (inner_selection == "one_sem_grd"):
@@ -600,7 +600,7 @@ class MachineLearningEstimator(DataLoader):
         #     else:
         #         print(f"Best trials score wiuth validation method: {best_score}. Using {inner_selection} th best score is {matching_score}.")
 
-        scores_df, shaps_array = _evaluate(X, y, best_model, best_params, self.config_cv)
+        scores_df, shaps_array = _evaluate(X, self.y, best_model, best_params, self.config_cv)
         return 'SUCCESS'
 
         if boxplot:

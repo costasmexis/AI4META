@@ -2,34 +2,6 @@ from dataloader import DataLoader
 from sklearn.feature_selection import SelectFromModel
 
 def _filter_features(X, y, num_feature2_use, config, train_index = None, test_index = None, features_names_list = None):
-    """
-    This function filters the features using the selected model.
-    Returns the filtered train and test sets indexes - including the normalized data and the missing values - and the selected features.
-    
-    Parameters
-    ----------
-    train_index : array-like
-        The indices of the samples in the training set.
-    test_index : array-like
-        The indices of the samples in the test set.
-    X : pandas DataFrame
-        The features of the dataset.
-    y : pandas Series
-        The target variable of the dataset.
-    num_feature2_use : int
-        The number of features to select.
-    cvncvsel : str
-        Whether to use the config for nested cv or recursive nested cv.
-    
-    Returns
-    -------
-    X_train_selected : pandas DataFrame
-        The filtered training set.
-    X_test_selected : pandas DataFrame
-        The filtered test set.
-    num_feature : int or str
-        The number of features selected or "none" if all features were selected.
-    """
     
     data_loader = DataLoader(label=config["dataset_label"], csv_dir=config["dataset_name"])
     
