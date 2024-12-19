@@ -5,7 +5,7 @@ from itertools import chain
 from collections import Counter
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from .calc_hlp_fnc import _bootstrap_ci
+from .calc_fnc import _bootstrap_ci
 
 def _plot(
     scores_dataframe: pd.DataFrame, 
@@ -164,3 +164,96 @@ def _histogram(scores_dataframe, final_dataset_name, freq_feat, clfs, max_featur
         # Save the plot to 'Results/histogram.png'
         save_path = f"{final_dataset_name}_histogram.png"
         fig.write_image(save_path)
+
+def _eval_boxplot(self, estimator_name, eval_df, splits, evaluation):
+    """
+    Generate a boxplot to visualize the model evaluation results.
+    
+    :param estimator_name: The name of the estimator.
+    :type estimator_name: str
+    :param eval_df: The evaluation dataframe containing the scores.
+    :type eval_df: pandas.DataFrame
+    :param cv: The number of cross-validation folds.
+    :type cv: int
+    :param evaluation: The evaluation method to use ("bootstrap", "cv_simple", or any other custom method).
+    :type evaluation: str
+    """
+    
+    results_dir = "Final_Model_Results"
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
+
+    if (evaluation == "bootstrap") or (evaluation == "oob") or (evaluation == "train_test"):
+        fig = go.Figure()
+        fig.add_trace(
+            go.Box(
+                y=eval_df["Scores"],
+                name=estimator_name,
+                boxpoints="all",
+                jitter=0.3,
+                pointpos=-1.8,
+                boxmean=True,
+            )
+        )
+
+        fig.update_layout(
+            title=f"Model Evaluation Results With {evaluation} Method",
+            yaxis_title="Score",
+            template="plotly_white",
+        )
+
+    elif evaluation == "cv_rounds":
+        # fig = make_subplots(
+        #     rows=1, cols=2, subplot_titles=("Summary Boxplot", "Rounds Scores")
+        # )
+        fig = go.Figure()
+        all_scores = []
+        best_scores_rounds = []
+        best_cv = []
+        for row in range(eval_df.shape[0]):
+            for score in eval_df["Scores"].iloc[row]:
+                all_scores.append(score)
+
+        fig.add_trace(
+            go.Box(
+                y=all_scores,
+                name="All trial Scores",
+                boxpoints="all",
+                jitter=0.3,
+                pointpos=-1.8,
+            )#,
+            # row=1,
+            # col=1,
+        )
+            
+        # Update layout for better readability
+        fig.update_layout(
+            title=f"Model Evaluation Results With {evaluation} Method",
+            height=600,
+            width=1200,
+            showlegend=False,
+        )
+
+    elif evaluation == "train_test":
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(
+                x=eval_df["round"],  # You can change this to any x-axis variable you want
+                y=eval_df["Scores"],     # Y-axis variable
+                mode='markers',          # Use markers for scatter plot
+                name=estimator_name,
+            )
+        )
+
+        fig.update_layout(
+            title=f"Model Evaluation Results With {evaluation} Method",
+            xaxis_title="Score type",  # Change this to the relevant label for the x-axis
+            yaxis_title="Score",
+            template="plotly_white",
+        )
+    
+    fig.show()
+
+    # Save the plot to 'Results/final_model_evaluation.png'
+    save_path = os.path.join(results_dir, f"final_model_evaluation_for_{estimator_name}.png")
+    fig.write_image(save_path)

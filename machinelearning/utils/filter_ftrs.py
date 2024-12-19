@@ -1,6 +1,7 @@
 from dataloader import DataLoader
+from sklearn.feature_selection import SelectFromModel
 
-def _filter_features(train_index, test_index, X, y, num_feature2_use, config):
+def _filter_features(X, y, num_feature2_use, config, train_index = None, test_index = None, features_names_list = None):
     """
     This function filters the features using the selected model.
     Returns the filtered train and test sets indexes - including the normalized data and the missing values - and the selected features.
@@ -32,10 +33,19 @@ def _filter_features(train_index, test_index, X, y, num_feature2_use, config):
     
     data_loader = DataLoader(label=config["dataset_label"], csv_dir=config["dataset_name"])
     
-    # Find the train and test sets
-    X_tr, X_te = X.iloc[train_index], X.iloc[test_index]
-    y_train, _ = y[train_index], y[test_index]
+    if (train_index is None) and (test_index is None):
+        X_tr, X_te = X.copy(), X.copy()
+        y_train = y.copy()
+    else:
+        # Find the train and test sets
+        X_tr, X_te = X.iloc[train_index], X.iloc[test_index]
+        y_train, _ = y[train_index], y[test_index]
 
+    if features_names_list is not None:
+        X_tr = X_tr[features_names_list]
+        X_te = X_te[features_names_list]
+
+    # Normalize the train and test sets
     X_train, X_test = data_loader.normalize(
         X=X_tr,
         train_test_set=True,
@@ -100,3 +110,44 @@ def _filter_features(train_index, test_index, X, y, num_feature2_use, config):
         raise ValueError("num_features must be an integer or a list or None")
 
     return X_train_selected, X_test_selected, num_feature
+
+def _sfm(estimator, X_train, X_test, y_train, num_feature2_use=None, threshold="mean"):
+    """
+    Select features using SelectFromModel with either a predefined number of features 
+    or using the threshold if num_feature2_use is not provided.
+
+    Args:
+        estimator: The estimator object to use for feature selection. Must support `fit` and `feature_importances_`.
+        X_train: Training feature set.
+        X_test: Testing feature set.
+        y_train: Training target variable.
+        num_feature2_use: Number of features to select, defaults to None.
+        threshold: Threshold value for feature selection, defaults to "mean".
+
+    Returns:
+        X_train_selected: The training set with selected features.
+        X_test_selected: The testing set with selected features.
+        num_feature2_use: The number of features selected.
+    """
+    
+    # Fit the estimator on the training data
+    estimator.fit(X_train, y_train)
+
+    # Initialize SelectFromModel based on num_feature2_use or threshold
+    if num_feature2_use is None:
+        sfm = SelectFromModel(estimator, threshold=threshold)
+    else:
+        sfm = SelectFromModel(estimator, max_features=num_feature2_use)
+
+    # Fit SelectFromModel to identify important features
+    sfm.fit(X_train, y_train)
+    
+    # Get indices of selected features
+    selected_features = sfm.get_support(indices=True)
+    selected_columns = X_train.columns[selected_features].to_list()
+    
+    # Select the features for training and testing sets
+    X_train_selected = X_train[selected_columns]
+    X_test_selected = X_test[selected_columns]
+
+    return X_train_selected, X_test_selected, num_feature2_use

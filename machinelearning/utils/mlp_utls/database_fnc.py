@@ -182,31 +182,9 @@ def _insert_data_into_sqlite_db(scores_dataframe, config, database_name="ai4meta
                 (job_id, classifier_id, dataset_id, selection_id, hyperparameter_id, performance_id, sample_rate_id, config['model_selection_type'])
             )
             combination_id = cursor.lastrowid
-            
-            print(row["Sel_feat"])
-            print(type(row["Sel_feat"]))
 
             if config['features_name'] == None:
                 continue
-            # if row["Sel_feat"] is not None:
-            #         # Convert numpy array to a list if necessary
-            #         if isinstance(selected_features, np.ndarray):
-            #             selected_features = selected_features.tolist()
-
-            #         # Flatten nested lists if needed
-            #         if any(isinstance(i, list) for i in selected_features):
-            #             selected_features = [item for sublist in selected_features for item in sublist]
-
-            #         # Count occurrences of each feature
-            #         feature_counts = Counter(selected_features)
-            #         for feature, count in feature_counts.items():
-            #             if feature is None:
-            #                 continue
-            #             feature_counts_query = """
-            #                 INSERT INTO Feature_Counts (feature_name, count, combination_id)
-            #                 VALUES (?, ?, ?);
-            #             """
-            #             cursor.execute(feature_counts_query, (feature, count, combination_id))
             else:
                 # Insert feature counts
                 if all(val is None for val in row["Sel_feat"]) and (row["Sel_feat"].size > 0):

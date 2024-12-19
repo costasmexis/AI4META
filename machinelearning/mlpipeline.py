@@ -14,7 +14,7 @@ from joblib import Parallel, delayed
 
 # Custom modules
 from .mlestimator import MachineLearningEstimator
-from .utils import balance_fnc, calc_hlp_fnc, inner_selection_fnc, plots_fnc, modinst_fnc
+from .utils import balance_fnc, calc_fnc, inner_selection_fnc, plots_fnc, modinst_fnc
 from .utils.mlp_utls import config_fnc, cv_default, database_fnc, ncv_inout
 
 class MLPipelines(MachineLearningEstimator):
@@ -108,7 +108,7 @@ class MLPipelines(MachineLearningEstimator):
         """
         self.config_rcv = locals()
         self.config_rcv.pop("self", None)
-        self.config_rcv = calc_hlp_fnc._parameters_check(self.config_rcv,'rcv', self.X, self.csv_dir, self.label, self.available_clfs)
+        self.config_rcv = calc_fnc._parameters_check(self.config_rcv,'rcv', self.X, self.csv_dir, self.label, self.available_clfs)
         
         # Parallelization
         trial_indices = range(rounds)
@@ -175,7 +175,7 @@ class MLPipelines(MachineLearningEstimator):
                 }
             )
             
-            results = calc_hlp_fnc._input_renamed_metrics(
+            results = calc_fnc._input_renamed_metrics(
                 self.config_rcv['extra_metrics'], results, indices
             )
                                             
@@ -224,7 +224,7 @@ class MLPipelines(MachineLearningEstimator):
         class_balance: str = None,
         inner_scoring: str = "matthews_corrcoef",
         outer_scoring: str = "matthews_corrcoef",
-        inner_selection_lst: list = ["validation_score", "one_sem", "gso_1", "gso_2", "one_sem_grd"],
+        inner_selection: list = ["validation_score", "one_sem", "gso_1", "gso_2", "one_sem_grd"],
         extra_metrics: str|list = ['recall', 'specificity', 'accuracy', 'balanced_accuracy', 
                             'precision', 'f1', 'roc_auc', 'average_precision', 'matthews_corrcoef'],
         plot: str = "box",
@@ -268,7 +268,7 @@ class MLPipelines(MachineLearningEstimator):
             Scoring metric used in the inner cross-validation loop, by default 'matthews_corrcoef'
         outer_scoring : str, optional
             Scoring metric used in the outer cross-validation loop, by default 'matthews_corrcoef'
-        inner_selection_lst : list, optional
+        inner_selection : list, optional
             List of methods for selecting the hyperparameters, by default ['validation_score', 'one_sem', 'gso_1', 'gso_2', 'one_sem_grd']
             Should be a subset of ['validation_score', 'one_sem', 'gso_1', 'gso_2', 'one_sem_grd'] to be valid.
         extra_metrics : str|list, optional
@@ -303,7 +303,7 @@ class MLPipelines(MachineLearningEstimator):
         """
         self.config_rncv = locals()
         self.config_rncv.pop("self", None)
-        self.config_rncv = calc_hlp_fnc._parameters_check(self.config_rncv,'rncv', self.X, self.csv_dir, self.label, self.available_clfs)
+        self.config_rncv = calc_fnc._parameters_check(self.config_rncv,'rncv', self.X, self.csv_dir, self.label, self.available_clfs)
         
         # Parallelization
         trial_indices = range(rounds)
@@ -335,7 +335,7 @@ class MLPipelines(MachineLearningEstimator):
             dataframe = pd.DataFrame(item)
             df = pd.concat([df, dataframe], axis=0)
 
-        for inner_selection in inner_selection_lst:
+        for inner_selection in inner_selection:
             df_inner = df[df["Inner_selection_mthd"] == inner_selection]
             for classif in np.unique(df_inner["Classifiers"]):
                 indices = df_inner[df_inner["Classifiers"] == classif]
@@ -383,7 +383,7 @@ class MLPipelines(MachineLearningEstimator):
                     }
                 )
 
-                results = calc_hlp_fnc._input_renamed_metrics(
+                results = calc_fnc._input_renamed_metrics(
                     self.config_rncv['extra_metrics'], results, indices
                 )
                                             

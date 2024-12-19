@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.feature_selection import SelectFromModel
+import shap
 from scipy.stats import sem
 from sklearn.metrics import get_scorer, confusion_matrix, get_scorer_names
 from sklearn.metrics import average_precision_score, roc_auc_score
@@ -80,46 +80,35 @@ def _bootstrap_ci(data, type='median'):
     
     return lower_bound, upper_bound
 
-def _sfm(estimator, X_train, X_test, y_train, num_feature2_use=None, threshold="mean"):
-    """
-    Select features using SelectFromModel with either a predefined number of features 
-    or using the threshold if num_feature2_use is not provided.
+def _calc_shap(self, X_train, X_test, model):
+    try:
+        explainer = shap.Explainer(model, X_train)
+    except TypeError as e:
+        if (
+            "The passed model is not callable and cannot be analyzed directly with the given masker!"
+            in str(e)
+        ):
+            print(
+                "Switching to predict_proba due to compatibility issue with the model."
+            )
+            explainer = shap.Explainer(lambda x: model.predict_proba(x), X_train)
+        else:
+            raise TypeError(e)
+    try:
+        if self.best_estimator.__class__.__name__ in ["LGBMClassifier", "CatBoostClassifier","RandomForestClassifier"]:
+            shap_values = explainer(X_test, check_additivity=False)
+        else: 
+            shap_values = explainer(X_test)
+    except ValueError:
+        num_features = X_test.shape[1]
+        max_evals = 2 * num_features + 1
+        shap_values = explainer(X_test, max_evals=max_evals)
 
-    Args:
-        estimator: The estimator object to use for feature selection. Must support `fit` and `feature_importances_`.
-        X_train: Training feature set.
-        X_test: Testing feature set.
-        y_train: Training target variable.
-        num_feature2_use: Number of features to select, defaults to None.
-        threshold: Threshold value for feature selection, defaults to "mean".
-
-    Returns:
-        X_train_selected: The training set with selected features.
-        X_test_selected: The testing set with selected features.
-        num_feature2_use: The number of features selected.
-    """
-    
-    # Fit the estimator on the training data
-    estimator.fit(X_train, y_train)
-
-    # Initialize SelectFromModel based on num_feature2_use or threshold
-    if num_feature2_use is None:
-        sfm = SelectFromModel(estimator, threshold=threshold)
+    if len(shap_values.shape) == 3:
+        shap_values = shap_values[:, :, 1]
     else:
-        sfm = SelectFromModel(estimator, max_features=num_feature2_use)
-
-    # Fit SelectFromModel to identify important features
-    sfm.fit(X_train, y_train)
-    
-    # Get indices of selected features
-    selected_features = sfm.get_support(indices=True)
-    selected_columns = X_train.columns[selected_features].to_list()
-    
-    # Select the features for training and testing sets
-    X_train_selected = X_train[selected_columns]
-    X_test_selected = X_test[selected_columns]
-
-    return X_train_selected, X_test_selected, num_feature2_use
+        pass
+    return shap_values
  
 def _parameters_check(config, main_type, X, csv_dir, label, available_clfs):
     """
@@ -140,16 +129,24 @@ def _parameters_check(config, main_type, X, csv_dir, label, available_clfs):
             f"Your Dataset contains NaN values. Some estimators does not work with NaN values.\nThe {config['missing_values_method']} method will be used for the missing values manipulation.\n"
         )
         
-    # Checks for reliability of parameters
-    if isinstance(config["num_features"], int):
-        config["num_features"] = [config["num_features"]]
-    elif isinstance(config["num_features"], list):
-        pass
-    elif config["num_features"] is None:
-        config["num_features"] = [X.shape[1]]
-    else:
-        raise ValueError("num_features must be an integer or a list or None")
-    
+    if (main_type == 'rncv') or (main_type == 'rcv'):
+        # Checks for reliability of parameters
+        if isinstance(config["num_features"], int):
+            config["num_features"] = [config["num_features"]]
+        elif isinstance(config["num_features"], list):
+            pass
+        elif config["num_features"] is None:
+            config["num_features"] = [X.shape[1]]
+        else:
+            raise ValueError("num_features must be an integer or a list or None")
+    else: 
+        if (config["num_features"] is None) or (config["num_features"] > X.shape[1]):
+            config["num_features"] = X.shape[1]
+        elif isinstance(config["num_features"], int):
+            pass
+        else:
+            raise ValueError("num_features must be an integer or None")
+
     if config['extra_metrics'] is not None:
         if type(config['extra_metrics']) is not list:
             config['extra_metrics'] = [config['extra_metrics']]
@@ -168,9 +165,7 @@ def _parameters_check(config, main_type, X, csv_dir, label, available_clfs):
             pass
         else:
             config['extra_metrics'] = [config['outer_scoring']]
-            
-        config['model_selection_type'] = 'rncv'
-        
+                    
         # Checks for reliability of parameters
         if (config['inner_scoring'] not in get_scorer_names()) and (config['inner_scoring'] != "specificity"):
             raise ValueError(
@@ -180,7 +175,7 @@ def _parameters_check(config, main_type, X, csv_dir, label, available_clfs):
             raise ValueError(
                 f"Invalid outer scoring metric: {config['outer_scoring']}. Select one of the following: {list(get_scorer_names())} and specificity"
             )
-        for inner_selection in config['inner_selection_lst']:
+        for inner_selection in config['inner_selection']:
             if inner_selection not in ["validation_score", "one_sem", "gso_1", "gso_2","one_sem_grd"]:
                 raise ValueError(
                     f'Invalid inner method: {inner_selection}. Select one of the following: ["validation_score", "one_sem", "one_sem_grd", "gso_1", "gso_2"]'
@@ -207,13 +202,13 @@ def _parameters_check(config, main_type, X, csv_dir, label, available_clfs):
         else:
             config['extra_metrics'] = [config['scoring']]
         
-        config['model_selection_type'] = 'rcv'
-        
         if (config['scoring'] not in get_scorer_names()) and (config['scoring'] != "specificity"):
             raise ValueError(
                 f"Invalid scoring metric: {config['scoring']}. Select one of the following: {list(get_scorer_names())} and specificity"
             )
             
+    config['model_selection_type'] = main_type
+    
     if config['class_balance'] not in ['smote','borderline_smote','tomek', None]:
         raise ValueError("class_balance must be one of the following: 'smote','smotenn','adasyn','borderline_smote','tomek', or None")
     elif config['class_balance'] == None:
@@ -222,25 +217,25 @@ def _parameters_check(config, main_type, X, csv_dir, label, available_clfs):
         
     config['dataset_name'] = csv_dir
     config['dataset_label'] = label
-    config['features_name'] = None if config['num_features'] == [X.shape[1]] else config['num_features']
+    config['features_name'] = None if (config['num_features'] == [X.shape[1]]) or (config['num_features'] == X.shape[1]) else config['num_features']
             
-    # Set available classifiers
-    if config['search_on'] is not None:
-        classes = config['search_on']  # 'search_on' is a list of classifier names as strings
-        exclude_classes = [
-            clf for clf in available_clfs.keys() if clf not in classes
-        ]
-    elif config['exclude'] is not None:
-            exclude_classes = (
-            config['exclude']  # 'exclude' is a list of classifier names as strings
-        )
-    else:
-        exclude_classes = []
+    if (main_type == 'rncv') or (main_type == 'rcv'):
+        # Set available classifiers
+        if config['search_on'] is not None:
+            classes = config['search_on']  # 'search_on' is a list of classifier names as strings
+            exclude_classes = [
+                clf for clf in available_clfs.keys() if clf not in classes
+            ]
+        elif config['exclude'] is not None:
+                exclude_classes = (
+                config['exclude']  # 'exclude' is a list of classifier names as strings
+            )
+        else:
+            exclude_classes = []
 
-    # Filter classifiers based on the exclude_classes list
-    clfs = [clf for clf in available_clfs.keys() if clf not in exclude_classes]
-    config["clfs"] = clfs
-
+        # Filter classifiers based on the exclude_classes list
+        clfs = [clf for clf in available_clfs.keys() if clf not in exclude_classes]
+        config["clfs"] = clfs
     return config  
  
 def _input_renamed_metrics( extra_metrics, results, indices):
@@ -286,14 +281,7 @@ def _input_renamed_metrics( extra_metrics, results, indices):
         lomean, upmean = _bootstrap_ci(metric_values, type='mean')
 
         results[-1][f"{qck_mtrc}_lomean"] = round(lomean, 3)
-        results[-1][f"{qck_mtrc}_upmean"] = round(upmean, 3)
-        # # Compute and store the 5th and 95th percentiles
-        # lower_percentile = np.percentile(metric_values, 5)
-        # upper_percentile = np.percentile(metric_values, 95)
-        # results[-1][f"{qck_mtrc}_lowerCI"] = round(lower_percentile, 3)
-        # results[-1][f"{qck_mtrc}_upperCI"] = round(upper_percentile, 3)
-
-        
+        results[-1][f"{qck_mtrc}_upmean"] = round(upmean, 3)    
         results[-1][f"{qck_mtrc}_lomed"] = round(lomed, 3)
         results[-1][f"{qck_mtrc}_upmed"] = round(upmed, 3)
     
