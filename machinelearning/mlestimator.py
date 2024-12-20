@@ -58,75 +58,6 @@ class MachineLearningEstimator(DataLoader):
         optuna.logging.set_verbosity(level)
         logging.getLogger("optuna").setLevel(level)
 
-    # def _preprocess(
-    #         self,
-    #         X,
-    #         y,
-    #         scoring,
-    #         features_names_list,
-    #         num_features,
-    #         feature_selection_type,
-    #         estimator_name,
-    #         normalization,
-    #         missing_values_method,
-    #     ):
-    #     """Preprocess the data before fitting the estimator.
-
-    #     This method performs various preprocessing steps on the input data
-    #     based on the provided parameters. It handles missing values, feature
-    #     selection, normalization, and scoring.
-
-    #     :param X: The input features.
-    #     :type X: array-like
-    #     :param y: The target variable.
-    #     :type y: array-like
-    #     :param scoring: The scoring metric to use for evaluation.
-    #     :type scoring: str
-    #     :param features_names_list: The list of feature names to select.
-    #     :type features_names_list: list or None
-    #     :param num_features: The number of features to select.
-    #     :type num_features: int or None
-    #     :param feature_selection_type: The feature selection method.
-    #     :type feature_selection_type: str or None
-    #     :param estimator_name: The name of the estimator to use.
-    #     :type estimator_name: str or None
-    #     :param normalization: The normalization method to use.
-    #     :type normalization: str or None
-    #     :param missing_values_method: The method to handle missing values.
-    #     :type missing_values_method: str or None
-    #     :return: The preprocessed features, target variable, and estimator.
-    #     :rtype: tuple
-    #     """
-    #     scoring_check(scoring)
-    #     # scoring_function = getattr(metrics, scoring)
-    #     scorer = metrics.get_scorer(scoring)
-
-    #     self.scoring = scorer
-
-    #     X = X or self.X
-    #     y = y or self.y
-
-    #     if missing_values_method is not None:
-    #         X = self.missing_values_method(X, method=missing_values_method)
-
-    #     if normalization is not None:
-    #         X = self.normalize(X, method=normalization)
-
-    #     if features_names_list is not None:
-    #         X = X[features_names_list]
-
-    #     elif num_features is not None:
-    #         selected = self.feature_selection(X, y, feature_selection_type, num_features)
-    #         X = X[selected]
-
-    #     if estimator_name is None:
-    #         estimator_name = self.name
-    #     else:
-    #         estimator_name = estimator_name
-
-    #     estimator = self.available_clfs[estimator_name]
-    #     return X, y, estimator
-
     def grid_search(
         self,
         X=None,
@@ -287,26 +218,28 @@ class MachineLearningEstimator(DataLoader):
         else:
             return self.best_estimator, eval_df
 
-    def random_search(
+    def search_cv(
         self,
-        X=None,
-        y=None,
         scoring="matthews_corrcoef",
+        search_type = "random_search",
         features_names_list=None,
         rounds=10,
         splits=5,
-        n_iter=100,
+        n_trials=100,
         estimator_name=None,
-        evaluation="cv_simple",
+        evaluation="cv_rounds",
         num_features=None,
         feature_selection_type="mrmr",
+        feature_selection_method="chi2",
         missing_values_method="median",
         calculate_shap=False,
         param_grid=None,
         normalization="minmax",
         boxplot=True,
-        extra_metrics = ['roc_auc','accuracy','balanced_accuracy','recall','precision','f1','matthews_corrcoef'],
+        extra_metrics = ['roc_auc','accuracy','balanced_accuracy','recall','precision','f1','average_precision','specificity','matthews_corrcoef'],
         warnings_filter=False,
+        info_to_db = False,
+        class_balance = None,
         processors = -1
     ):
         """
@@ -347,20 +280,17 @@ class MachineLearningEstimator(DataLoader):
         :return: The best estimator and evaluation results and/or shap values.
         :rtype: tuple
         """
+        if search_type not in ["random_search", "grid_search"]:
+            raise ValueError(
+                f"Invalid search type: {search_type}. Select one of the following: ['random_search', 'bayesian_search']"
+            )
+        self.model_selection_way = search_type
 
-        self.model_selection_way = "random_search"
+        self.config_cv = locals()
+        self.config_cv.pop("self", None)
+        self.config_cv = _parameters_check(self.config_cv, self.model_selection_way, self.X, self.csv_dir, self.label, self.available_clfs)
 
-        X, y, estimator = self._preprocess(
-            X,
-            y,
-            scoring,
-            features_names_list,
-            num_features,
-            feature_selection_type,
-            estimator_name,
-            normalization,
-            missing_values_method,
-        )
+        X, _, num_feature = _preprocess(self.X, self.y, self.config_cv['num_features'], self.config_cv, features_names_list = features_names_list)
 
         if param_grid is None:
             self.param_grid = optuna_grid["SklearnParameterGrid"]
@@ -468,7 +398,7 @@ class MachineLearningEstimator(DataLoader):
         param_grid=None,
         normalization="minmax",
         inner_selection = "validation_score",
-        extra_metrics = ['roc_auc','accuracy','balanced_accuracy','recall','precision','f1','matthews_corrcoef'],
+        extra_metrics = ['roc_auc','accuracy','balanced_accuracy','recall','precision','f1','average_precision','specificity','matthews_corrcoef'],
         warnings_filter = False,
         info_to_db = False,
         class_balance = None,
@@ -583,9 +513,6 @@ class MachineLearningEstimator(DataLoader):
             _plot_per_metric(scores_df, estimator_name, inner_selection, evaluation)
         
         if info_to_db:
-            print('INFO TO DB')
-            print(self.config_cv)
-            print(scores_df.columns)
             _save_to_db(scores_df, self.config_cv)
 
         if calculate_shap and (evaluation == 'cv_rounds'):
