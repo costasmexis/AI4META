@@ -126,7 +126,7 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
                         results["Hyperparameters"].append(params)
                         
                         # Metrics calculations
-                        results = _calculate_metrics(config, results, res_model, X_test_selected, y_test)
+                        results = _calculate_metrics(config['extra_metrics'], results, res_model, X_test_selected, y_test)
                         
                         y_pred = res_model.predict(X_test_selected)
 
@@ -175,7 +175,7 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
                     results["Estimator"].append(name)
 
                     # Metrics calculations
-                    results = _calculate_metrics(config, results, res_model, X_test_selected, y_test)
+                    results = _calculate_metrics(config['extra_metrics'], results, res_model, X_test_selected, y_test)
                     
                     y_pred = res_model.predict(X_test_selected)
 

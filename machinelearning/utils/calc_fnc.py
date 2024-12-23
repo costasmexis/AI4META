@@ -5,8 +5,8 @@ from sklearn.metrics import get_scorer, confusion_matrix, get_scorer_names
 from sklearn.metrics import average_precision_score, roc_auc_score
 from .translators import METRIC_ADDREVIATIONS
 
-def _calculate_metrics(config, results, clf, X_test, y_test):
-    for metric in config["extra_metrics"]:
+def _calculate_metrics(metrics, results, clf, X_test, y_test):
+    for metric in metrics:
         if metric == 'specificity':
             results[f"{metric}"].append(
                 _specificity_scorer(clf, X_test, y_test)

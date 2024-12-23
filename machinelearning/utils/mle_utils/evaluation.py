@@ -10,7 +10,7 @@ from sklearn.model_selection import (
 )
 import copy
 
-from machinelearning.utils.calc_fnc import _calc_shap
+from machinelearning.utils.calc_fnc import _calc_shap, _calculate_metrics
 from machinelearning.utils.balance_fnc import _class_balance
 
 def _evaluate(
@@ -71,13 +71,14 @@ def _cv_rounds_validation(X, y, model, config, x_shap):
             X_train, X_test = X.iloc[train_index], X.iloc[test_index]
             y_train, y_test = y[train_index], y[test_index]
             model.fit(X_train, y_train)
-            y_pred = model.predict(X_test)
+            # y_pred = model.predict(X_test)
             
             # Calculate and store scores for each extra metric
-            if config['extra_metrics'] is not None:
-                for extra in config['extra_metrics']:
-                    extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
-                    extra_metrics_scores[extra].append(extra_score)
+            # if config['extra_metrics'] is not None:
+            #     for extra in config['extra_metrics']:
+            #         extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
+            #         extra_metrics_scores[extra].append(extra_score)
+            extra_metrics_scores = _calculate_metrics(config['extra_metrics'], extra_metrics_scores, model, X_test, y_test)
 
             if config['calculate_shap']:
                 shap_values = _calc_shap(X_train, X_test, model)
@@ -108,13 +109,10 @@ def _bootstrap_validation(
         model_bootstrap = copy.deepcopy(model)
         X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
         model_bootstrap.fit(X_train_res, y_train_res)
-        y_pred = model_bootstrap.predict(X_test)
+        # y_pred = model_bootstrap.predict(X_test)
 
         # Calculate and store extra metrics
-        if extra_metrics is not None:
-            for extra in extra_metrics:
-                extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
-                extra_metrics_scores[extra].append(extra_score)
+        extra_metrics_scores = _calculate_metrics(extra_metrics, extra_metrics_scores, model_bootstrap, X_test, y_test)
 
     return extra_metrics_scores#, bootstrap_scores, 
 
@@ -141,10 +139,11 @@ def _oob_validation(
         y_pred = model_oob.predict(X_test)
         
         # Calculate and store extra metrics
-        if extra_metrics is not None:
-            for extra in extra_metrics:
-                extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
-                extra_metrics_scores[extra].append(extra_score)
+        # if extra_metrics is not None:
+        #     for extra in extra_metrics:
+        #         extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
+        #         extra_metrics_scores[extra].append(extra_score)
+        extra_metrics_scores = _calculate_metrics(extra_metrics, extra_metrics_scores, model_oob, X_test, y_test)
 
     return  extra_metrics_scores#, oob_scores,
 
@@ -163,9 +162,10 @@ def _train_test_validation(X, y, model, class_balance_method, extra_metrics=None
         y_pred = model_tt_prop.predict(X_test)
 
         # Calculate and store extra metrics
-        if extra_metrics is not None:
-            for extra in extra_metrics:
-                extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
-                extra_metrics_scores[extra].append(extra_score)
+        # if extra_metrics is not None:
+        #     for extra in extra_metrics:
+        #         extra_score = metrics.get_scorer(extra)._score_func(y_test, y_pred)
+        #         extra_metrics_scores[extra].append(extra_score)
+        extra_metrics_scores = _calculate_metrics(extra_metrics, extra_metrics_scores, model_tt_prop, X_test, y_test)
 
     return extra_metrics_scores, #tt_prop_scores, 
