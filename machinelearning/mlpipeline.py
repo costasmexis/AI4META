@@ -13,9 +13,14 @@ from threadpoolctl import threadpool_limits
 from joblib import Parallel, delayed
 
 # Custom modules
-from .mlestimator import MachineLearningEstimator
-from .utils import balance_fnc, calc_fnc, inner_selection_fnc, plots_fnc, modinst_fnc
-from .utils.mlp_utls import config_fnc, cv_default, database_fnc, ncv_inout
+from machinelearning.mlestimator import MachineLearningEstimator
+from machinelearning.utils.calc_fnc import _calc_metrics_stats
+from machinelearning.utils.check import _parameters_check
+from machinelearning.utils.mlp_utls.cv_default import _cv_loop
+from machinelearning.utils.mlp_utls.config_fnc import _name_outputs, _return_csv
+from machinelearning.utils.mlp_utls.database_fnc import _insert_data_into_sqlite_db
+from machinelearning.utils.plots_fnc import _plot_per_clf, _histogram
+from machinelearning.utils.mlp_utls.ncv_inout import _outer_loop
 
 class MLPipelines(MachineLearningEstimator):
     def __init__(self, label, csv_dir, database_name=None, estimator=None, param_grid=None):
@@ -108,7 +113,7 @@ class MLPipelines(MachineLearningEstimator):
         """
         self.config_rcv = locals()
         self.config_rcv.pop("self", None)
-        self.config_rcv = calc_fnc._parameters_check(self.config_rcv,'rcv', self.X, self.csv_dir, self.label, self.available_clfs)
+        self.config_rcv = _parameters_check(self.config_rcv,'rcv', self.X, self.csv_dir, self.label, self.available_clfs)
         
         # Parallelization
         trial_indices = range(rounds)
@@ -121,7 +126,7 @@ class MLPipelines(MachineLearningEstimator):
 
         with threadpool_limits():
             list_dfs = Parallel(n_jobs=use_cores,verbose=0)(
-                delayed(cv_default._cv_loop)(self.X, self.y, self.config_rcv,i,avail_thr) for i in trial_indices
+                delayed(_cv_loop)(self.X, self.y, self.config_rcv,i,avail_thr) for i in trial_indices
             )
 
         list_dfs_flat = list(chain.from_iterable(list_dfs))
@@ -175,7 +180,7 @@ class MLPipelines(MachineLearningEstimator):
                 }
             )
             
-            results = calc_fnc._input_renamed_metrics(
+            results = _calc_metrics_stats(
                 self.config_rcv['extra_metrics'], results, indices
             )
                                             
@@ -188,24 +193,24 @@ class MLPipelines(MachineLearningEstimator):
             os.makedirs(results_dir)
 
         # Initiate name
-        final_dataset_name = config_fnc._name_outputs(self.config_rcv, results_dir, self.csv_dir)  
+        final_dataset_name = _name_outputs(self.config_rcv, results_dir, self.csv_dir)  
           
         # Save the results to a CSV file of the outer scores for each classifier
         # if return_csv:
-        statistics_dataframe = config_fnc._return_csv(final_dataset_name, scores_dataframe, self.config_rcv['extra_metrics'], filter_csv, return_csv)
+        statistics_dataframe = _return_csv(final_dataset_name, scores_dataframe, self.config_rcv['extra_metrics'], filter_csv, return_csv)
 
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:
             # Plot histogram of features
-            plots_fnc._histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rcv['clfs'], self.X.shape[1])
+            _histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rcv['clfs'], self.X.shape[1])
         
         # Plot box or violin plots of the outer cross-validation scores 
         if plot is not None:
-            plots_fnc._plot_per_clf(scores_dataframe, plot, self.config_rcv['scoring'], final_dataset_name)
+            _plot_per_clf(scores_dataframe, plot, self.config_rcv['scoring'], final_dataset_name)
             
         if info_to_db:
             # Add to database
-            database_fnc._insert_data_into_sqlite_db(scores_dataframe, self.config_rcv, self.database_name)
+            _insert_data_into_sqlite_db(scores_dataframe, self.config_rcv, self.database_name)
 
         return statistics_dataframe
 
@@ -303,7 +308,7 @@ class MLPipelines(MachineLearningEstimator):
         """
         self.config_rncv = locals()
         self.config_rncv.pop("self", None)
-        self.config_rncv = calc_fnc._parameters_check(self.config_rncv,'rncv', self.X, self.csv_dir, self.label, self.available_clfs)
+        self.config_rncv = _parameters_check(self.config_rncv,'rncv', self.X, self.csv_dir, self.label, self.available_clfs)
         
         # Parallelization
         trial_indices = range(rounds)
@@ -318,12 +323,12 @@ class MLPipelines(MachineLearningEstimator):
             avail_thr = 1
             with threadpool_limits(limits=avail_thr):
                 list_dfs = Parallel(n_jobs=use_cores, verbose=0)(
-                    delayed(ncv_inout._outer_loop)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices
+                    delayed(_outer_loop)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices
                 )
         else: 
             with threadpool_limits():
                 list_dfs = Parallel(n_jobs=use_cores, verbose=0)(
-                    delayed(ncv_inout._outer_loop)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices
+                    delayed(_outer_loop)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices
                 )
 
         list_dfs_flat = list(chain.from_iterable(list_dfs))
@@ -383,7 +388,7 @@ class MLPipelines(MachineLearningEstimator):
                     }
                 )
 
-                results = calc_fnc._input_renamed_metrics(
+                results = _calc_metrics_stats(
                     self.config_rncv['extra_metrics'], results, indices
                 )
                                             
@@ -396,23 +401,23 @@ class MLPipelines(MachineLearningEstimator):
             os.makedirs(results_dir)
 
         # Name
-        final_dataset_name = config_fnc._name_outputs(self.config_rncv, results_dir, self.csv_dir)  
+        final_dataset_name = _name_outputs(self.config_rncv, results_dir, self.csv_dir)  
             
         # Save the results to a CSV file of the outer scores for each classifier
         # if return_csv:
-        statistics_dataframe = config_fnc._return_csv(final_dataset_name, scores_dataframe, self.config_rncv['extra_metrics'], filter_csv, return_csv)
+        statistics_dataframe = _return_csv(final_dataset_name, scores_dataframe, self.config_rncv['extra_metrics'], filter_csv, return_csv)
             
         # Manipulate the size of the plot to fit the number of features
         if num_features is not None:    
             # Plot histogram of features
-            plots_fnc._histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rncv['clfs'], self.X.shape[1])
+            _histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rncv['clfs'], self.X.shape[1])
         
         # Plot box or violin plots of the outer cross-validation scores for all Inner_Selection methods
         if plot is not None:
-            plots_fnc._plot_per_clf(scores_dataframe, plot, self.config_rncv['outer_scoring'], final_dataset_name)
+            _plot_per_clf(scores_dataframe, plot, self.config_rncv['outer_scoring'], final_dataset_name)
             
         if info_to_db:
             # Add to database
-            database_fnc._insert_data_into_sqlite_db(scores_dataframe, self.config_rncv, database_name=self.database_name)
+            _insert_data_into_sqlite_db(scores_dataframe, self.config_rncv, database_name=self.database_name)
             
         return statistics_dataframe

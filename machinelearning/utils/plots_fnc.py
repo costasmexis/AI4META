@@ -5,7 +5,7 @@ from itertools import chain
 from collections import Counter
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-from machinelearning.utils.calc_fnc import _bootstrap_ci
+from machinelearning.utils.calc_fnc import _calc_ci_btstrp
 
 def _plot_per_clf(
     scores_dataframe: pd.DataFrame, 
@@ -49,7 +49,7 @@ def _plot_per_clf(
             )
 
             # Calculate and add 95% CI for the median
-            lower, upper = _bootstrap_ci(data, type='median')
+            lower, upper = _calc_ci_btstrp(data, type='median')
             fig.add_trace(
                 go.Scatter(
                     x=[f"{classifier} (Median: {median:.2f})",

@@ -17,8 +17,8 @@ import warnings
 
 from machinelearning.utils.optuna_grid import optuna_grid
 from machinelearning.utils.translators import AVAILABLE_CLFS
-from machinelearning.utils.calc_fnc import _parameters_check
-from machinelearning.utils.filter_ftrs import _preprocess
+from machinelearning.utils.check import _parameters_check
+from machinelearning.utils.features_selection import _preprocess
 from machinelearning.utils.balance_fnc import _class_balance
 from machinelearning.utils.modinst_fnc import _create_model_instance
 from machinelearning.utils.inner_selection_fnc import _one_sem_model, _gso_model
