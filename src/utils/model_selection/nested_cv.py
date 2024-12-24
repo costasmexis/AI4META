@@ -75,46 +75,25 @@ def _outer_loop(X, y, config, i, avail_thr):
     ]
     
     # Find the parallelization method
-    if config["parallel"] == "freely_parallel":
-        temp_list = []
-        with progressbar.ProgressBar(
-            prefix=f"Outer fold of {i+1} round:",
-            max_value=config["outer_splits"],
-            widgets=widgets,
-        ) as bar:
-            split_index = 0
+    temp_list = []
+    with progressbar.ProgressBar(
+        prefix=f"Outer fold of {i+1} round:",
+        max_value=config["outer_splits"],
+        widgets=widgets,
+    ) as bar:
+        split_index = 0
 
-            # For each outer fold perform the inner loop
-            for train_index, test_index in train_test_indices:
-                results = _inner_loop(
-                    X, y, config, train_index, test_index, avail_thr, i
-                )
-                temp_list.append(results)
-                bar.update(split_index)
-                split_index += 1
-                time.sleep(1)
-            list_dfs = [item for sublist in temp_list for item in sublist]
-            end = time.time()
-    else:
-        temp_list = []
-        with progressbar.ProgressBar(
-            prefix=f"Outer fold of {i+1} round:",
-            max_value=config["outer_splits"],
-            widgets=widgets,
-        ) as bar:
-            split_index = 0
-
-            # For each outer fold perform the inner loop
-            for train_index, test_index in train_test_indices:
-                results = _inner_loop(
-                    X, y, config, train_index, test_index, avail_thr, i
-                )
-                temp_list.append(results)
-                bar.update(split_index)
-                split_index += 1
-                time.sleep(1)
-            list_dfs = [item for sublist in temp_list for item in sublist]
-            end = time.time()
+        # For each outer fold perform the inner loop
+        for train_index, test_index in train_test_indices:
+            results = _inner_loop(
+                X, y, config, train_index, test_index, avail_thr, i
+            )
+            temp_list.append(results)
+            bar.update(split_index)
+            split_index += 1
+            time.sleep(1)
+        list_dfs = [item for sublist in temp_list for item in sublist]
+        end = time.time()
 
     # Return the list of dataframes and the time of the outer loop
     print(f"Finished with {i+1} round after {(end-start)/3600:.2f} hours.")

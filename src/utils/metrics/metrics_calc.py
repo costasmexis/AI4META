@@ -7,13 +7,15 @@ from src.utils.statistics.bootstrap_ci import _calc_ci_btstrp
 
 def _calculate_metrics(metrics, results, clf, X_test, y_test):
     for metric in metrics:
+        print(metric)
         if metric == 'specificity':
             results[f"{metric}"].append(
                 _specificity_scorer(clf, X_test, y_test)
             )
         else:
-            # print(res_model)
-            try:                                 
+            try:   
+                print('Starting with MCC')    
+                print(get_scorer(metric)(clf, X_test, y_test))                          
                 results[f"{metric}"].append(
                     get_scorer(metric)(clf, X_test, y_test)
                 )

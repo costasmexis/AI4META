@@ -87,24 +87,21 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
                         param_distributions=optuna_grid[opt_grid][name],
                         cv=config["inner_cv"],
                         return_train_score=True,
-                        n_jobs=n_jobs,
+                        n_jobs=1,
                         verbose=0,
                         n_trials=config["n_trials"],
                     )
-                    
+
                     clf.fit(X_train_selected, y_train)
-                    
+                    trials = clf.study_.trials
+
                     for inner_selection in config["inner_selection"]:
                         results['Inner_selection_mthd'].append(inner_selection)
                         # Store the results and apply one_sem method if its selected
                         results["Estimator"].append(name)
                         if inner_selection == "validation_score":
-                            
                             res_model = copy.deepcopy(clf)
-
-                            params = res_model.best_params_
-
-                            trials = clf.trials_
+                            params = res_model.study_.best_params
                         else:
                             if (inner_selection == "one_sem") or (inner_selection == "one_sem_grd"):
                                 samples = X_train_selected.shape[0]
@@ -123,12 +120,15 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
                             new_params_clf.fit(X_train_selected, y_train)
 
                             res_model = copy.deepcopy(new_params_clf)
-                            
+                        
+                        print(f'New model:{res_model}')
+
                         results["Hyperparameters"].append(params)
-                        
+                        print(f'Hyper:{params}')
                         # Metrics calculations
+                        print('Starting Metrics')
                         results = _calculate_metrics(config['extra_metrics'], results, res_model, X_test_selected, y_test)
-                        
+                        print('Starting Predictions')
                         y_pred = res_model.predict(X_test_selected)
 
                         # Store the results using different names if feature selection is applied
