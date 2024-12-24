@@ -14,10 +14,10 @@ from joblib import Parallel, delayed
 
 # Custom modules
 from src.models.mlestimator import MachineLearningEstimator
-from src.utils.metrics.metrics_calc import _calculate_metrics
+from src.utils.statistics.metrics_stats import _calc_metrics_stats
 from src.utils.validation import _validation
 from src.utils.model_selection.default_cv import _cv_loop
-from src.utils.model_selection.nested_cv import _nested_cv
+from src.utils.model_selection.nested_cv import _outer_loop 
 from src.utils.model_selection.results_config import _name_outputs, _return_csv
 from src.utils.model_selection.database_input import _insert_data_into_sqlite_db
 from src.utils.plots import _plot_per_clf, _histogram
@@ -180,7 +180,7 @@ class MLPipelines(MachineLearningEstimator):
                 }
             )
             
-            results = _calculate_metrics(
+            results = _calc_metrics_stats(
                 self.config_rcv['extra_metrics'], results, indices
             )
                                             
@@ -188,7 +188,7 @@ class MLPipelines(MachineLearningEstimator):
         scores_dataframe = pd.DataFrame(results)
 
         # Create a 'Results' directory
-        results_dir = "Results"
+        results_dir = "results"
         if not os.path.exists(results_dir):
             os.makedirs(results_dir)
 
@@ -323,12 +323,12 @@ class MLPipelines(MachineLearningEstimator):
             avail_thr = 1
             with threadpool_limits(limits=avail_thr):
                 list_dfs = Parallel(n_jobs=use_cores, verbose=0)(
-                    delayed(_nested_cv)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices
+                    delayed(_outer_loop)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices
                 )
         else: 
             with threadpool_limits():
                 list_dfs = Parallel(n_jobs=use_cores, verbose=0)(
-                    delayed(_nested_cv)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices
+                    delayed(_outer_loop)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices
                 )
 
         list_dfs_flat = list(chain.from_iterable(list_dfs))
@@ -388,7 +388,7 @@ class MLPipelines(MachineLearningEstimator):
                     }
                 )
 
-                results = _calculate_metrics(
+                results = _calc_metrics_stats(
                     self.config_rncv['extra_metrics'], results, indices
                 )
                                             
@@ -396,7 +396,7 @@ class MLPipelines(MachineLearningEstimator):
         scores_dataframe = pd.DataFrame(results)
         
         # Create a 'Results' directory
-        results_dir = "Results"
+        results_dir = "results"
         if not os.path.exists(results_dir):
             os.makedirs(results_dir)
 

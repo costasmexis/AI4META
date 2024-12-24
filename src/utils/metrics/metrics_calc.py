@@ -1,6 +1,5 @@
 import numpy as np
-import sem
-
+from scipy.stats import sem
 from sklearn.metrics import get_scorer, confusion_matrix, get_scorer_names
 from sklearn.metrics import average_precision_score, roc_auc_score
 from src.utils.translators import METRIC_ADDREVIATIONS

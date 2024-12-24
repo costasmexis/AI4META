@@ -1,5 +1,5 @@
 import numpy as np
-import sem
+from scipy.stats import sem
 from src.utils.translators import METRIC_ADDREVIATIONS
 from src.utils.statistics.bootstrap_ci import _calc_ci_btstrp
 

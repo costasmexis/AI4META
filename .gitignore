@@ -15,10 +15,7 @@ Notes/*
 *.so
 
 # Results
-Results_ncv/*
-Results/*
-Final_Model_Results/*
-exl/*
+results/
 
 # Distribution / packaging
 .Python
@@ -183,3 +180,8 @@ results/
 
 # Other 
 usr/*
+
+# uv
+.python-version
+uv.lock
+pyproject.toml
