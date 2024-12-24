@@ -4,7 +4,7 @@ import numpy as np
 import optuna
 import pandas as pd
 import sklearn.metrics as metrics
-from dataloader import DataLoader
+from src.data_manipulation import DataLoader
 from optuna.samplers import TPESampler
 from plotly.subplots import make_subplots
 
@@ -15,16 +15,16 @@ from sklearn.model_selection import (
 )
 import warnings
 
-from machinelearning.utils.optuna_grid import optuna_grid
-from machinelearning.utils.translators import AVAILABLE_CLFS
-from machinelearning.utils.check import _parameters_check
-from machinelearning.utils.features_selection import _preprocess
-from machinelearning.utils.balance_fnc import _class_balance
-from machinelearning.utils.modinst_fnc import _create_model_instance
-from machinelearning.utils.inner_selection_fnc import _one_sem_model, _gso_model
-from machinelearning.utils.mle_utils.evaluation import _evaluate
-from machinelearning.utils.plots_fnc import _plot_per_metric
-from machinelearning.utils.mle_utils.database_fnc import _save_to_db
+from src.utils.parameters_grid import optuna_grid
+from src.utils.translators import AVAILABLE_CLFS
+from src.utils.validation import _parameters_check
+from src.features.features_selection import _preprocess
+from src.utils.model_manipulation.balance_fnc import _class_balance
+from src.utils.model_manipulation.modinst_fnc import _create_model_instance
+from src.utils.model_manipulation.inner_selection import _one_sem_model, _gso_model
+from src.utils.mle_utils.evaluation import _evaluate
+from src.utils.plots import _plot_per_metric
+from src.utils.mle_utils.database_fnc import _save_to_db
 
 class MachineLearningEstimator(DataLoader):
     def __init__(self, label, csv_dir, database_name=None, estimator=None, param_grid=None):
