@@ -321,14 +321,12 @@ class MLPipelines(MachineLearningEstimator):
 
         if self.config_rncv['parallel'] == "thread_per_round":
             avail_thr = 1
-            print(f"Using {avail_thr} threads per round")
             with threadpool_limits(limits=avail_thr):
                 list_dfs = Parallel(n_jobs=use_cores, verbose=0)(
                     delayed(_outer_loop)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices
                 )
         else:         
             avail_thr = max(1, num_cores // rounds)
-            print(f"Using {avail_thr} threads per round")
             with threadpool_limits():
                 list_dfs = Parallel(n_jobs=use_cores, verbose=0)(
                     delayed(_outer_loop)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices

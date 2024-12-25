@@ -1,6 +1,7 @@
 import time
 import logging
-import optuna
+from optuna.integration import OptunaSearchCV
+from optuna.logging import set_verbosity
 import copy
 import numpy as np
 
@@ -15,7 +16,7 @@ from src.utils.translators import AVAILABLE_CLFS
 
 def _set_optuna_verbosity(level):
     """ Adjust Optuna's verbosity level """
-    optuna.logging.set_verbosity(level)
+    set_verbosity(level)
     logging.getLogger("optuna").setLevel(level)
 
 def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=None):
@@ -81,7 +82,7 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
                 if config['model_selection_type'] == 'rncv':
                     opt_grid = "NestedCV"
                     _set_optuna_verbosity(logging.ERROR)
-                    clf = optuna.integration.OptunaSearchCV(
+                    clf = OptunaSearchCV(
                         estimator=estimator,
                         scoring=config["inner_scoring"],
                         param_distributions=optuna_grid[opt_grid][name],
@@ -121,14 +122,9 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
 
                             res_model = copy.deepcopy(new_params_clf)
                         
-                        print(f'New model:{res_model}')
-
                         results["Hyperparameters"].append(params)
-                        print(f'Hyper:{params}')
                         # Metrics calculations
-                        print('Starting Metrics')
                         results = _calculate_metrics(config['extra_metrics'], results, res_model, X_test_selected, y_test)
-                        print('Starting Predictions')
                         y_pred = res_model.predict(X_test_selected)
 
                         # Store the results using different names if feature selection is applied

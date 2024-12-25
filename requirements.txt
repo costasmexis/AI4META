@@ -2,10 +2,10 @@ numpy==1.23.5
 pandas
 matplotlib
 xgboost
-scikit-learn
+scikit-learn==1.5.2
 lightgbm
 dash
-dask
+dask[dataframe]
 progressbar2
 ipykernel
 catboost==1.2.5
@@ -21,7 +21,7 @@ plotly
 nbformat
 umap-learn
 seaborn
-kaleido
+kaleido==0.2.1
 openpyxl
 psycopg2
 imblearn
