@@ -19,7 +19,7 @@ from src.utils.validation import _validation
 from src.utils.model_selection.default_cv import _cv_loop
 from src.utils.model_selection.nested_cv import _outer_loop 
 from src.utils.model_selection.results_config import _name_outputs, _return_csv
-from src.utils.model_selection.database_input import _insert_data_into_sqlite_db
+from src.utils.model_selection.database_input import insert_to_db
 from src.utils.plots import _plot_per_clf, _histogram
 
 class MLPipelines(MachineLearningEstimator):
@@ -210,7 +210,7 @@ class MLPipelines(MachineLearningEstimator):
             
         if info_to_db:
             # Add to database
-            _insert_data_into_sqlite_db(scores_dataframe, self.config_rcv, self.database_name)
+            insert_to_db(scores_dataframe, self.config_rcv, self.database_name)
 
         return statistics_dataframe
 
@@ -419,6 +419,6 @@ class MLPipelines(MachineLearningEstimator):
             
         if info_to_db:
             # Add to database
-            _insert_data_into_sqlite_db(scores_dataframe, self.config_rncv, database_name=self.database_name)
+            insert_to_db(scores_dataframe, self.config_rncv, database_name=self.database_name)
             
         return statistics_dataframe

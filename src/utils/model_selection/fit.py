@@ -5,7 +5,7 @@ from optuna.logging import set_verbosity
 import copy
 import numpy as np
 
-from src.utils.metrics.metrics_calc import _calculate_metrics
+from src.utils.metrics.metrics import _calculate_metrics
 from src.utils.model_manipulation.inner_selection import _one_sem_model, _gso_model
 from src.data_manipulation.class_balance import _class_balance
 from src.utils.model_manipulation.model_instances import _create_model_instance

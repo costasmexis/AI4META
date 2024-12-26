@@ -10,8 +10,8 @@ from sklearn.model_selection import (
 )
 import copy
 
-from src.utils.metrics.metrics_calc import _calculate_metrics
-from src.utils.metrics.shap_calc import _calc_shap
+from src.utils.metrics.metrics import _calculate_metrics
+from src.utils.metrics.shap import _calc_shap
 from src.data_manipulation.class_balance import _class_balance
 
 def _evaluate(

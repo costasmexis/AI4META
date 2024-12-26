@@ -1,7 +1,7 @@
 import time
 from sklearn.model_selection import StratifiedKFold
 import progressbar
-from .fit import _fit_procedure
+from src.utils.model_selection.fit import _fit_procedure
 
 def _cv_loop(X, y, config, i, avail_thr):
     """
