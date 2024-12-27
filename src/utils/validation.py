@@ -88,6 +88,12 @@ def _validation(config, main_type, X, csv_dir, label, available_clfs):
             print('Parallel method is set to "thread_per_round"')
         
     else:
+        if 'evaluation' not in config.keys():
+            config['evaluation'] = None
+        if 'param_grid' not in config.keys():
+            config['param_grid'] = None
+        if 'features_names_list' not in config.keys():  
+            config['features_names_list'] = None
         if config['scoring'] not in config['extra_metrics']:
             config['extra_metrics'].insert(0, config['scoring'])
         elif config['scoring'] in config['extra_metrics'] and config['extra_metrics'].index(config['scoring']) != 0:

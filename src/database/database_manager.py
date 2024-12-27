@@ -82,16 +82,16 @@ class DatabaseManager():
             INSERT INTO Job_Parameters (
                 n_trials, rounds, feature_selection_type, feature_selection_method, 
                 inner_scoring, outer_scoring, inner_splits, outer_splits, normalization, 
-                missing_values_method, class_balance, evaluation_mthd, param_grid, features_names_list
+                missing_values_method, class_balance
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING job_id;  
         """
         params = (
             config.get("n_trials"), config.get("rounds"), config.get("feature_selection_type"),
             config.get("feature_selection_method"), config.get("inner_scoring"), config.get("outer_scoring"),
             config.get("inner_splits"), config.get("outer_splits"), config.get("normalization"),
-            config.get("missing_values_method"), config.get('class_balance'), None, None, None
+            config.get("missing_values_method"), config.get('class_balance')
         )
 
         # Execute the insert query and retrieve the job_id
@@ -102,7 +102,8 @@ class DatabaseManager():
         else:
             raise ValueError("Failed to insert job parameters and fetch job_id.")
 
-    def insert_job_parameters_rcv(self, config):
+    def insert_job_parameters_cv(self, config):
+        """Insert job parameters for rcv and return the job_id."""
         # Fetch existing job_id first
         job_parameters_select_query = """
             SELECT job_id 
@@ -110,14 +111,17 @@ class DatabaseManager():
             WHERE 
                 rounds = ? AND feature_selection_type = ? AND feature_selection_method = ?
                 AND outer_scoring = ? AND outer_splits = ? AND normalization = ?
-                AND missing_values_method = ? AND class_balance = ?;
+                AND missing_values_method = ? AND class_balance = ? AND evaluation_mthd = ?
+                AND param_grid = ? AND features_names_list = ?;
         """
         job_id_result = self.execute_query(
             job_parameters_select_query,
             (
                 config.get('rounds'), config.get('feature_selection_type'), config.get('feature_selection_method'),
                 config.get('scoring'), config.get('splits'), config.get('normalization'),
-                config.get('missing_values_method'), config.get('class_balance')
+                config.get('missing_values_method'), config.get('class_balance'), config.get('evaluation'),
+                config.get('param_grid'),config.get('features_names_list')
+
             ),
             fetch_one=True
         )
@@ -130,24 +134,26 @@ class DatabaseManager():
             INSERT INTO Job_Parameters (
                 rounds, feature_selection_type, feature_selection_method, 
                 outer_scoring, outer_splits, normalization, 
-                missing_values_method, class_balance
+                missing_values_method, class_balance, evaluation_mthd, param_grid, features_names_list
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING job_id;  # Retrieve job_id after insertion
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         params = (
             config.get("rounds"), config.get("feature_selection_type"), config.get("feature_selection_method"),
             config.get("scoring"), config.get("splits"), config.get("normalization"),
-            config.get("missing_values_method"), config.get("class_balance")
+            config.get("missing_values_method"), config.get("class_balance"), config.get("evaluation"),
+            config.get("param_grid"),config.get('features_names_list')
         )
 
-        # Execute the insert query and retrieve the job_id
-        job_id_result = self.execute_query(job_parameters_query, params, fetch_one=True)
+        # Execute the insert query
+        self.execute_query(job_parameters_query, params)
 
+        # Fetch the newly inserted job_id
+        job_id_result = self.execute_query("SELECT last_insert_rowid();", fetch_one=True)
         if job_id_result:
             return job_id_result[0]
         else:
-            raise ValueError("Failed to insert job parameters and fetch job_id.")
+            raise ValueError("Failed to insert or fetch job_id.")
 
     def insert_classifier(self, estimator, inner_selection):
         # Check if the classifier already exists

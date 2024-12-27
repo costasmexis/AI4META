@@ -24,7 +24,7 @@ from src.utils.model_manipulation.model_instances import _create_model_instance
 from src.utils.model_manipulation.inner_selection import _one_sem_model, _gso_model
 from src.utils.model_evaluation.evaluation import _evaluate
 from src.utils.plots import _plot_per_metric
-from src.utils.model_evaluation.database_input import _save_to_db
+from src.database.database_input import insert_to_db
 
 class MachineLearningEstimator(DataLoader):
     def __init__(self, label, csv_dir, database_name=None, estimator=None, param_grid=None):
@@ -221,7 +221,8 @@ class MachineLearningEstimator(DataLoader):
             _plot_per_metric(scores_df, estimator_name, self.config_cv['inner_selection'], evaluation)
 
         if info_to_db:
-            _save_to_db(scores_df, self.config_cv)
+            scores_db_df = pd.DataFrame({col: [scores_df[col].tolist()] for col in scores_df.columns})
+            insert_to_db(scores_db_df, self.config_cv, self.database_name)
 
         if calculate_shap:
             self.shap_values = shaps_array
