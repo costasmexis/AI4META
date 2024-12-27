@@ -116,6 +116,7 @@ def _validation(config, main_type, X, csv_dir, label, available_clfs):
     config['dataset_name'] = csv_dir
     config['dataset_label'] = label
     config['features_name'] = None if (config['num_features'] == [X.shape[1]]) or (config['num_features'] == X.shape[1]) else config['num_features']
+    config['all_features'] = X.shape[1]
             
     if (main_type == 'rncv') or (main_type == 'rcv'):
         # Set available classifiers

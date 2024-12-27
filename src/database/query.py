@@ -82,9 +82,8 @@ CREATE_TABLE_SQL = [
         performance_id INTEGER REFERENCES Performance_Metrics(performance_id) ON DELETE CASCADE,
         sample_rate_id INTEGER REFERENCES Samples_Classification_Rates(sample_rate_id) ON DELETE CASCADE,
         shap_values_id INTEGER REFERENCES Shap_Values(shap_values_id) ON DELETE CASCADE,
-        model_selection_type TEXT,
-        feature_count_ids TEXT
-    );
+        model_selection_type TEXT
+        );
     """,
     """
     CREATE TABLE IF NOT EXISTS Feature_Counts (

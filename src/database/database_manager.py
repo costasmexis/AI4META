@@ -7,23 +7,37 @@ class DatabaseManager():
     def __init__(self, db_name="ai4meta.db", db_folder="database"):
         self.db_path = os.path.join(db_folder, db_name)
         os.makedirs(db_folder, exist_ok=True)
-        self._enable_foreign_keys()
+        self.connection = sqlite3.connect(self.db_path)
+        self.connection.execute("PRAGMA foreign_keys = ON;")  # Enable foreign keys
+        self.connection.row_factory = sqlite3.Row  # Optional: fetch results as dictionaries
 
-    def _enable_foreign_keys(self):
-        """Enable foreign key support for SQLite."""
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute("PRAGMA foreign_keys = ON;")
-
-    def execute_query(self, query, params=None, fetch_one=False, fetch_all=False):
+    def execute_query(self, query, params=(), fetch_one=False, fetch_all=False):
         """Execute a query on the SQLite database."""
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, params or ())
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute(query, params)
+
             if fetch_one:
                 return cursor.fetchone()
             if fetch_all:
                 return cursor.fetchall()
-            conn.commit()
+
+            self.connection.commit()
+
+            # Return lastrowid for INSERT queries
+            if query.strip().lower().startswith("insert"):
+                return cursor.lastrowid
+
+        except sqlite3.IntegrityError as e:
+            raise sqlite3.IntegrityError(f"Integrity Error: {e}")
+        except sqlite3.Error as e:
+            raise sqlite3.Error(f"Database Error: {e}")
+
+        return None
+
+    def close_connection(self):
+        """Close the database connection."""
+        self.connection.close()
 
     def initialize_schema(self, create_table_queries):
         """Initialize the database schema."""
@@ -71,7 +85,7 @@ class DatabaseManager():
                 missing_values_method, class_balance, evaluation_mthd, param_grid, features_names_list
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING job_id;  # Retrieve job_id after insertion
+            RETURNING job_id;  
         """
         params = (
             config.get("n_trials"), config.get("rounds"), config.get("feature_selection_type"),
@@ -181,44 +195,84 @@ class DatabaseManager():
         select_query = "SELECT last_insert_rowid();"
         return self.execute_query(select_query, fetch_one=True)[0]
 
-    def insert_performance_metrics(self, metrics_dict):
+    def insert_performance_metrics(self, metrics_values, metrics_names):
         """Insert performance metrics and return the ID."""
-        columns = ', '.join(metrics_dict.keys())
-        placeholders = ', '.join(['?'] * len(metrics_dict))
+        # Join column names and placeholders
+        columns = ', '.join(metrics_names)
+        placeholders = ', '.join(['?'] * len(metrics_names))
         query = f"INSERT INTO Performance_Metrics ({columns}) VALUES ({placeholders});"
-        self.execute_query(query, list(metrics_dict.values()))
+        # Execute the query with ordered metrics
+        self.execute_query(query, metrics_values)
         return self.execute_query("SELECT last_insert_rowid();", fetch_one=True)[0]
 
     def insert_job_combination(self, job_id, classifier_id, dataset_id, selection_id, 
-                            hyperparameter_id, performance_id, sample_rate_id, 
-                            model_selection_type):
-        select_query = """
+                                hyperparameter_id, performance_id, sample_rate_id, 
+                                model_selection_type):
+        """Insert or fetch a job combination and return its ID."""
+        
+        # Construct WHERE clause dynamically
+        conditions = []
+        params = []
+
+        # Mapping column names to their values
+        columns = [
+            ("job_id", job_id),
+            ("classifier_id", classifier_id),
+            ("dataset_id", dataset_id),
+            ("selection_id", selection_id),
+            ("hyperparameter_id", hyperparameter_id),
+            ("performance_id", performance_id),
+            ("sample_rate_id", sample_rate_id),
+            ("model_selection_type", model_selection_type),
+        ]
+
+        for col, val in columns:
+            if val is None:
+                conditions.append(f"{col} IS NULL")
+            else:
+                conditions.append(f"{col} = ?")
+                params.append(val)
+
+        where_clause = " AND ".join(conditions)
+
+        # Check if the combination already exists
+        select_query = f"""
             SELECT combination_id 
             FROM Job_Combinations 
-            WHERE job_id = ? AND classifier_id = ? AND dataset_id = ? AND selection_id = ? 
-            AND hyperparameter_id = ? AND performance_id = ? AND sample_rate_id = ? 
-            AND model_selection_type = ?;
+            WHERE {where_clause};
         """
-        existing_id = self.execute_query(select_query, (job_id, classifier_id, dataset_id, selection_id, 
-                                                    hyperparameter_id, performance_id, sample_rate_id, 
-                                                    model_selection_type), fetch_one=True)
+        existing_id = self.execute_query(select_query, params, fetch_one=True)
 
         if existing_id:
-            return existing_id[0]  # Return existing job_combination_id
+            return existing_id[0]  # Return the existing combination ID
 
+        # Insert a new combination
         insert_query = """
             INSERT INTO Job_Combinations (
                 job_id, classifier_id, dataset_id, selection_id, hyperparameter_id,
                 performance_id, sample_rate_id, model_selection_type
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
         """
-        self.execute_query(insert_query, (job_id, classifier_id, dataset_id, selection_id, 
-                                hyperparameter_id, performance_id, sample_rate_id, 
-                                model_selection_type))
+        self.execute_query(insert_query, (
+            job_id, classifier_id, dataset_id, selection_id, 
+            hyperparameter_id, performance_id, sample_rate_id, 
+            model_selection_type))
 
-        return self.execute_query("SELECT last_insert_rowid();", fetch_one=True)[0]
+        # Fetch the newly inserted combination_id
+        new_combination_id = self.execute_query("SELECT last_insert_rowid();", fetch_one=True)
+        if new_combination_id:
+            return new_combination_id[0]
+        else:
+            raise ValueError("Failed to insert or fetch combination_id.")
 
     def insert_feature_counts(self, selected_features, combination_id):
+        """Insert feature counts for a job combination."""
+        # Filter out invalid features (e.g., None or empty strings)
+        selected_features = [feature for feature in selected_features if feature]
+
+        if not selected_features:
+            raise ValueError("No valid features to insert for combination_id: {}".format(combination_id))
+
         feature_counts = Counter(selected_features)
         for feature, count in feature_counts.items():
             select_query = """
@@ -229,7 +283,8 @@ class DatabaseManager():
             existing_id = self.execute_query(select_query, (feature, count, combination_id), fetch_one=True)
 
             if existing_id:
-                continue  # If the entry already exists, skip insertion
+                # print(f"Feature '{feature}' with count '{count}' already exists for combination_id {combination_id}")
+                continue  # Skip existing rows
 
             insert_query = """
                 INSERT INTO Feature_Counts (feature_name, count, combination_id)
@@ -238,15 +293,20 @@ class DatabaseManager():
             self.execute_query(insert_query, (feature, count, combination_id))
 
     def insert_hyperparameters(self, hyperparameters):
+        """Insert or fetch a hyperparameter ID."""
         select_query = "SELECT hyperparameter_id FROM Hyperparameters WHERE hyperparameters = ?;"
         existing_id = self.execute_query(select_query, (hyperparameters,), fetch_one=True)
 
         if existing_id:
-            return existing_id[0]  # Return existing hyperparameter_id
+            return existing_id[0]
 
-        query = "INSERT INTO Hyperparameters (hyperparameters) VALUES (?);"
-        self.execute_query(query, (hyperparameters,))
-        return self.execute_query("SELECT last_insert_rowid();", fetch_one=True)[0]
+        # If the hyperparameters don't exist, insert them
+        insert_query = "INSERT INTO Hyperparameters (hyperparameters) VALUES (?);"
+        hyperparameter_id = self.execute_query(insert_query, (hyperparameters,))
+
+        if hyperparameter_id is None:
+            raise ValueError("Failed to insert or fetch hyperparameter_id.")
+        return hyperparameter_id
 
     def insert_sample_classification_rates(self, classification_rates):
         select_query = """

@@ -32,20 +32,23 @@ def insert_to_db(scores_dataframe, config, database_name="ai4meta.db"):
             hyperparameters = hyperparameters.tolist()
         hyperparameter_id = db_manager.insert_hyperparameters(json.dumps(hyperparameters))
         
-        # Insert feature selection and retrieve selection_id
-        selection_id = db_manager.insert_feature_selection(row["Sel_way"], row["Fs_num"])
+        if row["Fs_num"] != config.get('all_features'):    
+            # Insert feature selection and retrieve selection_id
+            selection_id = db_manager.insert_feature_selection(row["Sel_way"], row["Fs_num"])
+
+            # Insert sample classification rates and retrieve sample_rate_id
+            sample_rate_id = db_manager.insert_sample_classification_rates(json.dumps(row["Classif_rates"]))
+            
+        else:
+            selection_id = None
+            sample_rate_id = None
         
         # Insert performance metrics and retrieve performance_id
-        metrics = {
-            metric: json.dumps(
-                metric.tolist() if isinstance(metric, np.ndarray) else metric
-            )
+        metrics_values = [
+            json.dumps(row.get(metric, None).tolist() if isinstance(row.get(metric, None), np.ndarray) else row.get(metric, None))
             for metric in config['extra_metrics']
-        }
-        performance_id = db_manager.insert_performance_metrics(metrics)
-        
-        # Insert sample classification rates and retrieve sample_rate_id
-        sample_rate_id = db_manager.insert_sample_classification_rates(json.dumps(row["Classif_rates"]))
+        ]
+        performance_id = db_manager.insert_performance_metrics(metrics_values, config['extra_metrics'])
         
         # Insert job combination and retrieve combination_id
         combination_id = db_manager.insert_job_combination(
@@ -54,98 +57,20 @@ def insert_to_db(scores_dataframe, config, database_name="ai4meta.db"):
             config['model_selection_type']
         )
         
-        # Insert feature counts if features are available
-        if config['features_name'] is not None:
-            if all(val is None for val in row["Sel_feat"]) and (row["Sel_feat"].size > 0):
-                selected_features = row["Sel_feat"]
+        if row["Fs_num"] != config.get('all_features'):
+        
+            # Insert feature counts and retrieve combination_id
+            selected_features = row["Sel_feat"]
+            
+            # Convert numpy array to list if necessary
+            if isinstance(selected_features, np.ndarray):
+                selected_features = selected_features.tolist()
 
-                # Convert numpy array to list if necessary
-                if isinstance(selected_features, np.ndarray):
-                    selected_features = selected_features.tolist()
+            # Flatten nested lists if needed
+            if any(isinstance(i, list) for i in selected_features):
+                selected_features = [item for sublist in selected_features for item in sublist]
 
-                # Flatten nested lists if needed
-                if any(isinstance(i, list) for i in selected_features):
-                    selected_features = [item for sublist in selected_features for item in sublist]
-
-                # Insert feature counts
-                db_manager.insert_feature_counts(selected_features, combination_id)
+            # Insert feature counts
+            db_manager.insert_feature_counts(selected_features, combination_id)
 
     print("Data inserted into the SQLite database successfully.")
-
-#             # Insert hyperparameters
-#             hyperparameters_query = """
-#                 INSERT INTO Hyperparameters (hyperparameters)
-#                 VALUES (?);
-#             """
-#             hyperparameters = row["Hyp"]
-#             if isinstance(hyperparameters, np.ndarray):  # Convert numpy arrays to lists
-#                 hyperparameters = hyperparameters.tolist()
-#             cursor.execute(hyperparameters_query, (json.dumps(hyperparameters),))
-#             hyperparameter_id = cursor.lastrowid
-
-
-
-#             # Insert performance metrics
-#             metrics_to_add = ', '.join([f'{metric}' for metric in config['extra_metrics']])
-#             list_of_s = [f'?' for metric in config['extra_metrics']]
-#             count_q = ', '.join(list_of_s)
-#             performance_metrics_query = f"""
-#                 INSERT INTO Performance_Metrics ({metrics_to_add})
-#                 VALUES ({count_q}) RETURNING performance_id;
-#             """
-            
-#             metrics = [
-#                 json.dumps(
-#                     metric.tolist() if isinstance(metric, np.ndarray) else metric
-#                 )
-#                 for metric in [row.get(metric, None) for metric in config['extra_metrics']]
-#             ]
-#             cursor.execute(performance_metrics_query, metrics)
-#             performance_id = cursor.lastrowid
-
-#             # Insert samples classification rates
-#             samples_classification_query = """
-#                 INSERT INTO Samples_Classification_Rates (samples_classification_rates)
-#                 VALUES (?);
-#             """
-#             cursor.execute(samples_classification_query, (json.dumps(row["Classif_rates"]),))
-#             sample_rate_id = cursor.lastrowid
-
-#             # Insert data into job combinations
-#             job_combinations_query = """
-#                 INSERT INTO Job_Combinations (
-#                     job_id, classifier_id, dataset_id, selection_id, hyperparameter_id, performance_id, sample_rate_id, model_selection_type
-#                 )
-#                 VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-#             """
-#             cursor.execute(
-#                 job_combinations_query,
-#                 (job_id, classifier_id, dataset_id, selection_id, hyperparameter_id, performance_id, sample_rate_id, config['model_selection_type'])
-#             )
-#             combination_id = cursor.lastrowid
-
-#             if config['features_name'] == None:
-#                 continue
-#             else:
-#                 # Insert feature counts
-#                 if all(val is None for val in row["Sel_feat"]) and (row["Sel_feat"].size > 0):
-#                     selected_features = row["Sel_feat"]
-
-#                     # Convert numpy array to a list if necessary
-#                     if isinstance(selected_features, np.ndarray):
-#                         selected_features = selected_features.tolist()
-
-#                     # Flatten nested lists if needed
-#                     if any(isinstance(i, list) for i in selected_features):
-#                         selected_features = [item for sublist in selected_features for item in sublist]
-
-#                     # Count occurrences of each feature
-#                     feature_counts = Counter(selected_features)
-#                     for feature, count in feature_counts.items():
-#                         if feature is None:
-#                             continue
-#                         feature_counts_query = """
-#                             INSERT INTO Feature_Counts (feature_name, count, combination_id)
-#                             VALUES (?, ?, ?);
-#                         """
-#                         cursor.execute(feature_counts_query, (feature, count, combination_id))
