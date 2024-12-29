@@ -120,7 +120,7 @@ def _histogram(scores_dataframe, final_dataset_name, freq_feat, clfs, max_featur
     # Plot histogram of features
     feature_counts = Counter()
     for idx, row in scores_dataframe.iterrows():
-        if row["Sel_way"] != "full":  # If no features were selected, skip
+        if row["Sel_way"] != "none":  # If no features were selected, skip
             features = list(
                 chain.from_iterable(
                     [list(index_obj) for index_obj in row["Sel_feat"]]

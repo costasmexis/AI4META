@@ -131,10 +131,10 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
                         y_pred = res_model.predict(X_test_selected)
 
                         # Store the results using different names if feature selection is applied
-                        if num_feature == "full" or num_feature is None:
+                        if num_feature == "none" or num_feature is None:
                             results["Selected_Features"].append(None)
                             results["Number_of_Features"].append(X_test_selected.shape[1])
-                            results["Way_of_Selection"].append("full")
+                            results["Way_of_Selection"].append("none")
                             results["Classifiers"].append(f"{name}")
                         else:
                             if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
@@ -180,10 +180,10 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
                     y_pred = res_model.predict(X_test_selected)
 
                     # Store the results using different names if feature selection is applied
-                    if num_feature == "full" or num_feature is None:
+                    if num_feature == "none" or num_feature is None:
                         results["Selected_Features"].append(None)
                         results["Number_of_Features"].append(X_test_selected.shape[1])
-                        results["Way_of_Selection"].append("full")
+                        results["Way_of_Selection"].append("none")
                         results["Classifiers"].append(f"{name}")
                     else:
                         if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
