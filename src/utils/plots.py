@@ -49,7 +49,7 @@ def _plot_per_clf(
             )
 
             # Calculate and add 95% CI for the median
-            lower, upper = _calc_ci_btstrp(data, type='median')
+            lower, upper = _calc_ci_btstrp(data, central_tendency='median')
             fig.add_trace(
                 go.Scatter(
                     x=[f"{classifier} (Median: {median:.2f})",
@@ -112,7 +112,7 @@ def _plot_per_metric(scores_df, estimator_name, inner_selection, evaluation):
     :type evaluation: str
     """
     
-    results_dir = "images"
+    results_dir = "results/images"
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
 
@@ -136,7 +136,7 @@ def _plot_per_metric(scores_df, estimator_name, inner_selection, evaluation):
     fig.show()
 
     # Save the plot to 'Results/final_model_evaluation.png'
-    save_path = os.path.join(results_dir, f"evaluation{estimator_name}_{evaluation}_{inner_selection}.png")
+    save_path = os.path.join(results_dir, f"evaluation_{estimator_name}_{evaluation}_{inner_selection}_.png")
     fig.write_image(save_path)
 
 def _histogram(scores_dataframe, final_dataset_name, freq_feat, clfs, max_features):

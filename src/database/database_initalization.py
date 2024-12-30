@@ -1,7 +1,7 @@
 from database_manager import DatabaseManager  
 from query import CREATE_TABLE_SQL  
 
-def main():
+def db_main():
     # Prompt user for database name
     db_name = input("Enter the desired name for the database (default: ai4meta.db): ")
     if not db_name:
@@ -16,6 +16,6 @@ def main():
     print(f"Database initialized and tables created in {database_manager.db_path}.")
 
 if __name__ == "__main__":
-    main()
+    db_main()
 
 

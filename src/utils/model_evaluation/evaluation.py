@@ -14,145 +14,192 @@ from src.utils.metrics.metrics import _calculate_metrics
 from src.utils.metrics.shap import _calc_shap
 from src.data_manipulation.class_balance import _class_balance
 
-def _evaluate(
-    X, y, best_model, best_params, config
-    ):
+def _evaluate(X, y, best_model, best_params, config):
     """
-    Evaluate the performance of a machine learning model using cross-validation or bootstrap methods.
+    Evaluate the performance of a machine learning model using various validation methods.
 
-    :param X: The input features.
-    :type X: pandas.DataFrame
-    :param y: The target variable.
-    :type y: pandas.Series
-    :param cv: The number of cross-validation folds.
-    :type cv: int
-    :param evaluation: The evaluation method to use. Must be either 'cv_simple', 'bootstrap', or 'cv_rounds'.
-    :type evaluation: str
-    :param rounds: The number of rounds for cross-validation or bootstrap evaluation.
-    :type rounds: int
-    :param best_model: The best model obtained from model selection.
-    :type best_model: object
-    :param best_params: The best hyperparameters obtained from model selection.
-    :type best_params: dict
-    :param way: The model selection method used. Only required if evaluation is 'cv_rounds' or 'cv_simple'.
-    :type way: object
-    :param calculate_shap: Whether to calculate SHAP values or not.
-    :type calculate_shap: bool
-    :raises ValueError: If cv is less than 2.
-    :raises ValueError: If evaluation method is not one of 'cv_simple', 'bootstrap', or 'cv_rounds'.
-    :return: The best model, evaluation results, and SHAP values (if calculate_shap is True).
-    :rtype: tuple
+    Parameters:
+    -----------
+    X : pandas.DataFrame
+        Input features.
+    y : pandas.Series
+        Target labels.
+    best_model : object
+        Trained machine learning model.
+    best_params : dict
+        Best hyperparameters from model selection.
+    config : dict
+        Configuration dictionary containing evaluation settings.
+
+    Returns:
+    --------
+    tuple
+        local_data_full_outer : pandas.DataFrame
+            DataFrame containing evaluation metrics.
+        x_shap : numpy.ndarray
+            SHAP values array if SHAP is calculated, otherwise zeros.
     """
-    
-    # Initiate shap values array
     x_shap = np.zeros((X.shape[0], X.shape[1]))
 
     if config['evaluation'] == "cv_rounds":
         extra_metrics_scores, x_shap = _cv_rounds_validation(X, y, best_model, config, x_shap)
-    
     elif config['evaluation'] == "bootstrap":
-        extra_metrics_scores = _bootstrap_validation(X, y, best_model, config['extra_metrics'])#, calculate_shap=False)
-
+        extra_metrics_scores = _bootstrap_validation(X, y, best_model, config['extra_metrics'])
     elif config['evaluation'] == "oob":
-        extra_metrics_scores = _oob_validation(X, y, best_model, config['extra_metrics'])#, calculate_shap=False)
-    
+        extra_metrics_scores = _oob_validation(X, y, best_model, config['extra_metrics'])
     elif config['evaluation'] == "train_test":
-        extra_metrics_scores = _train_test_validation(X, y, best_model, config['class_balance'], config['extra_metrics'])#, calculate_shap=False)
-                
-    local_data_full_outer = pd.DataFrame(extra_metrics_scores)
+        extra_metrics_scores = _train_test_validation(X, y, best_model, config['class_balance'], config['extra_metrics'])
+    else:
+        raise ValueError("Invalid evaluation method specified.")
 
+    local_data_full_outer = pd.DataFrame(extra_metrics_scores)
     return local_data_full_outer, x_shap
 
 def _cv_rounds_validation(X, y, model, config, x_shap):
-    extra_metrics_scores = {extra: [] for extra in config['extra_metrics']} if config['extra_metrics'] else {}    
+    """
+    Perform cross-validation rounds for model evaluation.
+
+    Parameters:
+    -----------
+    X : pandas.DataFrame
+        Input features.
+    y : pandas.Series
+        Target labels.
+    model : object
+        Machine learning model.
+    config : dict
+        Configuration dictionary.
+    x_shap : numpy.ndarray
+        Array to store SHAP values.
+
+    Returns:
+    --------
+    tuple
+        extra_metrics_scores : dict
+            Scores for extra metrics.
+        x_shap : numpy.ndarray
+            Updated SHAP values.
+    """
+    extra_metrics_scores = {extra: [] for extra in config['extra_metrics']} if config['extra_metrics'] else {}
+    
     for i in range(config['rounds']):
         cv_splits = StratifiedKFold(n_splits=config['splits'], shuffle=True, random_state=i)
         temp_train_test_indices = list(cv_splits.split(X, y))
+        
         for train_index, test_index in temp_train_test_indices:
             X_train, X_test = X.iloc[train_index], X.iloc[test_index]
             y_train, y_test = y[train_index], y[test_index]
             model.fit(X_train, y_train)
-            
-            # Calculate and store scores for each extra metric
+
             extra_metrics_scores = _calculate_metrics(config['extra_metrics'], extra_metrics_scores, model, X_test, y_test)
 
             if config['calculate_shap']:
                 shap_values = _calc_shap(X_train, X_test, model)
-                x_shap[test_index, :] = np.add(
-                    x_shap[test_index, :], shap_values.values
-                )
-    
+                x_shap[test_index, :] += shap_values.values
+
     if config['calculate_shap']:
-        x_shap = x_shap / (config['rounds'])
+        x_shap /= config['rounds']
 
     return extra_metrics_scores, x_shap
 
-def _bootstrap_validation(
-        X, y, model, extra_metrics=None):#, calculate_shap=False
-    """Performs bootstrap validation for model evaluation.
-    :return: A tuple of (bootstrap_scores, extra_metrics_scores).
-    :rtype: tuple
+def _bootstrap_validation(X, y, model, extra_metrics=None):
     """
+    Perform bootstrap validation for model evaluation.
 
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.3, shuffle=True
-    )
+    Parameters:
+    -----------
+    X : pandas.DataFrame
+        Input features.
+    y : pandas.Series
+        Target labels.
+    model : object
+        Machine learning model.
+    extra_metrics : list, optional
+        List of additional metrics to calculate.
 
-    bootstrap_scores = []
-    extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}    
+    Returns:
+    --------
+    dict
+        Scores for extra metrics.
+    """
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, shuffle=True)
+    extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
     
     for i in tqdm(range(100), desc="Bootstrap validation"):
         model_bootstrap = copy.deepcopy(model)
         X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
         model_bootstrap.fit(X_train_res, y_train_res)
 
-        # Calculate and store extra metrics
         extra_metrics_scores = _calculate_metrics(extra_metrics, extra_metrics_scores, model_bootstrap, X_test, y_test)
 
     return extra_metrics_scores
 
-def _oob_validation(
-        X, y, model, extra_metrics=None
-    ):
+def _oob_validation(X, y, model, extra_metrics=None):
+    """
+    Perform out-of-bag (OOB) validation for model evaluation.
 
-    oob_scores = []
+    Parameters:
+    -----------
+    X : pandas.DataFrame
+        Input features.
+    y : pandas.Series
+        Target labels.
+    model : object
+        Machine learning model.
+    extra_metrics : list, optional
+        List of additional metrics to calculate.
+
+    Returns:
+    --------
+    dict
+        Scores for extra metrics.
+    """
     extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
-    
+
     for i in tqdm(range(100), desc="OOB validation"):
-        # Generate a random bootstrap sample with replacement
-        rng = np.random.default_rng(i)  # New random generator for each seed
+        rng = np.random.default_rng(i)
         indices = rng.choice(range(X.shape[0]), size=X.shape[0], replace=True)
 
         X_train, y_train = X.iloc[indices, :], y[indices]
-        
-        # Determine the OOB indices
         oob_indices = list(set(range(X.shape[0])) - set(indices))
         X_test, y_test = X.iloc[oob_indices, :], y[oob_indices]
-        
+
         model_oob = copy.deepcopy(model)
-        model_oob = model_oob.fit(X_train, y_train)
-        y_pred = model_oob.predict(X_test)
-        
-        # Calculate and store extra metrics
+        model_oob.fit(X_train, y_train)
         extra_metrics_scores = _calculate_metrics(extra_metrics, extra_metrics_scores, model_oob, X_test, y_test)
 
-    return  extra_metrics_scores
+    return extra_metrics_scores
 
 def _train_test_validation(X, y, model, class_balance_method, extra_metrics=None):
-    tt_prop_scores = []
+    """
+    Perform train-test split validation for model evaluation.
+
+    Parameters:
+    -----------
+    X : pandas.DataFrame
+        Input features.
+    y : pandas.Series
+        Target labels.
+    model : object
+        Machine learning model.
+    class_balance_method : str
+        Method for class balancing.
+    extra_metrics : list, optional
+        List of additional metrics to calculate.
+
+    Returns:
+    --------
+    dict
+        Scores for extra metrics.
+    """
     extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
     sss = StratifiedShuffleSplit(n_splits=100, test_size=0.3, random_state=0)
 
     for i, (train_index, test_index) in tqdm(enumerate(sss.split(X, y)), desc="TT prop validation"):
-        # Use .iloc for DataFrame X and NumPy indexing for array y
-        X_train, y_train = _class_balance(X.iloc[train_index], y[train_index], class_balance_method), _class_balance(X.iloc[test_index], y[test_index], class_balance_method)
+        X_train, y_train = _class_balance(X.iloc[train_index], y[train_index], class_balance_method)
         X_test, y_test = X.iloc[test_index], y[test_index]
 
-        # Deepcopy the model and fit it on the train set
-        model_tt_prop = model.fit(X_train, y_train)  
-        y_pred = model_tt_prop.predict(X_test)
-
-        # Calculate and store extra metrics
+        model_tt_prop = model.fit(X_train, y_train)
         extra_metrics_scores = _calculate_metrics(extra_metrics, extra_metrics_scores, model_tt_prop, X_test, y_test)
 
     return extra_metrics_scores

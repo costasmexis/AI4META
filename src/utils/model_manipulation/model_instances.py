@@ -1,9 +1,7 @@
-# Model instance
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.gaussian_process import GaussianProcessClassifier
-from sklearn.model_selection import StratifiedKFold
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -13,78 +11,53 @@ from xgboost import XGBClassifier
 
 def _create_model_instance(model_name, params):
     """
-    This function creates a model instance with the given parameters.
-    It is used in order to prevent fitting of an already fitted model from previous runs.
+    Create a machine learning model instance with the specified parameters.
 
-    Args:
-        model_name (str): The name of the model to create.
-        params (dict): The parameters to use when creating the model.
+    This function initializes an instance of the specified model with the given
+    parameters or default configurations. It ensures reusability and consistency
+    in model creation, particularly for pipelines or repetitive experiments.
+
+    Parameters:
+    -----------
+    model_name : str
+        The name of the model to instantiate. Must be one of the supported models.
+    params : dict or None
+        A dictionary of hyperparameters to configure the model. If None, the model
+        is initialized with default parameters.
 
     Returns:
-        object: An instance of the specified model with the given parameters.
+    --------
+    object
+        An instance of the specified model with the provided parameters.
 
     Raises:
-        ValueError: If the model name is not recognized.
+    -------
+    ValueError
+        If the specified model name is not supported.
     """
     if model_name == "RandomForestClassifier":
-        if params is None:
-            return RandomForestClassifier()
-        else:
-            return RandomForestClassifier(**params)
+        return RandomForestClassifier(**params) if params else RandomForestClassifier()
     elif model_name == "LogisticRegression":
-        if params is None:
-            return LogisticRegression()
-        else:
-            return LogisticRegression(**params)
+        return LogisticRegression(**params) if params else LogisticRegression()
     elif model_name == "XGBClassifier":
-        if params is None:
-            return XGBClassifier()
-        else:
-            return XGBClassifier(**params)
+        return XGBClassifier(**params) if params else XGBClassifier()
     elif model_name == "LGBMClassifier":
-        if params is None:
-            return LGBMClassifier(verbose=-1)
-        else:
-            return LGBMClassifier(**params)
+        return LGBMClassifier(**params, verbose=-1) if params else LGBMClassifier(verbose=-1)
     elif model_name == "CatBoostClassifier":
-        if params is None:
-            return CatBoostClassifier(verbose=0)
-        else:
-            return CatBoostClassifier(**params)
+        return CatBoostClassifier(**params, verbose=0) if params else CatBoostClassifier(verbose=0)
     elif model_name == "SVC":
-        if params is None:
-            return SVC()
-        else:
-            return SVC(**params)
+        return SVC(**params) if params else SVC()
     elif model_name == "KNeighborsClassifier":
-        if params is None:
-            return KNeighborsClassifier()
-        else:
-            return KNeighborsClassifier(**params)
+        return KNeighborsClassifier(**params) if params else KNeighborsClassifier()
     elif model_name == "LinearDiscriminantAnalysis":
-        if params is None:
-            return LinearDiscriminantAnalysis()
-        else:
-            return LinearDiscriminantAnalysis(**params)
+        return LinearDiscriminantAnalysis(**params) if params else LinearDiscriminantAnalysis()
     elif model_name == "GaussianNB":
-        if params is None:
-            return GaussianNB()
-        else:
-            return GaussianNB(**params)
+        return GaussianNB(**params) if params else GaussianNB()
     elif model_name == "GradientBoostingClassifier":
-        if params is None:
-            return GradientBoostingClassifier()
-        else:
-            return GradientBoostingClassifier(**params)
+        return GradientBoostingClassifier(**params) if params else GradientBoostingClassifier()
     elif model_name == "GaussianProcessClassifier":
-        if params is None:
-            return GaussianProcessClassifier()
-        else:
-            return GaussianProcessClassifier(**params)
+        return GaussianProcessClassifier(**params) if params else GaussianProcessClassifier()
     elif model_name == "ElasticNet":
-        if params is None:
-            return LogisticRegression(penalty="elasticnet", solver="saga", l1_ratio=0.5)
-        else:
-            return LogisticRegression(**params)
+        return LogisticRegression(**params) if params else LogisticRegression(penalty="elasticnet", solver="saga", l1_ratio=0.5)
     else:
         raise ValueError(f"Unsupported model: {model_name}")

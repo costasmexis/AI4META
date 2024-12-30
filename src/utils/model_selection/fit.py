@@ -15,199 +15,200 @@ from src.utils.parameters_grid import optuna_grid
 from src.utils.translators import AVAILABLE_CLFS
 
 def _set_optuna_verbosity(level):
-    """ Adjust Optuna's verbosity level """
+    """
+    Adjust Optuna's verbosity level.
+
+    Parameters:
+    -----------
+    level : int
+        Logging level for Optuna.
+    """
     set_verbosity(level)
     logging.getLogger("optuna").setLevel(level)
 
 def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=None):
     """
-    This function is used to perform the fit procedure of the machine learning pipeline. 
-    It loops over the number of features and the classifiers given in the config dictionary.
+    Perform the fitting procedure for the machine learning pipeline.
 
-    Parameters
-    ----------
+    This function loops over the number of features and classifiers, applies preprocessing,
+    handles feature selection, and trains models with or without hyperparameter optimization.
+
+    Parameters:
+    -----------
+    X : pandas.DataFrame
+        Feature dataset.
+    y : pandas.Series or array-like
+        Target labels.
     config : dict
-        A dictionary containing all the configuration for the machine learning pipeline.
+        Configuration dictionary containing hyperparameters and other settings.
     results : dict
-        A dictionary containing the results of the machine learning pipeline.
+        Dictionary to store the results of the pipeline.
     train_index : array-like
-        The indices of the training set.
+        Indices for the training set.
     test_index : array-like
-        The indices of the testing set.
+        Indices for the testing set.
     i : int
-        The current round of the cross-validation.
-    n_jobs : int or None
-        The number of jobs to run in parallel. If None, the number of jobs is set to the number of available CPU cores.
+        Current round number for reproducibility.
+    n_jobs : int or None, optional
+        Number of jobs for parallel execution. Defaults to None.
 
-    Returns
-    -------
-    results : dict
-        The results of the machine learning pipeline.
+    Returns:
+    --------
+    dict
+        Updated results dictionary containing model evaluation metrics and configurations.
+
+    Notes:
+    ------
+    - Supports various feature selection methods and model selection types.
+    - Handles special cases like SelectFromModel (SFM) feature selection.
     """
-    # Loop over the number of features
-    for num_feature2_use in config["num_features"]:            
+    for num_feature2_use in config["num_features"]:
+        # Preprocess data (feature selection, normalization, etc.)
         X_train_selected, X_test_selected, num_feature = _preprocess(
-            X, y, num_feature2_use, config, train_index=train_index, test_index=test_index 
+            X, y, num_feature2_use, config, train_index=train_index, test_index=test_index
         )
         y_train, y_test = y[train_index], y[test_index]
-        
-        # Apply class balancing strategies
+
+        # Apply class balancing
         X_train_selected, y_train = _class_balance(X_train_selected, y_train, config["class_balance"], i)
-                            
-        # Check of the classifiers given list
-        if config["clfs"] is None:
+
+        if not config.get("clfs"):
             raise ValueError("No classifier specified.")
-        else:
-            for estimator in config["clfs"]:
-                # For every estimator find the best hyperparameteres
-                name = estimator
-                estimator = AVAILABLE_CLFS[estimator]
-                if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
-                            (estimator == "XGBClassifier") or 
-                            (estimator == 'GradientBoostingClassifier') or 
-                            (estimator == "LGBMClassifier") or 
-                            (estimator == "CatBoostClassifier")) and (num_feature2_use != X.shape[1]):
-                    
-                    X_train_selected, X_test_selected, num_feature = _preprocess(
-                        X, y, X.shape[1], config, train_index=train_index, test_index=test_index 
-                    )
-                    y_train, y_test = y[train_index], y[test_index]
-                    # Check of the classifiers given list
-                    # Perform feature selection using Select From Model (sfm)
-                    X_train_selected, X_test_selected, num_feature = _sfm(estimator, X_train_selected, X_test_selected, y_train, num_feature2_use)
 
-                    # Apply class balancing strategies
-                    X_train_selected, y_train = _class_balance(X_train_selected, y_train, config["class_balance"], i)
-                        
-                if config['model_selection_type'] == 'rncv':
-                    opt_grid = "NestedCV"
-                    _set_optuna_verbosity(logging.ERROR)
-                    clf = OptunaSearchCV(
-                        estimator=estimator,
-                        scoring=config["inner_scoring"],
-                        param_distributions=optuna_grid[opt_grid][name],
-                        cv=config["inner_cv"],
-                        return_train_score=True,
-                        n_jobs=1,
-                        verbose=0,
-                        n_trials=config["n_trials"],
-                    )
+        for estimator_name in config["clfs"]:
+            estimator = AVAILABLE_CLFS[estimator_name]
 
-                    clf.fit(X_train_selected, y_train)
-                    trials = clf.study_.trials
+            # Handle SelectFromModel (SFM) for supported classifiers
+            if (config["sfm"] and estimator_name in [
+                "RandomForestClassifier",
+                "XGBClassifier",
+                "GradientBoostingClassifier",
+                "LGBMClassifier",
+                "CatBoostClassifier",
+            ] and num_feature2_use != X.shape[1]):
+                X_train_selected, X_test_selected, num_feature = _sfm(
+                    estimator, X_train_selected, X_test_selected, y_train, num_feature2_use
+                )
+                X_train_selected, y_train = _class_balance(X_train_selected, y_train, config["class_balance"], i)
 
-                    for inner_selection in config["inner_selection"]:
-                        results['Inner_selection_mthd'].append(inner_selection)
-                        # Store the results and apply one_sem method if its selected
-                        results["Estimator"].append(name)
-                        if inner_selection == "validation_score":
-                            res_model = copy.deepcopy(clf)
-                            params = res_model.study_.best_params
-                        else:
-                            if (inner_selection == "one_sem") or (inner_selection == "one_sem_grd"):
-                                samples = X_train_selected.shape[0]
-                                # Find simpler parameters with the one_sem method if there are any
-                                simple_model_params = _one_sem_model(trials, name, samples, config['inner_splits'],inner_selection)
-                            elif (inner_selection == "gso_1") or (inner_selection == "gso_2"):
-                                # Find parameters with the smaller gap score with gso_1 method if there are any
-                                simple_model_params = _gso_model(trials, name, config['inner_splits'],inner_selection)
+            if config["model_selection_type"] == "rncv":
+                # Hyperparameter optimization with Optuna
+                opt_grid = "NestedCV"
+                _set_optuna_verbosity(logging.ERROR)
 
-                            params = simple_model_params
+                clf = OptunaSearchCV(
+                    estimator=estimator,
+                    scoring=config["inner_scoring"],
+                    param_distributions=optuna_grid[opt_grid][estimator_name],
+                    cv=config["inner_cv"],
+                    return_train_score=True,
+                    n_jobs=1,
+                    verbose=0,
+                    n_trials=config["n_trials"],
+                )
 
-                            # Fit the new model
-                            new_params_clf = _create_model_instance(
-                                name, simple_model_params
-                            )
-                            new_params_clf.fit(X_train_selected, y_train)
+                clf.fit(X_train_selected, y_train)
+                trials = clf.study_.trials
 
-                            res_model = copy.deepcopy(new_params_clf)
-                        
-                        results["Hyperparameters"].append(params)
-                        # Metrics calculations
-                        results = _calculate_metrics(config['extra_metrics'], results, res_model, X_test_selected, y_test)
-                        y_pred = res_model.predict(X_test_selected)
+                for inner_selection in config["inner_selection"]:
+                    results["Inner_selection_mthd"].append(inner_selection)
+                    results["Estimator"].append(estimator_name)
 
-                        # Store the results using different names if feature selection is applied
-                        if num_feature == "none" or num_feature is None:
-                            results["Selected_Features"].append(None)
-                            results["Number_of_Features"].append(X_test_selected.shape[1])
-                            results["Way_of_Selection"].append("none")
-                            results["Classifiers"].append(f"{name}")
-                        else:
-                            if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
-                                (estimator == "XGBClassifier") or 
-                                (estimator == 'GradientBoostingClassifier') or 
-                                (estimator == "LGBMClassifier") or 
-                                (estimator == "CatBoostClassifier")):
-                                fs_type = "sfm"
-                            else:
-                                fs_type = config["feature_selection_type"]
-                            results["Classifiers"].append(
-                                f"{name}_{fs_type}_{num_feature}"
-                            )
-                            results["Selected_Features"].append(
-                                X_train_selected.columns.tolist()
-                            )
-                            results["Number_of_Features"].append(num_feature)
-                            results["Way_of_Selection"].append(
-                                fs_type
-                            )
-
-                        # Track predictions
-                        samples_counts = np.zeros(len(y))
-                        for idx, resu, pred in zip(test_index, y_test, y_pred):
-                            if pred == resu:
-                                samples_counts[idx] += 1
-
-                        results['Samples_counts'].append(samples_counts)
-                        time.sleep(0.5)
-                        
-                else:
-                    # Train the model
-                    res_model = _create_model_instance(
-                            name, params=None
-                        )
-                    
-                    res_model.fit(X_train_selected, y_train)
-                    results["Estimator"].append(name)
-
-                    # Metrics calculations
-                    results = _calculate_metrics(config['extra_metrics'], results, res_model, X_test_selected, y_test)
-                    
-                    y_pred = res_model.predict(X_test_selected)
-
-                    # Store the results using different names if feature selection is applied
-                    if num_feature == "none" or num_feature is None:
-                        results["Selected_Features"].append(None)
-                        results["Number_of_Features"].append(X_test_selected.shape[1])
-                        results["Way_of_Selection"].append("none")
-                        results["Classifiers"].append(f"{name}")
+                    if inner_selection == "validation_score":
+                        res_model = copy.deepcopy(clf)
+                        params = res_model.study_.best_params
                     else:
-                        if (config["sfm"]) and ((estimator == "RandomForestClassifier") or 
-                            (estimator == "XGBClassifier") or 
-                            (estimator == 'GradientBoostingClassifier') or 
-                            (estimator == "LGBMClassifier") or 
-                            (estimator == "CatBoostClassifier")):
-                            fs_type = "sfm"
-                        else:
-                            fs_type = config["feature_selection_type"]
-                        results["Classifiers"].append(
-                            f"{name}_{fs_type}_{num_feature}"
-                        )
-                        results["Selected_Features"].append(
-                            X_train_selected.columns.tolist()
-                        )
-                        results["Number_of_Features"].append(num_feature)
-                        results["Way_of_Selection"].append(
-                            fs_type
-                        )
+                        if inner_selection in ["one_sem", "one_sem_grd"]:
+                            params = _one_sem_model(trials, estimator_name, len(X_train_selected), config["inner_splits"], inner_selection)
+                        elif inner_selection in ["gso_1", "gso_2"]:
+                            params = _gso_model(trials, estimator_name, config["inner_splits"], inner_selection)
 
-                    # Track predictions
+                    res_model = _create_model_instance(estimator_name, params)
+                    res_model.fit(X_train_selected, y_train)
+
+                    results["Hyperparameters"].append(params)
+
+                    # Evaluate metrics
+                    results = _calculate_metrics(config["extra_metrics"], results, res_model, X_test_selected, y_test)
+
+                    # Store feature selection and results
+                    _store_results(
+                        results, num_feature, estimator_name, config, X_train_selected
+                    )
+
+                    # Track predictions for Samples_counts
+                    y_pred = res_model.predict(X_test_selected)
                     samples_counts = np.zeros(len(y))
                     for idx, resu, pred in zip(test_index, y_test, y_pred):
                         if pred == resu:
                             samples_counts[idx] += 1
+                    results["Samples_counts"].append(samples_counts.tolist())
 
-                    results['Samples_counts'].append(samples_counts)
-                    time.sleep(0.5)
+                    # Debugging: Check consistency of results
+                    lengths = {key: len(val) for key, val in results.items()}
+                    if len(set(lengths.values())) > 1:
+                        print("Inconsistent lengths in results:", lengths)
+                        raise ValueError("Inconsistent lengths in results dictionary")
+
+            else:
+                # Train the model without hyperparameter optimization
+                res_model = _create_model_instance(estimator_name, params=None)
+                res_model.fit(X_train_selected, y_train)
+
+                results["Estimator"].append(estimator_name)
+                results = _calculate_metrics(config["extra_metrics"], results, res_model, X_test_selected, y_test)
+                _store_results(
+                    results, num_feature, estimator_name, config, X_train_selected
+                )
+
+                # Track predictions for Samples_counts
+                y_pred = res_model.predict(X_test_selected)
+                samples_counts = np.zeros(len(y))
+                for idx, resu, pred in zip(test_index, y_test, y_pred):
+                    if pred == resu:
+                        samples_counts[idx] += 1
+                results["Samples_counts"].append(samples_counts.tolist())
+
+                # Debugging: Check consistency of results
+                lengths = {key: len(val) for key, val in results.items()}
+                if len(set(lengths.values())) > 1:
+                    print("Inconsistent lengths in results:", lengths)
+                    raise ValueError("Inconsistent lengths in results dictionary")
+
     return results
+
+def _store_results(results, num_feature, estimator_name, config, X_train_selected):
+    """
+    Helper function to store results for each model and feature selection.
+
+    Parameters:
+    -----------
+    results : dict
+        Dictionary to store the results.
+    num_feature : int or str
+        Number of features selected.
+    estimator_name : str
+        Name of the estimator used.
+    config : dict
+        Configuration dictionary.
+    X_train_selected : pandas.DataFrame
+        The training dataset after feature selection.
+
+    Returns:
+    --------
+    None
+    """
+    if num_feature == "none" or num_feature is None:
+        results["Selected_Features"].append(None)
+        results["Number_of_Features"].append(X_train_selected.shape[1])
+        results["Way_of_Selection"].append("none")
+        results["Classifiers"].append(estimator_name)
+    else:
+        fs_type = "sfm" if config["sfm"] else config["feature_selection_type"]
+        results["Classifiers"].append(f"{estimator_name}_{fs_type}_{num_feature}")
+        results["Selected_Features"].append(X_train_selected.columns.tolist())
+        results["Number_of_Features"].append(num_feature)
+        results["Way_of_Selection"].append(fs_type)
+
+    # # Debugging: Log the current results state
+    # print(f"Updated results for {estimator_name}: {results}")
