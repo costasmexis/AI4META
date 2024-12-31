@@ -19,7 +19,7 @@ from src.utils.validation.validation import _validation
 from src.utils.model_selection.default_cv import _cv_loop
 from src.utils.model_selection.nested_cv import _outer_loop 
 from src.utils.model_selection.output_config import _name_outputs, _return_csv
-from src.database.input import insert_to_db
+from src.db.input import insert_to_db
 from src.utils.plots.plots import _plot_per_clf, _histogram
 
 class MLPipelines(MachineLearningEstimator):

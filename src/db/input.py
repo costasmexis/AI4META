@@ -1,4 +1,4 @@
-from src.database.manager import DatabaseManager
+from src.db.manager import DatabaseManager
 import json
 from collections import Counter
 import numpy as np
