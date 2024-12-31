@@ -1,7 +1,7 @@
 import time
 from sklearn.model_selection import StratifiedKFold
 import progressbar
-from src.utils.model_selection.fit import _fit_procedure
+from src.utils.model_selection.train import _fit_procedure
 
 def _inner_loop(X, y, config, train_index, test_index, avail_thr, i):
     """

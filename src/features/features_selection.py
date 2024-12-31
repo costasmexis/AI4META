@@ -1,4 +1,4 @@
-from src.data_manipulation import DataLoader
+from src.data import DataLoader
 
 def _preprocess(X, y, num_feature2_use, config, train_index=None, test_index=None, features_names_list=None):
     """

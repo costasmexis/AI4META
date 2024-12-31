@@ -2,7 +2,7 @@ import numpy as np
 from scipy.stats import sem
 from sklearn.metrics import get_scorer, confusion_matrix, get_scorer_names
 from sklearn.metrics import average_precision_score, roc_auc_score
-from src.utils.translators import METRIC_ADDREVIATIONS
+from src.constants.translators import METRIC_ADDREVIATIONS
 from src.utils.statistics.bootstrap_ci import _calc_ci_btstrp
 
 def _calculate_metrics(metrics, results, clf, X_test, y_test):

@@ -7,12 +7,12 @@ import numpy as np
 
 from src.utils.metrics.metrics import _calculate_metrics
 from src.utils.model_manipulation.inner_selection import _one_sem_model, _gso_model
-from src.data_manipulation.class_balance import _class_balance
+from src.data.class_balance import _class_balance
 from src.utils.model_manipulation.model_instances import _create_model_instance
 from src.features.features_selection import _preprocess
 from src.features.sfm import _sfm
-from src.utils.parameters_grid import optuna_grid
-from src.utils.translators import AVAILABLE_CLFS
+from src.constants.parameters_grid import optuna_grid
+from src.constants.translators import AVAILABLE_CLFS
 
 def _set_optuna_verbosity(level):
     """

@@ -12,7 +12,7 @@ import copy
 
 from src.utils.metrics.metrics import _calculate_metrics
 from src.utils.metrics.shap import _calc_shap
-from src.data_manipulation.class_balance import _class_balance
+from src.data.class_balance import _class_balance
 
 def _evaluate(X, y, best_model, best_params, config):
     """

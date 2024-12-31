@@ -15,12 +15,12 @@ from joblib import Parallel, delayed
 # Custom modules
 from src.models.mlestimator import MachineLearningEstimator
 from src.utils.statistics.metrics_stats import _calc_metrics_stats
-from src.utils.validation import _validation
+from src.utils.validation.validation import _validation
 from src.utils.model_selection.default_cv import _cv_loop
 from src.utils.model_selection.nested_cv import _outer_loop 
-from src.utils.model_selection.results_config import _name_outputs, _return_csv
-from src.database.database_input import insert_to_db
-from src.utils.plots import _plot_per_clf, _histogram
+from src.utils.model_selection.output_config import _name_outputs, _return_csv
+from src.database.input import insert_to_db
+from src.utils.plots.plots import _plot_per_clf, _histogram
 
 class MLPipelines(MachineLearningEstimator):
     def __init__(self, label, csv_dir, database_name=None, estimator=None, param_grid=None):

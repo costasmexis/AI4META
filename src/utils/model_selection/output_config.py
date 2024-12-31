@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from src.utils.translators import DEFAULT_CONFIG
+from src.constants.translators import DEFAULT_CONFIG
 
 def _return_csv(final_dataset_name, scores_dataframe, extra_metrics=None, filter_csv=None, save_csv=False):
     """

@@ -8,7 +8,7 @@ import seaborn as sns
 import umap
 from sklearn.decomposition import PCA
 
-from src.data_manipulation import DataLoader
+from src.data import DataLoader
 
 
 class DataExplorer(DataLoader):

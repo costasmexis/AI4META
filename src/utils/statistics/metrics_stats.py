@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.stats import sem
-from src.utils.translators import METRIC_ADDREVIATIONS
+from src.constants.translators import METRIC_ADDREVIATIONS
 from src.utils.statistics.bootstrap_ci import _calc_ci_btstrp
 
 def _calc_metrics_stats(extra_metrics, results, indices):

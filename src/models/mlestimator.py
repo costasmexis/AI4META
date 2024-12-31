@@ -4,7 +4,7 @@ import numpy as np
 import optuna
 import pandas as pd
 import sklearn.metrics as metrics
-from src.data_manipulation import DataLoader
+from src.data import DataLoader
 from optuna.samplers import TPESampler
 
 from sklearn.model_selection import (
@@ -15,15 +15,15 @@ from sklearn.model_selection import (
 import warnings
 
 from src.features.features_selection import _preprocess
-from src.data_manipulation.class_balance import _class_balance
-from src.utils.parameters_grid import optuna_grid
-from src.utils.translators import AVAILABLE_CLFS
-from src.utils.validation import _validation
+from src.data.class_balance import _class_balance
+from src.constants.parameters_grid import optuna_grid
+from src.constants.translators import AVAILABLE_CLFS
+from src.utils.validation.validation import _validation
 from src.utils.model_manipulation.model_instances import _create_model_instance
 from src.utils.model_manipulation.inner_selection import _one_sem_model, _gso_model
 from src.utils.model_evaluation.evaluation import _evaluate
-from src.utils.plots import _plot_per_metric
-from src.database.database_input import insert_to_db
+from src.utils.plots.plots import _plot_per_metric
+from src.database.input import insert_to_db
 
 class MachineLearningEstimator(DataLoader):
     def __init__(self, label, csv_dir, database_name=None, estimator=None, param_grid=None):

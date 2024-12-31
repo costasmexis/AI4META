@@ -1,6 +1,6 @@
 import optuna
 import numpy as np
-from src.utils.parameters_grid import hyper_compl
+from src.constants.parameters_grid import hyper_compl
 
 def _gso_model(trials, model_name, splits, method):
     """
