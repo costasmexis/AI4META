@@ -111,11 +111,18 @@ class MLPipelines(MachineLearningEstimator):
         for classif in np.unique(df["Classifiers"]):
             indices = df[df["Classifiers"] == classif]
             filtered_scores = indices[f"{self.config_rcv['scoring']}"]
+            
+            # Aggregate sample classification rates
+            samples_classification_rates = np.zeros(len(self.y))
+            for test_part in indices["Samples_counts"]:
+                samples_classification_rates = np.add(samples_classification_rates, test_part)
+            samples_classification_rates /= rounds
 
             metrics_summary = {
                 "Est": indices["Estimator"].unique()[0],
                 "Clf": classif,
                 "Hyp": 'Default',
+                "Sel_way": indices["Way_of_Selection"].unique()[0],
                 "Sel_feat": indices["Selected_Features"].values if num_features else None,
                 "Fs_num": indices["Number_of_Features"].unique()[0],
                 "Norm": normalization,
@@ -123,6 +130,8 @@ class MLPipelines(MachineLearningEstimator):
                 "Scoring": scoring,
                 "Splits": splits,
                 "Rnds": rounds,
+                "In_sel": 'Validation_score',
+                "Classif_rates": samples_classification_rates
             }
 
             metrics_summary = _calc_metrics_stats(self.config_rcv['extra_metrics'], [metrics_summary], indices)[-1]
@@ -269,13 +278,6 @@ class MLPipelines(MachineLearningEstimator):
                 filtered_scores = indices[f"{self.config_rncv['outer_scoring']}"]
                 filtered_features = indices["Selected_Features"].values if num_features is not None else None
 
-                # Compute performance metrics
-                mean_score = np.mean(filtered_scores)
-                max_score = np.max(filtered_scores)
-                std_score = np.std(filtered_scores)
-                sem_score = sem(filtered_scores)
-                median_score = np.median(filtered_scores)
-
                 # Extract other details
                 Numbers_of_Features = indices["Number_of_Features"].unique()[0]
                 Way_of_Selection = indices["Way_of_Selection"].unique()[0]
@@ -305,7 +307,8 @@ class MLPipelines(MachineLearningEstimator):
                         "Class_blnc": self.config_rncv['class_balance'],
                         "In_scor": inner_scoring,
                         "Out_scor": outer_scoring,
-                        "In_sel": inner_selection
+                        "In_sel": inner_selection,
+                        "Classif_rates": samples_classification_rates
                     }
                 )
 

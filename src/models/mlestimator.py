@@ -5,7 +5,6 @@ import optuna
 import pandas as pd
 import sklearn.metrics as metrics
 from src.data.dataloader import DataLoader
-from optuna.samplers import TPESampler
 
 from sklearn.model_selection import (
     GridSearchCV,
@@ -142,7 +141,7 @@ class MachineLearningEstimator(DataLoader):
         self.config_cv = _validation(
             self.config_cv, self.model_selection_way, self.X, self.csv_dir, self.label, self.available_clfs
         )
-
+                
         # Preprocess data
         X, _, num_feature = _preprocess(
             self.X, self.y, self.config_cv['num_features'], self.config_cv, features_names_list=features_names_list
@@ -194,6 +193,7 @@ class MachineLearningEstimator(DataLoader):
             best_params = search_cv.best_params_
         else:
             from optuna.logging import set_verbosity, ERROR
+            from optuna.samplers import TPESampler
             # Silence Optuna's logging
             set_verbosity(ERROR)
 

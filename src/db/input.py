@@ -37,14 +37,20 @@ def insert_to_db(scores_dataframe, config, database_name="ai4meta.db"):
         hyperparameter_id = db_manager.insert_hyperparameters(json.dumps(hyperparameters))
         
         if 'Fs_num' in scores_dataframe.columns:
+            # Insert sample classification rates and retrieve sample_rate_id
+            classif_rates_str = np.array2string(
+                row["Classif_rates"], 
+                separator=',', 
+                suppress_small=True,  
+                max_line_width=np.inf 
+            )
+            sample_rate_id = db_manager.insert_sample_classification_rates(classif_rates_str)
             if row["Fs_num"] != config.get('all_features'):    
                 # Insert feature selection and retrieve selection_id
                 selection_id = db_manager.insert_feature_selection(row["Sel_way"], row["Fs_num"])
-                # Insert sample classification rates and retrieve sample_rate_id
-                sample_rate_id = db_manager.insert_sample_classification_rates(json.dumps(row["Classif_rates"]))
             else:
                 selection_id = None
-                sample_rate_id = None
+                # sample_rate_id = None
         else: 
             if config['num_features'] != config.get('all_features'):
                 # Insert feature selection and retrieve selection_id

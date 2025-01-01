@@ -36,7 +36,7 @@ def _return_csv(final_dataset_name, scores_dataframe, extra_metrics=None, filter
     results_path = f"{final_dataset_name}_outerloops_results.csv"
 
     # Columns to drop by default
-    cols_drop = ["Clf", "Hyp", "Sel_feat"]
+    cols_drop = ["Classif_rates","Clf", "Hyp", "Sel_feat"]
 
     # Additional columns to drop if present
     if "Out_scor" in scores_dataframe.columns:
