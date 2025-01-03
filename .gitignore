@@ -8,14 +8,11 @@ __pycache__/
 *.json
 catboost_info/*
 
-# Notes and mermaid
-Notes/*
-
 # C extensions
 *.so
 
 # Results
-results/
+# results/
 
 # Distribution / packaging
 .Python
@@ -173,10 +170,6 @@ cython_debug/
 #.idea/
 
 .vscode/
-
-# Results
-Results_ncv/
-results/
 
 # Other 
 usr/*
