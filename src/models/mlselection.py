@@ -27,7 +27,7 @@ class MLPipelines(MachineLearningEstimator):
         if database_name is None:
             database_name = "ai4meta.db"
         super().__init__(label, csv_dir, database_name, estimator, param_grid)   
-
+# TODO: add the rest of the parameters
     def rcv_accel(
         self,
         rounds=10,

@@ -237,5 +237,5 @@ class MachineLearningEstimator(DataLoader):
         if calculate_shap:
             self.shap_values = shaps_array
 
-        return self.best_estimator, scores_df, self.shap_values if calculate_shap else None
+        # return self.best_estimator, scores_df, self.shap_values if calculate_shap else None
 
