@@ -42,9 +42,9 @@ def _create_model_instance(model_name, params):
     elif model_name == "XGBClassifier":
         return XGBClassifier(**params) if params else XGBClassifier()
     elif model_name == "LGBMClassifier":
-        return LGBMClassifier(**params, verbose=-1) if params else LGBMClassifier(verbose=-1)
+        return LGBMClassifier(**params) if params else LGBMClassifier(verbose=-1)
     elif model_name == "CatBoostClassifier":
-        return CatBoostClassifier(**params, verbose=0) if params else CatBoostClassifier(verbose=0)
+        return CatBoostClassifier(**params) if params else CatBoostClassifier(verbose=0)
     elif model_name == "SVC":
         return SVC(**params) if params else SVC()
     elif model_name == "KNeighborsClassifier":
