@@ -150,5 +150,4 @@ def _set_result_csv_name(csv_dir):
     - Strips the file extension from the CSV file name.
     """
     data_name = os.path.basename(csv_dir).split(".")[0]
-    print(data_name)
     return data_name
