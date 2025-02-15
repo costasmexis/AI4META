@@ -2,6 +2,7 @@ import numpy as np
 from scipy.stats import sem
 from src.constants.translators import METRIC_ADDREVIATIONS
 from src.utils.statistics.bootstrap_ci import _calc_ci_btstrp
+import pandas as pd
 
 def _calc_metrics_stats(extra_metrics, results, indices):
     """
@@ -71,3 +72,42 @@ def _calc_metrics_stats(extra_metrics, results, indices):
         results[-1][f"{qck_mtrc}_upmed"] = round(upmed, 3)
 
     return results
+
+
+def final_model_stats(metrics_df):
+    """
+    Calculate statistics for a final model and store them in a dataframe.
+
+    Parameters:
+    -----------
+    metrics_df : pandas.DataFrame
+        DataFrame containing the metric values for the final model.
+
+    Returns:
+    --------
+    pandas.DataFrame
+        DataFrame with calculated statistics for the final model.
+    """
+    # get column names
+    columns = metrics_df.columns
+    # add to the first index the "type" column
+    columns = ["type"] + list(columns)
+    # create a new stats dataframe
+    stat_df = pd.DataFrame(columns=columns)
+    # to the column "type" add values 'mean', 'std' and 'sem'
+    stat_df['type'] = ['mean', 'std', 'sem']
+    
+    # for every column in the metrics dataframe calculate the statistics
+    for col in columns[1:]:
+        # Convert the list in the cell to a numpy array
+        values = np.array(metrics_df[col].iloc[0])  # since we have only one row
+        
+        # Calculate statistics
+        mean_val = round(np.mean(values), 3)
+        std_val = round(np.std(values), 3)
+        sem_val = round(sem(values), 3)
+        
+        # Assign values to the stat_df
+        stat_df[col] = [mean_val, std_val, sem_val]
+    
+    return stat_df

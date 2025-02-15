@@ -25,6 +25,10 @@ def _plot_per_clf(
     Returns:
     None
     """
+    results_dir = "results/images"
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
+        
     scores_long = scores_dataframe.explode(f"{scorer}")
     scores_long[f"{scorer}"] = scores_long[f"{scorer}"].astype(float)
     fig = go.Figure()
@@ -98,23 +102,17 @@ def _plot_per_clf(
     image_path = f"{final_dataset_name}_model_selection_plot.png"
     fig.write_image(image_path)
             
-def _plot_per_metric(scores_df, estimator_name, inner_selection, evaluation):
+def _plot_per_metric(scores_df, name):
     """
     Generate a boxplot to visualize the model evaluation results.
     
-    :param estimator_name: The name of the estimator.
-    :type estimator_name: str
-    :param eval_df: The evaluation dataframe containing the scores.
-    :type eval_df: pandas.DataFrame
-    :param cv: The number of cross-validation folds.
-    :type cv: int
-    :param evaluation: The evaluation method to use ("bootstrap", "cv_simple", or any other custom method).
-    :type evaluation: str
-    """
+    Parameters:
+    scores_df (pandas.DataFrame): A DataFrame containing the model evaluation results.
+    name (str): The name of the dataset.
     
-    results_dir = "results/images"
-    if not os.path.exists(results_dir):
-        os.makedirs(results_dir)
+    Returns:
+    None
+    """
 
     fig = go.Figure()
     
@@ -127,7 +125,7 @@ def _plot_per_metric(scores_df, estimator_name, inner_selection, evaluation):
         autosize = False,
         width=1500,
         height=1200,
-        title=f"Evaluation of {evaluation} results for {estimator_name} with {inner_selection}",
+        title=f"{name}",
         yaxis_title=f"Scores",
         xaxis_title="Metrics",
         xaxis_tickangle=-45,
@@ -136,8 +134,8 @@ def _plot_per_metric(scores_df, estimator_name, inner_selection, evaluation):
     fig.show()
 
     # Save the plot to 'Results/final_model_evaluation.png'
-    save_path = os.path.join(results_dir, f"evaluation_{estimator_name}_{evaluation}_{inner_selection}_.png")
-    fig.write_image(save_path)
+    # save_path = os.path.join(results_dir, f"evaluation_{estimator_name}_{evaluation}_{inner_selection}_{dataset_plot_name}.png")
+    fig.write_image(f"{name}.png")
 
 def _histogram(scores_dataframe, final_dataset_name, freq_feat, clfs, max_features):
     """
@@ -202,6 +200,6 @@ def _histogram(scores_dataframe, final_dataset_name, freq_feat, clfs, max_featur
             height=700  # Set plot height
         )
 
-        # Save the plot to 'Results/histogram.png'
+        # Save the plot to 'results/histogram.png'
         save_path = f"{final_dataset_name}_histogram.png"
         fig.write_image(save_path)

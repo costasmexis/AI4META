@@ -52,6 +52,10 @@ DEFAULT_CONFIG = {
         "missing_values": "median",
         "features_name": None,
         "scoring": "matthews_corrcoef",
-        "splits": 5
-        
+        "splits": 5,
+        "features_names_list": None,
+        "direction": "maximize",
+        "inner_selection": None,
+        "estimator_name": None,
+        "class_balance": None
     }

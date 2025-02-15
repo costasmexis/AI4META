@@ -140,16 +140,21 @@ class MLPipelines(MachineLearningEstimator):
         scores_dataframe = pd.DataFrame(results)
 
         # Save results
-        results_dir = "results"
-        os.makedirs(results_dir, exist_ok=True)
-        final_dataset_name = _name_outputs(self.config_rcv, results_dir, self.csv_dir)
+        results_csv_dir = "results/csv"
+        os.makedirs(results_csv_dir, exist_ok=True)
+        final_dataset_name = _name_outputs(self.config_rcv, results_csv_dir, self.csv_dir)
         statistics_dataframe = _return_csv(final_dataset_name, scores_dataframe, self.config_rcv['extra_metrics'], filter_csv, return_csv)
+        
+        # Set the images directory
+        results_image_dir = "results/images"
+        os.makedirs(results_image_dir, exist_ok=True)
+        final_image_name = _name_outputs(self.config_rcv, results_image_dir, self.csv_dir)
 
         if plot:
-            _plot_per_clf(scores_dataframe, plot, self.config_rcv['scoring'], final_dataset_name)
+            _plot_per_clf(scores_dataframe, plot, self.config_rcv['scoring'], final_image_name)
 
         if freq_feat:
-            _histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rcv['clfs'], self.X.shape[1])
+            _histogram(scores_dataframe, final_image_name, freq_feat, self.config_rcv['clfs'], self.X.shape[1])
 
         if info_to_db:
             insert_to_db(scores_dataframe, self.config_rcv, self.database_name)

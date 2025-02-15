@@ -92,10 +92,10 @@ def _file_name(config):
 
     for conf, value in config.items():
         if conf in DEFAULT_CONFIG and config[conf] != DEFAULT_CONFIG[conf]:
-            name_add += f"_{conf}_{value}"
+            name_add += f"{conf}_{value}_"
 
     # Append timestamp
-    name_add += f"_{datetime.now().strftime('%Y%m%d_%H%M')}"
+    name_add += f"{datetime.now().strftime('%Y%m%d_%H%M')}"
 
     return name_add
 

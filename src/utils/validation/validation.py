@@ -1,4 +1,5 @@
 from sklearn.metrics import get_scorer_names
+import re
 
 def _validate_scoring(scoring: str) -> None:
     """
@@ -172,6 +173,13 @@ def _validation(config, main_type, X, csv_dir, label, available_clfs):
 
     # Add additional configurations
     config["dataset_name"] = csv_dir
+    pattern = r"[^/]+(?=\.csv)"
+    match = re.search(pattern, config["dataset_name"])
+    if match:
+        config["dataset_plot_name"] = match.group()
+    else:  
+        config["dataset_plot_name"] = ''
+
     config["dataset_label"] = label
     config["features_name"] = (
         None if config["num_features"] == [X.shape[1]] else config["num_features"]

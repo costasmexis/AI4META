@@ -20,9 +20,11 @@ from src.constants.translators import AVAILABLE_CLFS
 from src.utils.validation.validation import _validation
 from src.utils.model_manipulation.model_instances import _create_model_instance
 from src.utils.model_manipulation.inner_selection import _one_sem_model, _gso_model
+from src.utils.model_selection.output_config import _name_outputs
 from src.utils.model_evaluation.evaluation import _evaluate
 from src.utils.plots.plots import _plot_per_metric
 from src.db.input import insert_to_db
+from src.utils.statistics.metrics_stats import final_model_stats
 
 class MachineLearningEstimator(DataLoader):
     def __init__(self, label, csv_dir, database_name=None, estimator=None, param_grid=None):
@@ -71,6 +73,7 @@ class MachineLearningEstimator(DataLoader):
         warnings_filter=False,
         info_to_db=False,
         class_balance=None,
+        info_to_results=True,
         processors=-1
     ):
         """
@@ -228,7 +231,21 @@ class MachineLearningEstimator(DataLoader):
         scores_df, shaps_array = _evaluate(X, self.y, best_model, best_params, self.config_cv)
 
         if boxplot:
-            _plot_per_metric(scores_df, estimator_name, self.config_cv['inner_selection'], evaluation)
+            results_image_dir = "results/images"
+            os.makedirs(results_image_dir, exist_ok=True)
+            final_image_name = _name_outputs(self.config_cv, results_image_dir, self.csv_dir)
+
+            _plot_per_metric(scores_df, final_image_name)
+        
+        if info_to_results:
+            # Save results
+            results_csv_dir = "results/csv"
+            os.makedirs(results_csv_dir, exist_ok=True)
+
+            results_df = pd.DataFrame({col: [scores_df[col].tolist()] for col in scores_df.columns})
+            stat_df = final_model_stats(results_df)
+            results_name = _name_outputs(self.config_cv, results_csv_dir, self.csv_dir)
+            stat_df.to_csv(f"{results_name}_final_model.csv")
 
         if info_to_db:
             scores_db_df = pd.DataFrame({col: [scores_df[col].tolist()] for col in scores_df.columns})
