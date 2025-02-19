@@ -11,7 +11,7 @@ def insert_to_db(scores_dataframe, config, database_name="ai4meta.db"):
     db_manager = DatabaseManager(db_name=database_name)
     
     # Insert dataset and retrieve dataset_id
-    dataset_id = db_manager.insert_dataset(config['dataset_name'])
+    dataset_id = db_manager.insert_dataset(config['csv_dir'])
     
     # Insert job parameters and retrieve job_id
     if config['model_selection_type'] == 'rncv':

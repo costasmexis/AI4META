@@ -4,7 +4,9 @@ datasets = ['epic_lc_ms_pos']#,'epic_composite']
 num_features = [10]
 estimators = ['ElasticNet']#,'XGBClassifier','CatBoostClassifier']
 inner_methods = ['validation_score']#,'one_sem','one_sem_grd','gso_1','gso_2']
-evaluation_methods = ['bootstrap']#, 'oob', 'cv_rounds']
+evaluation_methods = ['bootstrap', 'oob', 'cv_rounds', 'train_test']
+
+
 
 for dataset in datasets:
     csv_dir = 'data/processed/' + dataset + '.csv'
@@ -20,6 +22,7 @@ for dataset in datasets:
         for estimator in estimators:
             for inner in inner_methods:
                 for evaluation in evaluation_methods:
-                    print(f'STARTING WITH {dataset} AND {estimator} AND {num_feature} AND {inner} AND {evaluation}')
-                    mlpipe.search_cv(estimator_name=estimator,num_features=num_feature,inner_selection=inner,evaluation=evaluation)
-                    # mlpipe.rcv_accel(rounds=2,search_on=[estimator],num_features=num_feature)
+                    # print(f'STARTING WITH {dataset} AND {estimator} AND {num_feature} AND {inner} AND {evaluation}')
+                    # mlpipe.search_cv(estimator_name=estimator,num_features=num_feature,inner_selection=inner,evaluation=evaluation)
+                    # mlpipe.rcv_accel(rounds=2,search_on=[estimator],num_features=num_feature,class_balance='smote', info_to_db=True)
+                    mlpipe.nested_cv(search_on=[estimator],num_features=num_feature,info_to_db=True)

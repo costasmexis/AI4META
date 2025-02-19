@@ -1,96 +1,89 @@
-# Standard library imports
 import os
 import multiprocessing
 from itertools import chain
-
-# Numerical computing
 import numpy as np
 import pandas as pd
-from scipy.stats import sem
+import logging
+from typing import Dict, List, Optional, Any
 
-# Optimization and multiprocessing
+from sklearn.model_selection import StratifiedKFold
 from threadpoolctl import threadpool_limits
 from joblib import Parallel, delayed
 
-# Custom modules
 from src.models.mlestimator import MachineLearningEstimator
 from src.utils.statistics.metrics_stats import _calc_metrics_stats
-from src.utils.validation.validation import _validation
-from src.utils.model_selection.default_cv import _cv_loop
-from src.utils.model_selection.nested_cv import _outer_loop 
+from src.utils.validation.validation import ConfigValidator
 from src.utils.model_selection.output_config import _name_outputs, _return_csv
 from src.db.input import insert_to_db
 from src.utils.plots.plots import _plot_per_clf, _histogram
+from src.utils.model_selection.default_cv import _cv_loop
+from src.utils.model_selection.nested_cv import _outer_loop
+
+# Available classifiers
+from src.constants.translators import AVAILABLE_CLFS
+
+
+# Global logging flags
+_logged_operations = {}
+
+def _log_once(logger, operation: str, message: str) -> None:
+    """Log a message only once for a specific operation."""
+    if operation not in _logged_operations:
+        _logged_operations[operation] = True
+        logger.info(message)
 
 class MLPipelines(MachineLearningEstimator):
-    def __init__(self, label, csv_dir, database_name=None, estimator=None, param_grid=None):
+    def __init__(self, label: str, csv_dir: str, database_name: Optional[str] = None, 
+                 estimator: Optional[object] = None, param_grid: Optional[Dict] = None):
+        """Initialize MLPipelines instance."""
         if database_name is None:
             database_name = "ai4meta.db"
         super().__init__(label, csv_dir, database_name, estimator, param_grid)   
-# TODO: add the rest of the parameters
+
+        # Configure logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(message)s'
+        )
+        self.logger = logging.getLogger(__name__)
+
     def rcv_accel(
         self,
-        rounds=10,
-        exclude=None,
-        search_on=None,
-        num_features=None,
-        feature_selection_type="mrmr",
-        return_csv=True,
-        feature_selection_method="chi2",
-        plot="box",
-        scoring="matthews_corrcoef",
-        splits=5,
-        freq_feat=None,
-        normalization="minmax",
-        missing_values_method="median",
-        class_balance=None,
-        sfm=False,
-        extra_metrics=['roc_auc', 'accuracy', 'balanced_accuracy', 'recall', 'precision', 'f1', 'average_precision', 'specificity', 'matthews_corrcoef'],
-        info_to_db=False,
-        filter_csv=None,
+        rounds: int = 10,
+        exclude: Optional[List[str]] = None,
+        search_on: Optional[List[str]] = None,
+        num_features: Optional[int] = None,
+        feature_selection_type: str = "mrmr",
+        return_csv: bool = True,
+        feature_selection_method: str = "chi2",
+        plot: Optional[str] = "box",
+        scoring: str = "matthews_corrcoef",
+        splits: int = 5,
+        freq_feat: Optional[int] = None,
+        normalization: str = "minmax",
+        missing_values_method: str = "median",
+        class_balance: Optional[str] = None,
+        sfm: bool = False,
+        extra_metrics: List[str] = ['roc_auc', 'accuracy', 'balanced_accuracy', 'recall', 
+                                   'precision', 'f1', 'average_precision', 'specificity', 
+                                   'matthews_corrcoef'],
+        info_to_db: bool = False,
+        filter_csv: Optional[Dict] = None,
     ):
-        """
-        Perform accelerated cross-validation with default hyperparameters.
-
-        This function leverages parallel processing to speed up repeated cross-validation runs.
-
-        Parameters:
-        -----------
-        rounds : int, optional
-            Number of CV rounds. Defaults to 10.
-        exclude : list, optional
-            Classifiers to exclude. Defaults to None.
-        search_on : list, optional
-            Classifiers to include in search. Defaults to None.
-        num_features : int, optional
-            Number of features for feature selection. Defaults to None.
-        feature_selection_type : str, optional
-            Feature selection method. Defaults to 'mrmr'.
-        return_csv : bool, optional
-            Save results as CSV. Defaults to True.
-        plot : str, optional
-            Plot type ('box' or 'violin'). Defaults to 'box'.
-        normalization : str, optional
-            Normalization method ('minmax' or 'std'). Defaults to 'minmax'.
-        missing_values_method : str, optional
-            Missing value handling method ('mean', 'median', etc.). Defaults to 'median'.
-        sfm : bool, optional
-            Use SelectFromModel for feature selection. Defaults to False.
-        extra_metrics : list, optional
-            Additional metrics to evaluate. Defaults to a pre-defined set.
-        info_to_db : bool, optional
-            Save results to a database. Defaults to False.
-        filter_csv : dict, optional
-            Filters for the results CSV. Defaults to None.
-
-        Returns:
-        --------
-        pandas.DataFrame
-            Results dataframe containing CV scores and statistics.
-        """
+        """Perform accelerated cross-validation with default hyperparameters."""
         self.config_rcv = locals()
         self.config_rcv.pop("self", None)
-        self.config_rcv = _validation(self.config_rcv, 'rcv', self.X, self.csv_dir, self.label, self.available_clfs)
+        
+        # Initialize the validator
+        validator = ConfigValidator(available_clfs=AVAILABLE_CLFS)
+
+        self.config_rcv = validator.validate_config(
+            config=self.config_rcv,
+            main_type="rcv",
+            X=self.X,
+            csv_dir=self.csv_dir,
+            label=self.label
+        )   
 
         # Setup parallelization
         num_cores = multiprocessing.cpu_count()
@@ -163,93 +156,48 @@ class MLPipelines(MachineLearningEstimator):
 
     def nested_cv(
         self,
-        n_trials: int = 100,
         rounds: int = 10,
-        exclude: str | list = None,
-        search_on: str | list = None,
-        info_to_db: bool = False,
-        num_features: int | list = None,
+        exclude: Optional[List[str]] = None,
+        search_on: Optional[List[str]] = None,
+        num_features: Optional[List[int]] = None,
         feature_selection_type: str = "mrmr",
+        return_csv: bool = True,
         feature_selection_method: str = "chi2",
-        sfm: bool = False,
-        freq_feat: int = None,
-        class_balance: str = None,
+        plot: Optional[str] = "box",
+        scoring: str = "matthews_corrcoef",
+        n_trials: int = 100,
+        freq_feat: Optional[int] = None,
+        normalization: str = "minmax",
+        missing_values_method: str = "median",
+        class_balance: Optional[str] = None,
         inner_scoring: str = "matthews_corrcoef",
         outer_scoring: str = "matthews_corrcoef",
-        inner_selection: list = ["validation_score", "one_sem", "gso_1", "gso_2", "one_sem_grd"],
-        extra_metrics: str | list = [
-            'recall', 'specificity', 'accuracy', 'balanced_accuracy',
-            'precision', 'f1', 'roc_auc', 'average_precision', 'matthews_corrcoef'
-        ],
-        plot: str = "box",
+        inner_selection: List[str] = ["validation_score", "one_sem", "gso_1", "gso_2", "one_sem_grd"],
         inner_splits: int = 5,
         outer_splits: int = 5,
         parallel: str = "thread_per_round",
-        normalization: str = "minmax",
-        missing_values_method: str = "median",
-        return_csv: bool = True,
-        filter_csv: dict = None
+
+        sfm: bool = False,
+        extra_metrics: List[str] = ['roc_auc', 'accuracy', 'balanced_accuracy', 'recall', 
+                                   'precision', 'f1', 'average_precision', 'specificity', 
+                                   'matthews_corrcoef'],
+        info_to_db: bool = False,
+        filter_csv: Optional[Dict] = None,
     ):
-        """
-        Perform nested cross-validation with feature selection and hyperparameter tuning.
-
-        Parameters:
-        -----------
-        n_trials : int, optional
-            Number of optuna trials for hyperparameter optimization, by default 100.
-        rounds : int, optional
-            Number of outer cross-validation rounds, by default 10.
-        exclude : str | list, optional
-            List of classifiers to exclude, by default None.
-        search_on : str | list, optional
-            List of classifiers to search on, by default None.
-        info_to_db : bool, optional
-            Save results to the database, by default False.
-        num_features : int | list, optional
-            Number of features for selection, by default None (use all features).
-        feature_selection_type : str, optional
-            Feature selection type (e.g., 'mrmr', 'kbest'), by default 'mrmr'.
-        feature_selection_method : str, optional
-            Method for feature selection (e.g., 'chi2', 'f_classif'), by default 'chi2'.
-        sfm : bool, optional
-            Use SelectFromModel for supported classifiers, by default False.
-        freq_feat : int, optional
-            Number of top features to visualize, by default None.
-        class_balance : str, optional
-            Class balancing method (e.g., 'smote'), by default None.
-        inner_scoring : str, optional
-            Metric for inner CV loop, by default 'matthews_corrcoef'.
-        outer_scoring : str, optional
-            Metric for outer CV loop, by default 'matthews_corrcoef'.
-        inner_selection : list, optional
-            Methods for selecting hyperparameters, by default all available methods.
-        extra_metrics : str | list, optional
-            List of additional metrics to calculate, by default a comprehensive set.
-        plot : str, optional
-            Type of plot to generate ('box' or 'violin'), by default 'box'.
-        inner_splits : int, optional
-            Number of splits for inner CV, by default 5.
-        outer_splits : int, optional
-            Number of splits for outer CV, by default 5.
-        parallel : str, optional
-            Parallelization method ('thread_per_round' or 'freely_parallel'), by default 'thread_per_round'.
-        normalization : str, optional
-            Data normalization method ('minmax' or 'std'), by default 'minmax'.
-        missing_values_method : str, optional
-            Method for handling missing values ('mean', 'median', etc.), by default 'median'.
-        return_csv : bool, optional
-            Save results as a CSV, by default True.
-        filter_csv : dict, optional
-            Filters to apply to the results CSV, by default None.
-
-        Returns:
-        --------
-        pandas.DataFrame
-            Dataframe containing the results of nested cross-validation.
-        """
+        """Perform nested cross-validation with feature selection and hyperparameter tuning."""
         self.config_rncv = locals()
         self.config_rncv.pop("self", None)
-        self.config_rncv = _validation(self.config_rncv, 'rncv', self.X, self.csv_dir, self.label, self.available_clfs)
+        
+        # Initialize the validator
+        validator = ConfigValidator(available_clfs=AVAILABLE_CLFS)
+
+        self.config_rncv = validator.validate_config(
+            config=self.config_rncv,
+            main_type="rncv",
+            X=self.X,
+            csv_dir=self.csv_dir,
+            label=self.label
+        )   
 
         # Set up parallelization
         trial_indices = range(rounds)
@@ -276,8 +224,8 @@ class MLPipelines(MachineLearningEstimator):
         df = pd.concat([pd.DataFrame(item) for item in list_dfs_flat], axis=0)
 
         results = []
-        for inner_selection in inner_selection:
-            df_inner = df[df["Inner_selection_mthd"] == inner_selection]
+        for inner in inner_selection:
+            df_inner = df[df["Inner_selection_mthd"] == inner]
             for classif in np.unique(df_inner["Classifiers"]):
                 indices = df_inner[df_inner["Classifiers"] == classif]
                 filtered_scores = indices[f"{self.config_rncv['outer_scoring']}"]
@@ -312,7 +260,7 @@ class MLPipelines(MachineLearningEstimator):
                         "Class_blnc": self.config_rncv['class_balance'],
                         "In_scor": inner_scoring,
                         "Out_scor": outer_scoring,
-                        "In_sel": inner_selection,
+                        "In_sel": inner,
                         "Classif_rates": samples_classification_rates
                     }
                 )

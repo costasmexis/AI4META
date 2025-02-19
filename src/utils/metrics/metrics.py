@@ -1,86 +1,106 @@
+from typing import Dict, List, Union, Any
 import numpy as np
 from scipy.stats import sem
-from sklearn.metrics import get_scorer, confusion_matrix, get_scorer_names
-from sklearn.metrics import average_precision_score, roc_auc_score
-from src.constants.translators import METRIC_ADDREVIATIONS
-from src.utils.statistics.bootstrap_ci import _calc_ci_btstrp
+from sklearn.metrics import (
+    get_scorer,
+    confusion_matrix,
+    get_scorer_names,
+    average_precision_score,
+    roc_auc_score
+)
 
-def _calculate_metrics(metrics, results, clf, X_test, y_test):
+def _specificity_scorer(estimator: Any, X: np.ndarray, y: np.ndarray) -> float:
     """
-    Calculate specified metrics for a given model and append them to the results dictionary.
+    Calculate the specificity score (true negative rate) for a classifier.
 
-    Parameters:
-    -----------
-    metrics : list
-        List of metric names to calculate.
-    results : dict
-        Dictionary to store the calculated metric values.
-    clf : object
-        Trained classifier to evaluate.
-    X_test : array-like
-        Feature data for testing.
-    y_test : array-like
-        True labels for testing.
+    Specificity measures the proportion of actual negatives correctly identified.
+    It is calculated as: TN / (TN + FP), where:
+    - TN: True Negatives
+    - FP: False Positives
 
-    Returns:
-    --------
-    dict
-        Updated results dictionary containing calculated metric values.
+    Parameters
+    ----------
+    estimator : Any
+        Trained classifier with predict method
+    X : np.ndarray
+        Input features
+    y : np.ndarray
+        True labels
 
-    Notes:
+    Returns
+    -------
+    float
+        Specificity score in range [0, 1]
+    """
+    y_pred = estimator.predict(X)
+    tn, fp, _, _ = confusion_matrix(y, y_pred).ravel()
+    return tn / (tn + fp)
+
+def _calculate_metrics(
+    metrics: List[str],
+    results: Dict[str, List[float]],
+    clf: Any,
+    X_test: np.ndarray,
+    y_test: np.ndarray
+) -> Dict[str, List[float]]:
+    """
+    Calculate multiple performance metrics for a classifier.
+
+    This function computes specified metrics for a trained classifier using test data.
+    It handles both standard sklearn metrics and custom metrics like specificity.
+    For probability-based metrics (roc_auc, average_precision), it uses predict_proba
+    when available.
+
+    Parameters
+    ----------
+    metrics : List[str]
+        List of metric names to calculate
+    results : Dict[str, List[float]]
+        Dictionary to store results, with metric names as keys
+    clf : Any
+        Trained classifier with predict method
+    X_test : np.ndarray
+        Test features
+    y_test : np.ndarray
+        True test labels
+
+    Returns
+    -------
+    Dict[str, List[float]]
+        Updated results dictionary with new metric scores
+
+    Raises
     ------
-    - Handles specific metrics like 'specificity', 'roc_auc', and 'average_precision' separately.
-    - Uses `get_scorer` for standard metrics.
+    AttributeError
+        If probability-based metrics are requested but classifier doesn't support predict_proba
     """
     for metric in metrics:
         if metric == 'specificity':
-            # Calculate specificity
-            results[f"{metric}"].append(_specificity_scorer(clf, X_test, y_test))
-        else:
-            try:
-                # Use sklearn's get_scorer for standard metrics
-                results[f"{metric}"].append(get_scorer(metric)(clf, X_test, y_test))
-            except AttributeError:
-                # Handle non-standard metrics explicitly
-                if metric in ['roc_auc', 'average_precision']:
-                    if hasattr(clf, 'predict_proba'):
-                        y_pred = clf.predict_proba(X_test)[:, 1]
-                    else:
-                        raise AttributeError(
-                            f"Model {type(clf).__name__} does not support `predict_proba`, required for {metric}."
-                        )
+            results[metric].append(_specificity_scorer(clf, X_test, y_test))
+            continue
 
-                    # Calculate the metric explicitly
-                    if metric == 'roc_auc':
-                        score = roc_auc_score(y_test, y_pred)
-                    elif metric == 'average_precision':
-                        score = average_precision_score(y_test, y_pred)
+        try:
+            # Try standard sklearn scoring
+            score = get_scorer(metric)(clf, X_test, y_test)
+            results[metric].append(score)
+        except AttributeError:
+            # Handle probability-based metrics
+            if metric in ['roc_auc', 'average_precision']:
+                if not hasattr(clf, 'predict_proba'):
+                    raise AttributeError(
+                        f"Model {type(clf).__name__} doesn't support predict_proba, "
+                        f"which is required for {metric}"
+                    )
+                
+                y_pred_proba = clf.predict_proba(X_test)[:, 1]
+                
+                if metric == 'roc_auc':
+                    score = roc_auc_score(y_test, y_pred_proba)
+                else:  # average_precision
+                    score = average_precision_score(y_test, y_pred_proba)
+                    
+                results[metric].append(score)
+            else:
+                raise  # Re-raise unexpected AttributeErrors
 
-                    results[f"{metric}"].append(score)
     return results
-
-def _specificity_scorer(estimator, X, y):
-    """
-    Calculate the specificity score for a given estimator.
-
-    Specificity is calculated as:
-    TN / (TN + FP)
-
-    Parameters:
-    -----------
-    estimator : object
-        Trained classifier.
-    X : array-like
-        Feature data for prediction.
-    y : array-like
-        True labels.
-
-    Returns:
-    --------
-    float
-        Specificity score.
-    """
-    y_pred = estimator.predict(X)
-    tn, fp, fn, tp = confusion_matrix(y, y_pred).ravel()
-    specificity = tn / (tn + fp)
-    return specificity
