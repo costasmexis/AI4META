@@ -51,16 +51,6 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
         Current round number for reproducibility.
     n_jobs : int or None, optional
         Number of jobs for parallel execution. Defaults to None.
-
-    Returns:
-    --------
-    dict
-        Updated results dictionary containing model evaluation metrics and configurations.
-
-    Notes:
-    ------
-    - Supports various feature selection methods and model selection types.
-    - Handles special cases like SelectFromModel (SFM) feature selection.
     """
     for num_feature2_use in config["num_features"]:
 
@@ -196,10 +186,6 @@ def _store_results(results, num_feature, estimator_name, config, X_train_selecte
         Configuration dictionary.
     X_train_selected : pandas.DataFrame
         The training dataset after feature selection.
-
-    Returns:
-    --------
-    None
     """
     if num_feature == "none" or num_feature is None:
         results["Selected_Features"].append(None)

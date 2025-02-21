@@ -93,4 +93,4 @@ def insert_to_db(scores_dataframe, config, database_name="ai4meta.db"):
     # Close the database connection
     db_manager.close_connection()
 
-    print("Data inserted into the SQLite database successfully.")
+    print("-> ✓ Data inserted into the SQLite database successfully. <-")

@@ -123,7 +123,7 @@ class MachineLearningEstimator(DataLoader):
         if param_grid is None:
             self.param_grid = optuna_grid["NestedCV"] if search_type == "bayesian_search" else optuna_grid["SklearnParameterGrid"]
             _log_once(self.logger, 'default_grid',
-                     "Using default parameter grid")
+                     "✓ Using default parameter grid")
         else:
             param_grid = {estimator_name: param_grid}
             self.param_grid = param_grid
