@@ -57,5 +57,6 @@ DEFAULT_CONFIG = {
         "direction": "maximize",
         "inner_selection": None,
         "estimator_name": None,
-        "class_balance": None
+        "class_balance": None,
+        "evaluation": None
     }

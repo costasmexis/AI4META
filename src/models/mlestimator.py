@@ -6,6 +6,7 @@ import pandas as pd
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, StratifiedKFold
 import warnings
 from typing import Optional, Dict, Any, List, Union, Tuple
+import pickle
 
 from src.data.dataloader import DataLoader
 from src.features.features_selection import preprocess
@@ -90,7 +91,8 @@ class MachineLearningEstimator(DataLoader):
         info_to_db: bool = False,
         class_balance: Optional[str] = None,
         info_to_results: bool = True,
-        processors: int = -1
+        processors: int = -1,
+        save_model: bool = True
     ):
         """Perform hyperparameter optimization using specified search methods."""
         
@@ -218,9 +220,18 @@ class MachineLearningEstimator(DataLoader):
             os.makedirs(results_csv_dir, exist_ok=True)
 
             results_df = pd.DataFrame({col: [scores_df[col].tolist()] for col in scores_df.columns})
-            stat_df = final_model_stats(results_df)
+            stat_df = final_model_stats(results_df, evaluation=evaluation)
             results_name = _name_outputs(self.config_cv, results_csv_dir, self.csv_dir)
             stat_df.to_csv(f"{results_name}_final_model.csv")
+            _log_once(self.logger, 'results_complete',
+                     f"✓ Results saved to {results_name}_final_model.csv")
+
+        if save_model:
+            model_dir = "results/models"
+            os.makedirs(model_dir, exist_ok=True)
+            model_name = _name_outputs(self.config_cv, model_dir, self.csv_dir)
+            with open(f"{model_name}_final_model.pkl", "wb") as model_file:
+                pickle.dump(best_model, model_file)
 
         if info_to_db:
             scores_db_df = pd.DataFrame({col: [scores_df[col].tolist()] for col in scores_df.columns})

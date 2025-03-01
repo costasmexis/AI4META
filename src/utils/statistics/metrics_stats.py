@@ -74,7 +74,7 @@ def _calc_metrics_stats(extra_metrics, results, indices):
     return results
 
 
-def final_model_stats(metrics_df):
+def final_model_stats(metrics_df, evaluation):
     """
     Calculate statistics for a final model and store them in a dataframe.
 
@@ -82,6 +82,7 @@ def final_model_stats(metrics_df):
     -----------
     metrics_df : pandas.DataFrame
         DataFrame containing the metric values for the final model.
+    evaluation : str
 
     Returns:
     --------
@@ -109,5 +110,8 @@ def final_model_stats(metrics_df):
         
         # Assign values to the stat_df
         stat_df[col] = [mean_val, std_val, sem_val]
+    
+    # Add the method used to the method column
+    stat_df['evaluation'] = evaluation
     
     return stat_df
