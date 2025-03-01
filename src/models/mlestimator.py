@@ -7,6 +7,7 @@ from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, Stratified
 import warnings
 from typing import Optional, Dict, Any, List, Union, Tuple
 import pickle
+import json
 
 from src.data.dataloader import DataLoader
 from src.features.features_selection import preprocess
@@ -230,9 +231,19 @@ class MachineLearningEstimator(DataLoader):
             model_dir = "results/models"
             os.makedirs(model_dir, exist_ok=True)
             model_name = _name_outputs(self.config_cv, model_dir, self.csv_dir)
+
+            # Save the final model
             with open(f"{model_name}_final_model.pkl", "wb") as model_file:
                 pickle.dump(best_model, model_file)
-
+            _log_once(self.logger, 'model_complete',
+                     f"✓ Model saved to {model_name}_final_model.pkl")
+            
+            # Save a json with the best hyperparameters and the estimator
+            with open(f"{model_name}_best_params.json", "w") as params_file:
+                json.dump(best_params, params_file)
+            _log_once(self.logger, 'params_complete',
+                     f"✓ Best hyperparameters saved to {model_name}_best_params.json")
+            
         if info_to_db:
             scores_db_df = pd.DataFrame({col: [scores_df[col].tolist()] for col in scores_df.columns})
             insert_to_db(scores_db_df, self.config_cv, self.database_name)
