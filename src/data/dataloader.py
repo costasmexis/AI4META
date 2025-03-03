@@ -107,7 +107,6 @@ class DataLoader:
         self,
         X: Optional[pd.DataFrame] = None,
         method: str = "minmax",
-        train_test_set: bool = False,
         X_test: Optional[pd.DataFrame] = None,
     ) -> Union[pd.DataFrame, Tuple[pd.DataFrame, pd.DataFrame]]:
         """Normalize the input data using specified method."""        
@@ -118,7 +117,7 @@ class DataLoader:
         if method in ["minmax", "standard"]:
             self.scaler = MinMaxScaler() if method == "minmax" else StandardScaler()
             X = pd.DataFrame(self.scaler.fit_transform(X), columns=X.columns)
-            if train_test_set:
+            if X_test is not None:
                 X_test = pd.DataFrame(self.scaler.transform(X_test), columns=X_test.columns)
                 self._log_once('normalization', f"{method}_train_test", f"✓ Applied {method} normalization to train and test sets")
             else:
@@ -131,7 +130,7 @@ class DataLoader:
         if initial_data:
             self.X = X
             return None
-        elif train_test_set:
+        elif X_test is not None:
             return X, X_test
         return X
 

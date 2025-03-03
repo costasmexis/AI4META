@@ -73,7 +73,6 @@ def preprocess(
         X_train_norm, X_test_norm = loader.normalize(
             X=X_train,
             method=config.get('normalization_method'),
-            train_test_set=True,
             X_test=X_test
         )
     else:
