@@ -92,7 +92,7 @@ def _cv_rounds_validation(
         cv_splits = StratifiedKFold(
             n_splits=config['splits'],
             shuffle=True,
-            random_state=i
+            random_state=i+10
         )
         
         # Process each fold

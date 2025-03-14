@@ -111,7 +111,7 @@ def _outer_loop(X, y, config, i, avail_thr):
             results = _inner_loop(X, y, config, train_index, test_index, avail_thr, i)
             temp_list.append(results)
             bar.update(split_index)
-            time.sleep(1)
+            # time.sleep(1)
 
     list_dfs = [item for sublist in temp_list for item in sublist]  # Flatten results
     end = time.time()
