@@ -208,8 +208,10 @@ class ConfigValidator:
     def _configure_classifiers(self, config: Dict) -> None:
         """Configure classifier selection based on include/exclude lists."""
         include_classes = config.get("search_on")
-        exclude_classes = config.get("exclude", [])
-        
+        exclude_classes = config.get("exclude")
+        if exclude_classes is None:
+            exclude_classes = []
+
         if include_classes:
             config["clfs"] = [clf for clf in include_classes 
                             if clf in self.available_clfs]
