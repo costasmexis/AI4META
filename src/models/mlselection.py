@@ -272,7 +272,7 @@ class MLPipelines(MachineLearningEstimator):
         scores_dataframe = pd.DataFrame(results)
 
         # Save results directory
-        results_dir = "results"
+        results_dir = "results/csv"
         os.makedirs(results_dir, exist_ok=True)
         final_dataset_name = _name_outputs(self.config_rncv, results_dir, self.csv_dir)
 
