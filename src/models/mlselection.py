@@ -245,7 +245,7 @@ class MLPipelines(MachineLearningEstimator):
                 results.append(
                     {
                         "Est": df_inner[df_inner["Classifiers"] == classif]["Estimator"].unique()[0],
-                        "Clf": classif,
+                        "Clf": classif+"_"+inner,
                         "Hyp": df_inner[df_inner["Classifiers"] == classif]["Hyperparameters"].values,
                         "Sel_way": Way_of_Selection,
                         "Fs_inner": 'none' if Way_of_Selection == 'none' else feature_selection_method,
@@ -272,20 +272,24 @@ class MLPipelines(MachineLearningEstimator):
         scores_dataframe = pd.DataFrame(results)
 
         # Save results directory
-        results_dir = "results/csv"
-        os.makedirs(results_dir, exist_ok=True)
-        final_dataset_name = _name_outputs(self.config_rncv, results_dir, self.csv_dir)
+        results_csv_dir = "results/csv"
+        os.makedirs(results_csv_dir, exist_ok=True)
+        final_csv_dataset_name = _name_outputs(self.config_rncv, results_csv_dir, self.csv_dir)
+
+        results_img_dir = "results/images"
+        os.makedirs(results_img_dir, exist_ok=True)
+        final_img_dataset_name = _name_outputs(self.config_rncv, results_img_dir, self.csv_dir)
 
         # Save to CSV if specified
-        statistics_dataframe = _return_csv(final_dataset_name, scores_dataframe, self.config_rncv['extra_metrics'], filter_csv, return_csv)
+        statistics_dataframe = _return_csv(final_csv_dataset_name, scores_dataframe, self.config_rncv['extra_metrics'], filter_csv, return_csv)
 
         # Plot histogram if required
         if num_features is not None:    
-            _histogram(scores_dataframe, final_dataset_name, freq_feat, self.config_rncv['clfs'], self.X.shape[1])
+            _histogram(scores_dataframe, final_img_dataset_name, freq_feat, self.config_rncv['clfs'], self.X.shape[1])
 
         # Generate performance plots
         if plot is not None:
-            _plot_per_clf(scores_dataframe, plot, self.config_rncv['outer_scoring'], final_dataset_name)
+            _plot_per_clf(scores_dataframe, plot, self.config_rncv['outer_scoring'], final_img_dataset_name)
 
         # Save results to database if specified
         if info_to_db:

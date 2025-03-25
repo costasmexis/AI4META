@@ -41,10 +41,6 @@ def _plot_per_clf(
     - Both plot types show individual data points
     - Plots are automatically saved to the results/images directory
     """
-    # Ensure results directory exists
-    results_dir = "results/images"
-    os.makedirs(results_dir, exist_ok=True)
-
     # Prepare data
     scores_long = scores_dataframe.explode(scorer)
     scores_long[scorer] = scores_long[scorer].astype(float)
@@ -106,8 +102,8 @@ def _plot_per_clf(
     # Configure layout
     fig.update_layout(
         autosize=False,
-        width=1500,
-        height=1200,
+        width=2500,
+        height=1900,
         title="Model Selection Results by Classifier",
         yaxis_title=f"Scores {scorer}",
         xaxis_title="Classifier",
