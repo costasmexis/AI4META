@@ -77,16 +77,6 @@ def _class_balance(
         # Perform resampling
         X_balanced, y_balanced = balancer.fit_resample(X, y)
 
-        # # Log final class distribution
-        # unique, counts = np.unique(y_balanced, return_counts=True)
-        # final_dist = dict(zip(unique, counts))
-        # logger.info(f"Final class distribution: {final_dist}")
-
-        # # Calculate and log the changes
-        # samples_diff = len(y_balanced) - len(y)
-        # logger.info(f"✓ Balancing complete: {abs(samples_diff)} samples " + 
-        #            ("added" if samples_diff > 0 else "removed"))
-
         return X_balanced, y_balanced
 
     except Exception as e:

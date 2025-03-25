@@ -26,7 +26,7 @@ def _set_optuna_verbosity(level):
     set_verbosity(level)
     logging.getLogger("optuna").setLevel(level)
 
-def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=None):
+def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=1):
     """
     Perform the fitting procedure for the machine learning pipeline.
 
@@ -49,7 +49,7 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
         Indices for the testing set.
     i : int
         Current round number for reproducibility.
-    n_jobs : int or None, optional
+    n_jobs : int or 1, optional
         Number of jobs for parallel execution. Defaults to None.
     """
     for num_feature2_use in config["num_features"]:
@@ -95,7 +95,7 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
                     param_distributions=optuna_grid[opt_grid][estimator_name],
                     cv=config["inner_cv"],
                     return_train_score=True,
-                    n_jobs=1,
+                    n_jobs=n_jobs,
                     verbose=0,
                     n_trials=config["n_trials"],
                 )

@@ -47,13 +47,6 @@ def _inner_loop(X, y, config, train_index, test_index, avail_thr, i):
     # Execute the fitting procedure
     results = _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs)
 
-    # # Validate consistency of results lengths
-    # lengths = {key: len(val) for key, val in results.items()}
-
-    # if len(set(lengths.values())) > 1:
-    #     print("Inconsistent lengths in results:", lengths)
-    #     raise ValueError("Inconsistent lengths in results dictionary")
-
     return [results]
 
 def _outer_loop(X, y, config, i, avail_thr):

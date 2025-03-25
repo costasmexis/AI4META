@@ -210,7 +210,7 @@ class MLPipelines(MachineLearningEstimator):
                 list_dfs = Parallel(n_jobs=use_cores)(
                     delayed(_outer_loop)(self.X, self.y, self.config_rncv, i, avail_thr) for i in trial_indices
                 )
-        else:         
+        elif self.config_rncv['parallel'] == "freely_parallel":         
             avail_thr = max(1, num_cores // rounds)
             with threadpool_limits():
                 list_dfs = Parallel(n_jobs=use_cores)(
