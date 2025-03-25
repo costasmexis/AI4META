@@ -67,18 +67,18 @@ def preprocess(
             X_test = X_test[features_names_list]
         _log_once(logger, 'feature_list_complete', 
                  f"✓ Selected {len(features_names_list)} features from list")
-
+        
     # Normalize data
     if X_test is not None:
         X_train_norm, X_test_norm = loader.normalize(
             X=X_train,
-            method=config.get('normalization_method'),
+            method=config.get('normalization'),
             X_test=X_test
         )
     else:
         X_train_norm = loader.normalize(
             X=X_train,
-            method=config.get('normalization_method')
+            method=config.get('normalization')
         )
         X_test_norm = None
 
