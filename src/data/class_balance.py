@@ -1,54 +1,84 @@
+from typing import Optional, Tuple, Dict, Union
+import numpy as np
+import pandas as pd
+import logging
 from imblearn.over_sampling import SMOTE, BorderlineSMOTE
 from imblearn.under_sampling import TomekLinks
 
-def _class_balance(X, y, bal_type, i=42):
+# Global logging flags for class balancing
+_logged_balance_methods = {}
+
+def _log_once(logger, method: str, message: str) -> None:
+    """Log a message only once for a specific balancing method."""
+    if method not in _logged_balance_methods:
+        _logged_balance_methods[method] = True
+        logger.info(message)
+
+def _class_balance(
+    X: Union[pd.DataFrame, np.ndarray],
+    y: Union[pd.Series, np.ndarray],
+    balance_method: str = None,
+    i: int = 42
+) -> Tuple[Union[pd.DataFrame, np.ndarray], Union[pd.Series, np.ndarray]]:
     """
     Apply class balancing strategies to address imbalanced datasets.
 
-    Parameters:
-    -----------
-    X : pandas.DataFrame or numpy.ndarray
+    Parameters
+    ----------
+    X : DataFrame or ndarray
         Feature dataset.
-    y : pandas.Series or numpy.ndarray
+    y : Series or ndarray
         Target labels.
     bal_type : dict or None
-        Dictionary specifying the class balancing method. Options include:
-        - 'smote': Synthetic Minority Over-sampling Technique.
-        - 'borderline_smote': Borderline SMOTE for over-sampling.
-        - 'tomek': Tomek links for under-sampling.
-        If None, no class balancing is applied.
-    i : int, optional
-        Random state seed for reproducibility. Defaults to 42.
+        Class balancing configuration. Format: {'class_balance': method}
+        Supported methods:
+        - 'smote': Synthetic Minority Over-sampling Technique
+        - 'borderline_smote': Borderline SMOTE for over-sampling
+        - 'tomek': Tomek links for under-sampling
+        If None, no balancing is applied.
+    i : int
+        Random state seed for reproducibility.
 
-    Returns:
-    --------
-    tuple
-        X_balanced : pandas.DataFrame or numpy.ndarray
-            Balanced feature dataset.
-        y_balanced : pandas.Series or numpy.ndarray
-            Balanced target labels.
-
-    Raises:
+    Returns
     -------
-    ValueError
-        If an unsupported class balancing method is specified.
+    X_balanced : DataFrame or ndarray
+        Balanced feature dataset.
+    y_balanced : Series or ndarray
+        Balanced target labels.
     """
-    # No class balancing applied
-    if bal_type is None:
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(message)s'
+    )
+    logger = logging.getLogger(__name__)
+
+    # No class balancing if bal_type is None
+    if balance_method is None:
+        _log_once(logger, 'none', "✓ No class balancing requested, returning original data")
         return X, y
+    
+    try:
+        if balance_method == 'smote':
+            balancer = SMOTE(random_state=i)
+            _log_once(logger, 'smote', "Applying SMOTE oversampling...")
+        elif balance_method == 'borderline_smote':
+            balancer = BorderlineSMOTE(random_state=i)
+            _log_once(logger, 'borderline_smote', "Applying Borderline SMOTE oversampling...")
+        elif balance_method == 'tomek':
+            balancer = TomekLinks()
+            _log_once(logger, 'tomek', "Applying Tomek links undersampling...")
+        else:
+            raise ValueError(
+                f"Unsupported balancing method: {balance_method}. "
+                "Choose from ['smote', 'borderline_smote', 'tomek']"
+            )
 
-    # Apply class balancing based on the specified method
-    if bal_type['class_balance'] == 'smote':
-        X_balanced, y_balanced = SMOTE(random_state=i).fit_resample(X, y)
-    elif bal_type['class_balance'] == 'borderline_smote':
-        X_balanced, y_balanced = BorderlineSMOTE(random_state=i).fit_resample(X, y)
-    elif bal_type['class_balance'] == 'tomek':
-        tomek = TomekLinks()
-        X_balanced, y_balanced = tomek.fit_resample(X, y)
-    else:
-        raise ValueError(
-            f"Unsupported class balancing method: {bal_type['class_balance']}."
-            " Choose from ['smote', 'borderline_smote', 'tomek'] or None."
-        )
+        # Perform resampling
+        X_balanced, y_balanced = balancer.fit_resample(X, y)
 
-    return X_balanced, y_balanced
+        return X_balanced, y_balanced
+
+    except Exception as e:
+        logger.error(f"Error during class balancing: {str(e)}")
+        raise

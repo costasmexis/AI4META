@@ -9,7 +9,7 @@ from src.utils.metrics.metrics import _calculate_metrics
 from src.utils.model_manipulation.inner_selection import _one_sem_model, _gso_model
 from src.data.class_balance import _class_balance
 from src.utils.model_manipulation.model_instances import _create_model_instance
-from src.features.features_selection import _preprocess
+from src.features.features_selection import preprocess
 from src.features.sfm import _sfm
 from src.constants.parameters_grid import optuna_grid
 from src.constants.translators import AVAILABLE_CLFS
@@ -26,7 +26,7 @@ def _set_optuna_verbosity(level):
     set_verbosity(level)
     logging.getLogger("optuna").setLevel(level)
 
-def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=None):
+def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=1):
     """
     Perform the fitting procedure for the machine learning pipeline.
 
@@ -49,25 +49,18 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
         Indices for the testing set.
     i : int
         Current round number for reproducibility.
-    n_jobs : int or None, optional
+    n_jobs : int or 1, optional
         Number of jobs for parallel execution. Defaults to None.
-
-    Returns:
-    --------
-    dict
-        Updated results dictionary containing model evaluation metrics and configurations.
-
-    Notes:
-    ------
-    - Supports various feature selection methods and model selection types.
-    - Handles special cases like SelectFromModel (SFM) feature selection.
     """
     for num_feature2_use in config["num_features"]:
-        # Preprocess data (feature selection, normalization, etc.)
-        X_train_selected, X_test_selected, num_feature = _preprocess(
-            X, y, num_feature2_use, config, train_index=train_index, test_index=test_index
-        )
+
+        X_train, X_test = X.iloc[train_index], X.iloc[test_index]
         y_train, y_test = y[train_index], y[test_index]
+
+        # Preprocess data (feature selection, normalization, etc.)
+        X_train_selected, X_test_selected, num_feature = preprocess(
+           config, num_feature2_use, X_train, y_train, X_test
+        )
 
         # Apply class balancing
         X_train_selected, y_train = _class_balance(X_train_selected, y_train, config["class_balance"], i)
@@ -90,7 +83,7 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
                     estimator, X_train_selected, X_test_selected, y_train, num_feature2_use
                 )
                 X_train_selected, y_train = _class_balance(X_train_selected, y_train, config["class_balance"], i)
-
+            
             if config["model_selection_type"] == "rncv":
                 # Hyperparameter optimization with Optuna
                 opt_grid = "NestedCV"
@@ -102,7 +95,7 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=Non
                     param_distributions=optuna_grid[opt_grid][estimator_name],
                     cv=config["inner_cv"],
                     return_train_score=True,
-                    n_jobs=1,
+                    n_jobs=n_jobs,
                     verbose=0,
                     n_trials=config["n_trials"],
                 )
@@ -193,10 +186,6 @@ def _store_results(results, num_feature, estimator_name, config, X_train_selecte
         Configuration dictionary.
     X_train_selected : pandas.DataFrame
         The training dataset after feature selection.
-
-    Returns:
-    --------
-    None
     """
     if num_feature == "none" or num_feature is None:
         results["Selected_Features"].append(None)

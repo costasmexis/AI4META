@@ -2,22 +2,22 @@ from src.models.mlselection import MLPipelines
 # from machinelearning.mlexplain import MLExplainer
 # from dataloader.eda import DataExplorer
 # import pandas as pd
-
-datasets = ['epic_composite','ICC', 'epic_lc_ms_pos']
+datasets = ['ICC']
 
 for dataset in datasets:
-    csv_dir = 'data/' + dataset + '.csv'
-    if dataset == 'epic_lc_ms_pos':
-        label = 'group'
-    elif dataset == 'epic_composite':
-        label= 'Factor1' 
-    else:
-        label='type'
+    csv_dir = 'data/processed/' + dataset + '.csv'
+    # if dataset == 'epic_lc_ms_pos':
+    #     label = 'group'
+    # elif dataset == 'epic_composite':
+    #     label= 'Factor1' 
+    # else:
+    label='type'
+    # label = 'Class'
     
     print(f'STARTING WITH {dataset}')
-    mlpipe = MLPipelines(label=label, csv_dir=csv_dir, database_name='ai4meta_10_mrmr.db')
-    mlpipe.nested_cv(info_to_db=True, num_features=10)
-    mlpipe.rcv_accel(info_to_db=True, num_features=10)
+    mlpipe = MLPipelines(label=label, csv_dir=csv_dir)
+    mlpipe.nested_cv(num_features=20)
+    mlpipe.rcv_accel(num_features=20)  
     # for estimator in estimators:
     #     for evaluation_method in evaluation:
     #         for inner in inner_selection:

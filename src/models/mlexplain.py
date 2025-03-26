@@ -1,7 +1,9 @@
 import shap
+from src.models.mlestimator import MachineLearningEstimator
+
 shap.initjs()
 
-class MLExplainer:
+class MLExplainer(MachineLearningEstimator):
     """
     Class for calculating and visualizing SHAP values for machine learning models.
 

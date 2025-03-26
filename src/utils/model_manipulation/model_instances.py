@@ -9,55 +9,53 @@ from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
 from xgboost import XGBClassifier
 
-def _create_model_instance(model_name, params):
+def _create_model_instance(model_name: str, params: dict = None) -> object:
     """
-    Create a machine learning model instance with the specified parameters.
+    Create and configure a machine learning model instance with specified parameters.
 
-    This function initializes an instance of the specified model with the given
-    parameters or default configurations. It ensures reusability and consistency
-    in model creation, particularly for pipelines or repetitive experiments.
+    This factory function instantiates a machine learning model based on the provided
+    model name and configures it with the given parameters. If no parameters are provided,
+    the model is created with default settings.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     model_name : str
-        The name of the model to instantiate. Must be one of the supported models.
-    params : dict or None
-        A dictionary of hyperparameters to configure the model. If None, the model
-        is initialized with default parameters.
+        The name of the model to instantiate. Must be one of the supported model types.
+    params : dict, optional
+        Dictionary of hyperparameters to configure the model. If None, default parameters
+        are used.
 
-    Returns:
-    --------
-    object
-        An instance of the specified model with the provided parameters.
-
-    Raises:
+    Returns
     -------
-    ValueError
-        If the specified model name is not supported.
+    object
+        An initialized instance of the specified model type with the given parameters.
     """
-    if model_name == "RandomForestClassifier":
-        return RandomForestClassifier(**params) if params else RandomForestClassifier()
-    elif model_name == "LogisticRegression":
-        return LogisticRegression(**params) if params else LogisticRegression()
-    elif model_name == "XGBClassifier":
-        return XGBClassifier(**params) if params else XGBClassifier()
-    elif model_name == "LGBMClassifier":
-        return LGBMClassifier(**params, verbose=-1) if params else LGBMClassifier(verbose=-1)
-    elif model_name == "CatBoostClassifier":
-        return CatBoostClassifier(**params, verbose=0) if params else CatBoostClassifier(verbose=0)
-    elif model_name == "SVC":
-        return SVC(**params) if params else SVC()
-    elif model_name == "KNeighborsClassifier":
-        return KNeighborsClassifier(**params) if params else KNeighborsClassifier()
-    elif model_name == "LinearDiscriminantAnalysis":
-        return LinearDiscriminantAnalysis(**params) if params else LinearDiscriminantAnalysis()
-    elif model_name == "GaussianNB":
-        return GaussianNB(**params) if params else GaussianNB()
-    elif model_name == "GradientBoostingClassifier":
-        return GradientBoostingClassifier(**params) if params else GradientBoostingClassifier()
-    elif model_name == "GaussianProcessClassifier":
-        return GaussianProcessClassifier(**params) if params else GaussianProcessClassifier()
-    elif model_name == "ElasticNet":
-        return LogisticRegression(**params) if params else LogisticRegression(penalty="elasticnet", solver="saga", l1_ratio=0.5)
-    else:
-        raise ValueError(f"Unsupported model: {model_name}")
+    # Dictionary mapping model names to their instantiation functions
+    model_factories = {
+        "RandomForestClassifier": lambda p: RandomForestClassifier(**p) if p else RandomForestClassifier(),
+        "LogisticRegression": lambda p: LogisticRegression(**p) if p else LogisticRegression(),
+        "XGBClassifier": lambda p: XGBClassifier(**p) if p else XGBClassifier(),
+        "LGBMClassifier": lambda p: LGBMClassifier(**p) if p else LGBMClassifier(verbose=-1),
+        "CatBoostClassifier": lambda p: CatBoostClassifier(**p) if p else CatBoostClassifier(verbose=0),
+        "SVC": lambda p: SVC(**p) if p else SVC(),
+        "KNeighborsClassifier": lambda p: KNeighborsClassifier(**p) if p else KNeighborsClassifier(),
+        "LinearDiscriminantAnalysis": lambda p: LinearDiscriminantAnalysis(**p) if p else LinearDiscriminantAnalysis(),
+        "GaussianNB": lambda p: GaussianNB(**p) if p else GaussianNB(),
+        "GradientBoostingClassifier": lambda p: GradientBoostingClassifier(**p) if p else GradientBoostingClassifier(),
+        "GaussianProcessClassifier": lambda p: GaussianProcessClassifier(**p) if p else GaussianProcessClassifier(),
+        "ElasticNet": lambda p: LogisticRegression(**p) if p else LogisticRegression(
+            penalty="elasticnet", 
+            solver="saga", 
+            l1_ratio=0.5
+        )
+    }
+
+    # Check if the requested model is supported
+    if model_name not in model_factories:
+        raise ValueError(
+            f"Unsupported model: {model_name}. "
+            f"Supported models are: {', '.join(model_factories.keys())}"
+        )
+
+    # Create and return the model instance
+    return model_factories[model_name](params)

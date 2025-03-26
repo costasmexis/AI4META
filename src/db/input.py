@@ -11,7 +11,7 @@ def insert_to_db(scores_dataframe, config, database_name="ai4meta.db"):
     db_manager = DatabaseManager(db_name=database_name)
     
     # Insert dataset and retrieve dataset_id
-    dataset_id = db_manager.insert_dataset(config['dataset_name'])
+    dataset_id = db_manager.insert_dataset(config['csv_dir'])
     
     # Insert job parameters and retrieve job_id
     if config['model_selection_type'] == 'rncv':
@@ -72,6 +72,9 @@ def insert_to_db(scores_dataframe, config, database_name="ai4meta.db"):
             hyperparameter_id, performance_id, sample_rate_id,
             config['model_selection_type']
         )
+
+        # Add the combination_id to the metadata
+        config['combination_id'] = combination_id
         
         if 'Fs_num' in scores_dataframe.columns:
             if row["Fs_num"] != config.get('all_features'):
@@ -93,4 +96,4 @@ def insert_to_db(scores_dataframe, config, database_name="ai4meta.db"):
     # Close the database connection
     db_manager.close_connection()
 
-    print("Data inserted into the SQLite database successfully.")
+    print("✓ Data inserted into the SQLite database successfully.")

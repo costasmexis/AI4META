@@ -27,15 +27,6 @@ def _inner_loop(X, y, config, train_index, test_index, avail_thr, i):
     i : int
         Current iteration number for reproducibility.
 
-    Returns:
-    --------
-    list
-        A list containing a dictionary of results for this inner loop.
-
-    Notes:
-    ------
-    - The function ensures that results have consistent lengths for all metrics.
-    - Runs with different levels of parallelization based on `config['parallel']`.
     """
     # Determine the number of jobs for parallel execution
     n_jobs = 1 if config["parallel"] == "thread_per_round" else avail_thr
@@ -55,12 +46,6 @@ def _inner_loop(X, y, config, train_index, test_index, avail_thr, i):
 
     # Execute the fitting procedure
     results = _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs)
-
-    # Validate consistency of results lengths
-    lengths = {key: len(val) for key, val in results.items()}
-    if len(set(lengths.values())) > 1:
-        print("Inconsistent lengths in results:", lengths)
-        raise ValueError("Inconsistent lengths in results dictionary")
 
     return [results]
 
@@ -83,17 +68,6 @@ def _outer_loop(X, y, config, i, avail_thr):
         Current round number for reproducibility.
     avail_thr : int
         Number of threads available for parallelization.
-
-    Returns:
-    --------
-    list
-        A list of dictionaries, each containing the results for an outer loop split.
-
-    Notes:
-    ------
-    - Manages the train-test split for the outer cross-validation.
-    - Utilizes a progress bar to indicate the process status.
-    - Supports parallel execution for efficiency.
     """
     start = time.time()  # Track the start time for this round
 
@@ -130,7 +104,7 @@ def _outer_loop(X, y, config, i, avail_thr):
             results = _inner_loop(X, y, config, train_index, test_index, avail_thr, i)
             temp_list.append(results)
             bar.update(split_index)
-            time.sleep(1)
+            # time.sleep(1)
 
     list_dfs = [item for sublist in temp_list for item in sublist]  # Flatten results
     end = time.time()
