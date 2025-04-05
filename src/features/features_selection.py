@@ -83,9 +83,9 @@ def preprocess(
         X_test_norm = None
 
     # Handle missing values
-    X_train_clean = loader.missing_values(X_train_norm)
+    X_train_clean = loader.missing_values(X_train_norm, method=config.get('missing_values'))
     if X_test_norm is not None:
-        X_test_clean = loader.missing_values(X_test_norm)
+        X_test_clean = loader.missing_values(X_test_norm, method=config.get('missing_values'))
     else:
         X_test_clean = None
 

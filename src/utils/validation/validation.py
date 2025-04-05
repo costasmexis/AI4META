@@ -114,7 +114,7 @@ class ConfigValidator:
                 "outer_scoring": "mathews_corrcoef",
                 "inner_splits": 5,
                 "outer_splits": 5,
-                'inner_selection': ['validation_score', 'one_sem', 'one_sem_grd', 'gso_1', 'gso_2']
+                'inner_selection': ["validation_score", "one_sem", "gso_1", "gso_2", "one_sem_grd"]
             })
         else:
             base_required.update({
