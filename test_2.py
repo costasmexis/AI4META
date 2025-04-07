@@ -1,6 +1,6 @@
 from src.models.mlselection import MLPipelines
 
-datasets = ['epic_composite']
+datasets = ['chronic_fatigue','lung_cancer', 'ICC','epic_lc_ms_pos','epic_composite', 'periodontal_inflammation','gastric_cancer']
 # num_features = [10,20]#30,40,50,None]
 # estimators = ['LGBMClassifier','XGBClassifier','RandomForestClassifier','ElasticNet','GradientBoostingClassifier']
 # inner_methods = ['validation_score','one_sem','one_sem_grd','gso_1','gso_2']
@@ -34,6 +34,6 @@ for dataset in datasets:
     #         for inner in inner_methods:
     #             for evaluation in evaluation_methods:
                     # mlpipe.search_cv(estimator_name=estimator,num_features=num_feature,inner_selection=inner,evaluation=evaluation)
-    # mlpipe.rcv_accel(num_features=[10,None],info_to_db=True)
+    mlpipe.rcv_accel(num_features=[10,None],info_to_db=True)
     mlpipe.nested_cv(num_features=[10,None],info_to_db=True)
     print(f'FINISHED WITH {dataset}')
