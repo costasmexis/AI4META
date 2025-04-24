@@ -78,12 +78,12 @@ def _sfm(
          num_features = len(selected_columns)
 
     # Log completion
-    _log_once(logger, f'complete_{ num_features}',
-             f"✓ Selected { num_features} features using SelectFromModel")
+    _log_once(logger, f'complete_{num_features}',
+             f"✓ Selected {num_features} features using SelectFromModel")
 
     return X_train_selected, X_test_selected,  num_features
 
-def _sfm_condition(requested: bool, estimator_name: str, less_than_all_ft: bool) -> bool:
+def _sfm_condition(requested: bool, estimator_name: str, not_all_ft: bool) -> bool:
     """
     Check if SFM is applicable for the given estimator.
 
@@ -105,4 +105,4 @@ def _sfm_condition(requested: bool, estimator_name: str, less_than_all_ft: bool)
         "XGBClassifier",
         "LGBMClassifier",
         "CatBoostClassifier"
-    ] and less_than_all_ft
+    ] and not_all_ft

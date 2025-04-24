@@ -53,13 +53,13 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=1):
         Number of jobs for parallel execution. Defaults to None.
     """
     for num_feature2_use in config["num_features"]:
-
+        # Split the data into training and testing sets
         X_train, X_test = X.iloc[train_index], X.iloc[test_index]
         y_train, y_test = y[train_index], y[test_index]
-        all_features = (num_feature2_use != X.shape[1]) or (num_feature2_use == None)
+        all_features = num_feature2_use!=X.shape[1]
 
         # Preprocess data (feature selection, normalization, etc.)
-        if config['sfm']:
+        if (config['sfm']) and (all_features):
             # If SFM is used, we need to select features first
             X_train_norm, X_test_norm, num_feature = preprocess(
                 config, None, X_train, y_train, X_test
@@ -82,6 +82,7 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=1):
 
             # Handle SelectFromModel (SFM) for supported classifiers
             if _sfm_condition(config['sfm'], estimator_name, all_features):
+                # If SFM is used, we need to select features first
                 X_train_selected_sfm, X_test_selected_sfm, num_feature = _sfm(
                     estimator, X_train_norm, X_test_norm, y_train, num_feature2_use
                 )
