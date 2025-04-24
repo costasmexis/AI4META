@@ -102,7 +102,8 @@ def _plot_per_clf(
     # Configure layout
     fig.update_layout(
         autosize=False,
-        width=7000,
+        # Customize the width based on the number of classifiers
+        width=max(2000, len(classifiers) * 200),
         height=2500,
         title="Model Selection Results by Classifier",
         yaxis_title=f"Scores {scorer}",

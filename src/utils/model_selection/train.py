@@ -10,7 +10,7 @@ from src.utils.model_manipulation.inner_selection import _one_sem_model, _gso_mo
 from src.data.class_balance import _class_balance
 from src.utils.model_manipulation.model_instances import _create_model_instance
 from src.features.features_selection import preprocess
-from src.features.sfm import _sfm
+from src.features.sfm import _sfm, _sfm_condition
 from src.constants.parameters_grid import optuna_grid
 from src.constants.translators import AVAILABLE_CLFS
 
@@ -56,10 +56,19 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=1):
 
         X_train, X_test = X.iloc[train_index], X.iloc[test_index]
         y_train, y_test = y[train_index], y[test_index]
+        all_features = (num_feature2_use != X.shape[1]) or (num_feature2_use == None)
 
         # Preprocess data (feature selection, normalization, etc.)
+        if config['sfm']:
+            # If SFM is used, we need to select features first
+            X_train_norm, X_test_norm, num_feature = preprocess(
+                config, None, X_train, y_train, X_test
+            )
+            # Apply class balancing
+            X_train_norm, y_train = _class_balance(X_train_norm, y_train, config["class_balance"], i)
+
         X_train_selected, X_test_selected, num_feature = preprocess(
-           config, num_feature2_use, X_train, y_train, X_test
+        config, num_feature2_use, X_train, y_train, X_test
         )
 
         # Apply class balancing
@@ -72,17 +81,10 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=1):
             estimator = AVAILABLE_CLFS[estimator_name]
 
             # Handle SelectFromModel (SFM) for supported classifiers
-            if (config["sfm"] and estimator_name in [
-                "RandomForestClassifier",
-                "XGBClassifier",
-                "GradientBoostingClassifier",
-                "LGBMClassifier",
-                "CatBoostClassifier",
-            ] and num_feature2_use != X.shape[1]):
-                X_train_selected, X_test_selected, num_feature = _sfm(
-                    estimator, X_train_selected, X_test_selected, y_train, num_feature2_use
+            if _sfm_condition(config['sfm'], estimator_name, all_features):
+                X_train_selected_sfm, X_test_selected_sfm, num_feature = _sfm(
+                    estimator, X_train_norm, X_test_norm, y_train, num_feature2_use
                 )
-                X_train_selected, y_train = _class_balance(X_train_selected, y_train, config["class_balance"], i)
             
             if config["model_selection_type"] == "rncv":
                 # Hyperparameter optimization with Optuna
@@ -99,8 +101,11 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=1):
                     verbose=0,
                     n_trials=config["n_trials"],
                 )
-
-                clf.fit(X_train_selected, y_train)
+                
+                if _sfm_condition(config['sfm'], estimator_name, all_features): 
+                    clf.fit(X_train_selected_sfm, y_train)
+                else:
+                    clf.fit(X_train_selected, y_train)
                 trials = clf.study_.trials
 
                 for inner_selection in config["inner_selection"]:
@@ -117,20 +122,31 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=1):
                             params = _gso_model(trials, estimator_name, config["inner_splits"], inner_selection)
 
                     res_model = _create_model_instance(estimator_name, params)
-                    res_model.fit(X_train_selected, y_train)
+                    if _sfm_condition(config['sfm'], estimator_name, all_features): 
+                        res_model.fit(X_train_selected_sfm, y_train)
+                    else:
+                        res_model.fit(X_train_selected, y_train)
 
                     results["Hyperparameters"].append(params)
 
-                    # Evaluate metrics
-                    results = _calculate_metrics(config["extra_metrics"], results, res_model, X_test_selected, y_test)
+                    # Evaluate metrics depending on SFM condition
+                    if _sfm_condition(config['sfm'], estimator_name, all_features): 
+                        results = _calculate_metrics(config["extra_metrics"], results, res_model, X_test_selected_sfm, y_test)
+                        # Store feature selection and results
+                        _store_results(
+                            results, num_feature, estimator_name, config, X_train_selected_sfm
+                        )
+                        # Track predictions for Samples_counts
+                        y_pred = res_model.predict(X_test_selected_sfm)
+                    else:
+                        results = _calculate_metrics(config["extra_metrics"], results, res_model, X_test_selected, y_test)
+                        # Store feature selection and results
+                        _store_results(
+                            results, num_feature, estimator_name, config, X_train_selected
+                        )
+                        # Track predictions for Samples_counts
+                        y_pred = res_model.predict(X_test_selected)
 
-                    # Store feature selection and results
-                    _store_results(
-                        results, num_feature, estimator_name, config, X_train_selected
-                    )
-
-                    # Track predictions for Samples_counts
-                    y_pred = res_model.predict(X_test_selected)
                     samples_counts = np.zeros(len(y))
                     for idx, resu, pred in zip(test_index, y_test, y_pred):
                         if pred == resu:
@@ -146,16 +162,25 @@ def _fit_procedure(X, y, config, results, train_index, test_index, i, n_jobs=1):
             else:
                 # Train the model without hyperparameter optimization
                 res_model = _create_model_instance(estimator_name, params=None)
-                res_model.fit(X_train_selected, y_train)
-
                 results["Estimator"].append(estimator_name)
-                results = _calculate_metrics(config["extra_metrics"], results, res_model, X_test_selected, y_test)
-                _store_results(
-                    results, num_feature, estimator_name, config, X_train_selected
-                )
+                if _sfm_condition(config['sfm'], estimator_name, all_features):
+                    res_model.fit(X_train_selected_sfm, y_train)
+                    results = _calculate_metrics(config["extra_metrics"], results, res_model, X_test_selected_sfm, y_test)
+                    _store_results(
+                        results, num_feature, estimator_name, config, X_train_selected_sfm
+                    )
+                    # Track predictions for Samples_counts
+                    y_pred = res_model.predict(X_test_selected_sfm)
+                else:
+                    res_model.fit(X_train_selected, y_train)
+                    results = _calculate_metrics(config["extra_metrics"], results, res_model, X_test_selected, y_test)
+                    _store_results(
+                        results, num_feature, estimator_name, config, X_train_selected
+                    )
+                    # Track predictions for Samples_counts
+                    y_pred = res_model.predict(X_test_selected)
 
                 # Track predictions for Samples_counts
-                y_pred = res_model.predict(X_test_selected)
                 samples_counts = np.zeros(len(y))
                 for idx, resu, pred in zip(test_index, y_test, y_pred):
                     if pred == resu:
