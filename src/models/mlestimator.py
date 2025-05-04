@@ -21,7 +21,7 @@ from src.utils.model_selection.output_config import _name_outputs
 from src.utils.model_evaluation.evaluation import _evaluate
 from src.utils.plots.plots import _plot_per_metric
 from src.db.input import insert_to_db
-from src.utils.statistics.metrics_stats import final_model_stats
+from src.utils.statistics.metrics_stats import _calc_metrics_stats
 
 # Global logging flags
 _logged_operations = {}
@@ -220,8 +220,26 @@ class MachineLearningEstimator(DataLoader):
             results_csv_dir = "results/csv"
             os.makedirs(results_csv_dir, exist_ok=True)
 
-            results_df = pd.DataFrame({col: [scores_df[col].tolist()] for col in scores_df.columns})
-            stat_df = final_model_stats(results_df, evaluation=evaluation)
+            # Initiate the results
+            results = [
+                {
+                    "Est": estimator_name,
+                    "Sel_way": 'none' if num_features is None or num_features == self.X.shape[1] else feature_selection_type,
+                    "Fs_num": num_features,
+                    "Norm": normalization,
+                    "Miss_vals": missing_values_method,
+                    "Eval": evaluation,
+                    "Class_blnc": class_balance,
+                    "Scoring": scoring,
+                    "Fs_inner": feature_selection_method,
+                    "In_sel": inner_selection,
+                    "search_type": search_type
+                }
+            ]
+            # stat_df = final_model_stats(results_df, evaluation=evaluation)
+            stat_lst = _calc_metrics_stats(extra_metrics, results=results, indices=scores_df)
+            stat_df = pd.DataFrame(stat_lst)
+            stat_df = stat_df.drop(columns=extra_metrics, axis=1)
             results_name = _name_outputs(self.config_cv, results_csv_dir, self.csv_dir)
             stat_df.to_csv(f"{results_name}_final_model.csv")
             self.logger.info(f"✓ Results saved to {results_name}_final_model.csv")

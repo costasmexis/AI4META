@@ -1,10 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
 import scipy.stats as stats
 import seaborn as sns
+import os
 
 from src.data.dataloader import DataLoader
 
@@ -42,7 +41,69 @@ class DataExplorer(DataLoader):
             
         data["labels"] = labels
         return data
-
+    
+    def box_illustration(
+        self,
+        data=None,
+        labels=None,
+        features_names=None,
+        num_features=None,
+        dataset_name="dataset"  
+    ) -> None:
+        """
+        Generate a boxplot to visualize the distribution of features values to help identify 
+        the well fitted normalization method. Saves the plot to results/images/boxplot folder.
+        
+        :param data: The input data. If None, the instance's data is used. (DataFrame, optional)
+        :param labels: The labels corresponding to the input data. If None, the instance's labels are used. (Series or array-like, optional)
+        :param features_names: List of features to consider. If None, all features are used. (list, optional)
+        :param num_features: Number of top features to select. If None, no feature selection is applied. (int, optional)
+        :param dataset_name: Name to use when saving the boxplot file. Defaults to "dataset". (str, optional)
+        """
+        
+        # Create directory if it doesn't exist
+        save_dir = os.path.join("results", "images", "boxplot")
+        os.makedirs(save_dir, exist_ok=True)
+        
+        if self.normalization_method == "minmax":
+            data = self.plot_preprocess(
+                X=data,
+                y=labels,
+                features_names=features_names,
+                num_features=num_features
+            )
+            
+            # Create a DataFrame in long format for seaborn
+            melted_data = pd.melt(
+                data,
+                id_vars="labels",
+                value_vars=data.columns[:-1],
+                var_name="Feature",
+                value_name="Value"
+            )
+            
+            # Calculate an appropriate figure size
+            n_features = len(data.columns) - 1  # Exclude 'labels' column
+            fig_width = min(n_features * 0.4, 200)  # Cap width at 200 inches for very large feature sets
+            
+            # Create boxplot with horizontal orientation for better readability with many features
+            plt.figure(figsize=(fig_width, 50))
+            
+            # Create the boxplot
+            sns.boxplot(x="Feature", y="Value", data=melted_data)
+            plt.title(f"Boxplot of Features - {dataset_name}")
+            plt.xticks(rotation=90)
+            plt.tight_layout()
+            
+            # Save the figure
+            save_path = os.path.join(save_dir, f"boxplot_of_{dataset_name}.png")
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            plt.close()  # Close the plot to avoid displaying it
+            
+            print(f"Boxplot saved to: {save_path}")
+        else:
+            raise ValueError(f"Unsupported normalization method: {self.normalization_method}. Only 'minmax' is supported for boxplot.")
+   
     def pairplots_function(
             self,
             data=None,

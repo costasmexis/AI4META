@@ -126,7 +126,6 @@ class MLPipelines(MachineLearningEstimator):
                 "In_sel": 'Validation_score',
                 "Classif_rates": samples_classification_rates
             }
-
             metrics_summary = _calc_metrics_stats(self.config_rcv['extra_metrics'], [metrics_summary], indices)[-1]
             results.append(metrics_summary)
 
