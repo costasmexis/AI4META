@@ -164,7 +164,8 @@ def _histogram(
     scores_dataframe: pd.DataFrame,
     final_dataset_name: str,
     freq_feat: Optional[int],
-    clfs: List[str],
+    num_clf: int,
+    num_inner_sel: int,
     max_features: int
 ) -> None:
     """
@@ -197,10 +198,12 @@ def _histogram(
     feature_counts = Counter()
     for _, row in scores_dataframe.iterrows():
         if row["Sel_way"] != "none":
+
             features = list(chain.from_iterable(
                 [list(index_obj) for index_obj in row["Sel_feat"]]
             ))
             feature_counts.update(features)
+            print(f"Selected {len(features)} features for {row['Clf']}")
 
     # Check if any features were selected
     if not feature_counts:
@@ -209,8 +212,11 @@ def _histogram(
 
     # Process feature counts
     top_features = feature_counts.most_common(freq_feat)
+    print(f"Top features selected: {top_features}")
     features, counts = zip(*top_features)
-    normalized_counts = [count / len(clfs) for count in counts]
+
+    normalized_counts = [count / (num_clf*num_inner_sel) for count in counts]
+    print(normalized_counts)
     print(f"Selected {freq_feat} features")
 
     # Create plot

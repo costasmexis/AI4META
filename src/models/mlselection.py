@@ -146,7 +146,7 @@ class MLPipelines(MachineLearningEstimator):
             _plot_per_clf(scores_dataframe, plot, self.config_rcv['scoring'], final_image_name)
 
         if freq_feat:
-            _histogram(scores_dataframe, final_image_name, freq_feat, self.config_rcv['clfs'], self.X.shape[1])
+            _histogram(scores_dataframe, final_image_name, freq_feat, len(self.config_rcv['clfs']), 1, self.X.shape[1])
 
         if info_to_db:
             insert_to_db(scores_dataframe, self.config_rcv, self.database_name)
@@ -284,7 +284,8 @@ class MLPipelines(MachineLearningEstimator):
 
         # Plot histogram if required
         if num_features is not None:    
-            _histogram(scores_dataframe, final_img_dataset_name, freq_feat, self.config_rncv['clfs'], self.X.shape[1])
+            print(scores_dataframe)
+            _histogram(scores_dataframe, final_img_dataset_name, freq_feat, len(self.config_rncv['clfs']), len(self.config_rncv['inner_selection']), self.X.shape[1])
 
         # Generate performance plots
         if plot is not None:
