@@ -4,6 +4,9 @@ import pandas as pd
 import scipy.stats as stats
 import seaborn as sns
 import os
+from scipy.cluster import hierarchy
+from scipy.spatial.distance import squareform
+from scipy.stats import pearsonr
 
 from src.data.dataloader import DataLoader
 
@@ -41,7 +44,173 @@ class DataExplorer(DataLoader):
             
         data["labels"] = labels
         return data
-    
+
+    def hierarchical_correlation_plot(
+        self,
+        data: pd.DataFrame = None,
+        labels: pd.Series = None,
+        features_names: list = None,
+        num_features: int = None,
+        method: str = 'complete',
+        figsize: tuple = (50, 50)
+    ) -> None:
+        """
+        Create a hierarchical clustering correlation heatmap for visualizing relationships
+        between features in a metabolomics dataset with balanced layout.
+        
+        Parameters
+        ----------
+        data : pandas.DataFrame, optional
+            Feature dataset containing metabolite measurements. If None, uses the instance's data.
+        labels : pandas.Series or array-like, optional
+            Binary target labels (0 or 1) for the samples. If None, uses the instance's labels.
+        features_names : list, optional
+            List of feature names to include in the plot. If provided, overrides num_features.
+        num_features : int, optional
+            Number of features to include in the plot based on feature importance. 
+            If None, all features are used.
+        method : str, optional
+            Linkage method for hierarchical clustering ('single', 'complete', 'average', 'ward').
+            Default is 'complete'.
+        figsize : tuple, optional
+            Size of the figure (width, height) in inches. Default is (50, 50).
+        """
+        
+        # Set default class names if not provided
+        class_names = list(self.label_mapping.values())
+        
+        # Preprocess data
+        data_scaled = self.plot_preprocess(
+            X=data,
+            y=labels,
+            features_names=features_names,
+            num_features=num_features
+        )
+        
+        # Check if 'labels' is in the columns (it should be after plot_preprocess)
+        if 'labels' not in data_scaled.columns:
+            raise ValueError("The 'labels' column is missing from the preprocessed data.")
+        
+        # Extract labels and remove from dataset for correlation calculation
+        y = data_scaled['labels'].values
+        X = data_scaled.drop(columns=['labels'])
+        
+        # Calculate feature importance for color coding
+        class_0_data = data_scaled[data_scaled['labels'] == 0].drop(columns=['labels'])
+        class_1_data = data_scaled[data_scaled['labels'] == 1].drop(columns=['labels'])
+        
+        if class_0_data.empty or class_1_data.empty:
+            raise ValueError("One or both classes have no samples. Cannot compute class differences.")
+        
+        class_0_mean = class_0_data.mean()
+        class_1_mean = class_1_data.mean()
+        mean_diff = class_1_mean - class_0_mean  # Preserve sign
+        
+        # Calculate correlation matrix
+        corr = X.corr(method='pearson')
+        
+        # Create figure with better proportions
+        fig = plt.figure(figsize=figsize)
+        
+        # Adjust the grid to use space more efficiently
+        gs = fig.add_gridspec(1, 2, width_ratios=[0.2, 0.8])
+        
+        # Add axes
+        ax1 = fig.add_subplot(gs[0])  # Dendrogram
+        ax2 = fig.add_subplot(gs[1])  # Heatmap
+        
+        # Convert correlation to distance
+        distance = 1 - np.abs(corr)
+        
+        # Compute linkage
+        Z = hierarchy.linkage(squareform(distance), method=method)
+        
+        # Get the ordering of features based on hierarchical clustering
+        dendrogram = hierarchy.dendrogram(
+            Z, 
+            ax=ax1, 
+            orientation='left', 
+            # no_labels=True,
+            leaf_font_size=10,
+            color_threshold=0.3 * max(Z[:,2])  # Color threshold for better visualization
+        )
+        
+        # Get the leaf ordering
+        index = dendrogram['leaves']
+        
+        # Reorder the correlation matrix
+        corr = corr.iloc[index, index]
+        
+        # Feature importance for color bar
+        importance_series = pd.Series(mean_diff, index=X.columns)
+        importance_series = importance_series.iloc[index]
+        
+        # Plot the heatmap
+        sns.heatmap(
+            corr, 
+            ax=ax2,
+            cmap='coolwarm',
+            vmin=-1, 
+            vmax=1,
+            cbar_kws={'label': f'Pearson Correlation'},
+            # square=True  # Make cells square for better visualization
+        )
+        
+        # Improve heatmap layout for Y-axis
+        ax2.set_yticks(np.arange(len(corr.index)) + 0.5)
+        ax2.set_yticklabels(corr.index, fontsize=8)
+        ax2.tick_params(axis='y', rotation=0)
+        
+        # Add X-axis labels (same as Y-axis since correlation matrix is symmetric)
+        ax2.set_xticks(np.arange(len(corr.columns)) + 0.5)
+        ax2.set_xticklabels(corr.columns, fontsize=8, rotation=90)  # Rotate to avoid overlap
+        
+        # Create color map for feature importance bar
+        cmap_importance = plt.cm.RdBu_r
+        norm = plt.Normalize(importance_series.min(), importance_series.max())
+        
+        # Create feature importance color bar
+        feature_colors = np.array([cmap_importance(norm(importance_series[i])) for i in range(len(importance_series))])
+        feature_colors = feature_colors.reshape(-1, 1)
+
+        # Clean up dendrogram
+        ax1.spines['top'].set_visible(False)
+        ax1.spines['right'].set_visible(False)
+        ax1.spines['bottom'].set_visible(False)
+        ax1.spines['left'].set_visible(False)
+        ax1.set_xticks([])
+        ax1.set_yticks([])
+        ax1.set_xlabel('Distance', fontsize=10)
+        
+        # Set title
+        plt.suptitle(f'Hierarchical Clustering of Feature Correlations\n(Method: {method.capitalize()})', 
+                    fontsize=16)
+        
+        # Create legend for feature importance interpretation
+        legend_elements = [
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='royalblue', 
+                    markersize=10, label=f'{class_names[0]}'),
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='crimson', 
+                    markersize=10, label=f'{class_names[1]}')
+        ]
+        
+        # Add the legend
+        fig.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, 0.01), 
+                ncol=2, frameon=True, fontsize=9)
+        
+        # Create directory if it doesn't exist
+        save_dir = os.path.join("results", "images", "hierarchical")
+        os.makedirs(save_dir, exist_ok=True)
+        
+        # Save the figure
+        save_path = os.path.join(save_dir, f"hierarchical_correlation_pearson_{method}.png")
+        plt.tight_layout(rect=[0, 0.05, 1, 0.95])  # Adjust for title and note
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+        print(f"Hierarchical correlation plot saved to: {save_path}")
+        plt.show()
+                    
+
     def box_illustration(
         self,
         data=None,
