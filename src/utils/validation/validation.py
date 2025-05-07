@@ -163,15 +163,15 @@ class ConfigValidator:
                 config["num_features"] = [num_features]
             elif num_features is None:
                 config["num_features"] = [X.shape[1]]
-            if isinstance(num_features, list):
+            elif isinstance(num_features, list):
                 if None in num_features:
                     # Replace None with the number of features
                     num_features = [X.shape[1] if n is None else n for n in num_features]
                     config["num_features"] = num_features
-            elif not isinstance(num_features, list):
+            else:
                 raise ValueError("num_features must be an integer, list, or None")
         else:
-            if num_features is None or num_features > X.shape[1]:
+            if (num_features is None) or (num_features > X.shape[1]):
                 config["num_features"] = X.shape[1]
             elif not isinstance(num_features, int):
                 raise ValueError("num_features must be an integer or None")
