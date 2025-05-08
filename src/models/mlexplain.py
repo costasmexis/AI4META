@@ -1,5 +1,9 @@
 import shap
-from src.models.mlestimator import MachineLearningEstimator
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+from src.models.mlestimator import MachineLearningEstimator  
 
 shap.initjs()
 
@@ -63,7 +67,8 @@ class MLExplainer(MachineLearningEstimator):
 
         elif explainer_type == "tree":
             if self.name not in [
-                "RandomForestClassifier", "XGBClassifier", "CatBoostClassifier", "LightGBMClassifier"]:
+                "RandomForestClassifier", "XGBClassifier", "CatBoostClassifier", "LightGBMClassifier"
+            ]:
                 raise ValueError("Tree explainer supports tree-based models only.")
             elif self.name == "XGBClassifier" and self.estimator.booster != "gbtree":
                 raise ValueError("XGBClassifier requires 'booster' to be 'gbtree'.")
@@ -144,12 +149,83 @@ class MLExplainer(MachineLearningEstimator):
                 shap.plots.beeswarm(self.shap_values, max_display=max_display)
 
         elif plot_type == "bar":
-            if len(self.shap_values.shape) == 3:
+             if len(self.shap_values.shape) == 3:
                 shap.plots.bar(self.shap_values[:, :, label], max_display=max_display)
-            elif len(self.shap_values.shape) == 2:
+             elif len(self.shap_values.shape) == 2:
                 shap.plots.bar(self.shap_values, max_display=max_display)
-            else:
+             else:
                 print("Unexpected SHAP values format for bar plot.")
 
         else:
             raise ValueError("Unsupported plot type. Use 'summary', 'beeswarm', or 'bar'.")
+
+    def plot_shap_pca(self, label=None):
+        """
+        Generate a PCA plot of SHAP values, colored by the target labels.
+
+        Parameters:
+        -----------
+        label : int, optional
+            The class label to visualize. If None, uses all data.  For multiclass,
+            if label is None, it will plot using the first principal component
+            of the SHAP values for each class. If label is specified, it uses
+            the SHAP values for that specific class.
+        """
+        if not isinstance(self.shap_values, shap.Explanation):
+             self.shap_values = shap.Explanation(
+                values=self.shap_values,
+                feature_names=self.X.columns,
+                data=self.X
+            )
+        # Handle multiclass SHAP values
+        if len(self.shap_values.shape) == 3:
+            if label is None:
+                # Use the first principal component of SHAP values for each class.
+                shap_values_2d = np.array([PCA(n_components=1).fit_transform(self.shap_values[:, :, i].values).flatten() for i in range(self.shap_values.shape[2])]).T
+            else:
+                shap_values_2d = self.shap_values[:, :, label].values
+        elif len(self.shap_values.shape) == 2:
+            shap_values_2d = self.shap_values.values
+        else:
+            raise ValueError("Unexpected SHAP values format.")
+
+        # Apply PCA
+        pca = PCA(n_components=2)
+        principal_components = pca.fit_transform(shap_values_2d)
+        principal_df = pd.DataFrame(
+            data=principal_components, columns=["principal component 1", "principal component 2"]
+        )
+
+        # Prepare data for plotting
+        if isinstance(self.y, pd.Series):
+            target = self.y.values
+        else:
+            target = self.y
+        if len(target.shape) > 1:
+            target = np.argmax(target, axis=1)
+
+        final_df = pd.concat([principal_df, pd.Series(target, name="label")], axis=1)
+
+        # Create the plot
+        fig, ax = plt.subplots(figsize=(8, 6))
+        targets = np.unique(target)
+        labels = [self.label_mapping[t] for t in targets]
+        colors = ["r", "g", "b", "c", "m", "y", "k", "orange", "purple", "brown"]  # Extend as needed
+
+        for i, target_label in enumerate(targets):
+            indices_to_keep = final_df["label"] == target_label
+            ax.scatter(
+                final_df.loc[indices_to_keep, "principal component 1"],
+                final_df.loc[indices_to_keep, "principal component 2"],
+                color=colors[i % len(colors)],  # Use modulo to cycle through colors
+                label=labels[i],
+                alpha=0.7,
+                s=50,
+            )
+
+        ax.set_xlabel("PC1", fontsize=15)
+        ax.set_ylabel("PC2", fontsize=15)
+        ax.set_title("PCA of SHAP Values", fontsize=20)
+        ax.legend(loc="best")
+        # ax.grid()
+        plt.show()
