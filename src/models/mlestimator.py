@@ -11,7 +11,7 @@ import json
 
 from src.data.dataloader import DataLoader
 from src.features.features_selection import preprocess
-from src.data.class_balance import _class_balance
+from src.data.process import _class_balance
 from src.constants.parameters_grid import optuna_grid
 from src.constants.translators import AVAILABLE_CLFS
 from src.utils.validation.validation import ConfigValidator
@@ -52,7 +52,6 @@ class MachineLearningEstimator(DataLoader):
         self.name = estimator.__class__.__name__ if estimator else None
         self.param_grid = param_grid
         self.best_params = None
-        self.best_score = None
         self.best_estimator = None
         self.scoring = None
         self.model_selection_way = None
@@ -274,4 +273,5 @@ class MachineLearningEstimator(DataLoader):
         _log_once(self.logger, 'complete',
                  "✓ Model selection and evaluation complete")
 
-        return self.best_estimator, scores_df, self.shap_values if calculate_shap else None
+        # return self.best_estimator, scores_df, self.shap_values if calculate_shap else None
+        return 'Done'

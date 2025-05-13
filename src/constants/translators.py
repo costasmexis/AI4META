@@ -37,26 +37,34 @@ METRIC_ADDREVIATIONS = {
         'matthews_corrcoef': 'MCC'
     }
 
-DEFAULT_CONFIG = {
-        "rounds": 10,
-        "n_trials": 100,
-        "feature_selection_type": "mrmr",
-        "feature_selection_method": "chi2",
-        "inner_scoring": "matthews_corrcoef",
-        "outer_scoring": "matthews_corrcoef",
-        "inner_splits": 5,
-        "outer_splits": 5,
-        "normalization": "minmax",
-        "class_balance": 'None',    
-        "sfm": False,
-        "missing_values": "median",
-        "features_name": None,
-        "scoring": "matthews_corrcoef",
-        "splits": 5,
-        "features_names_list": None,
-        "direction": "maximize",
-        "inner_selection": None,
-        "estimator_name": None,
-        "class_balance": None,
-        "evaluation": None
-    }
+DEFAULT_CONFIG_MS = {
+    "rounds": 10,
+    "n_trials": 100,
+    "feature_selection_type": "mrmr",
+    "feature_selection_method": "chi2",
+    "inner_scoring": "matthews_corrcoef",
+    "scoring": "roc_auc",
+    "inner_splits": 5,
+    "splits": 5,
+    "normalization": "minmax",
+    "class_balance": None,    
+    "sfm": False,
+    "missing_values": "median"
+}
+
+DEFAULT_CONFIG_ME = {
+    "rounds": 20,
+    "n_trials": 100,
+    "feature_selection_type": "mrmr",
+    "feature_selection_method": "chi2",
+    "scoring": "roc_auc",
+    "splits": 5,
+    "normalization": "minmax",
+    "class_balance": None,    
+    "sfm": False,
+    "missing_values": "median",
+    "estimator_name": None,
+    "features_names_list": None,
+    "direction": "maximize",
+    "evaluation": None
+}

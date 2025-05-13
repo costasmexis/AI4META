@@ -131,7 +131,7 @@ class MLExplainer(MachineLearningEstimator):
             except IndexError:
                 print(f"The SHAP values do not exist for the label {label}. Showing summary plot for all labels.")
                 shap.summary_plot(
-                    shap_values=self.shap_values,
+                    shap_values=self.shap_values.values,
                     features=self.X,
                     feature_names=self.X.columns,
                     max_display=max_display,

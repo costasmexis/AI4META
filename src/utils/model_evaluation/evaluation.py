@@ -13,7 +13,7 @@ import copy
 import logging
 from src.utils.metrics.metrics import _calculate_metrics
 from src.utils.metrics.shap import _calc_shap
-from src.data.class_balance import _class_balance
+from src.data.process import _class_balance
 
 # Global logging configuration
 logging.basicConfig(level=logging.INFO, format='%(message)s')

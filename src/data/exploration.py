@@ -7,48 +7,50 @@ import os
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import squareform
 from scipy.stats import pearsonr
+from sklearn.preprocessing import MinMaxScaler
+from src.data.process import DataProcessor
 
-from src.data.dataloader import DataLoader
 
-
-class DataExplorer(DataLoader):
-    def __init__(self, label, csv_dir, index_col=None, normalization_method="minmax", way_of_selection="mrmr"):
-
-        super().__init__(label, csv_dir, index_col=index_col)
-        self.normalization_method = normalization_method
-        self.x_normalized_df = self.normalize(self.X, method=self.normalization_method)
-        self.way_of_selection = way_of_selection
-
-    def plot_preprocess(self,X=None,y=None,
-                        features_names=None, 
-                        num_features=None
-                        ) -> pd.DataFrame:
+class DataExplorer(DataProcessor):
+    def __init__(self, label, csv_dir, index_col=None, 
+                 normalization='minmax',
+                 fs_method='mrmr',
+                 inner_fs_method='chi2',
+                 mv_method='median',
+                 class_balance=None):
+        
+        # Call the parent constructor with all the processing parameters
+        super().__init__(
+            label=label, 
+            csv_dir=csv_dir, 
+            index_col=index_col,
+            normalization=normalization,
+            fs_method=fs_method,
+            inner_fs_method=inner_fs_method,
+            mv_method=mv_method,
+            class_balance=class_balance,
+            preprocess_mode='general'
+        )
+        
+    def plot_preprocess(self, features_names=None, num_features=None) -> pd.DataFrame:
         """
-        This function performs preprocessing on the input data, including normalization and feature selection.
+        Preprocess data for plotting using the functionality from DataProcessor.
         """
-        if X is None and y is None:
-            data = self.x_normalized_df
-            labels = self.y
-        else:
-            data = self.normalize(X, method=self.normalization_method)
-            labels = y
-
-        if features_names is not None:
-                data = data[features_names]
-
-        if num_features is not None:
-            selected = self.feature_selection(
-                data, labels, method=self.way_of_selection, num_features=num_features
-            )
-            data = data[selected]
-            
-        data["labels"] = labels
+        # Use the process_general method from DataProcessor
+        X_processed, y_processed, _ = self.process_general(
+            X=self.X,
+            y=self.y,
+            num_features=num_features,
+            features_names_list=features_names
+        )
+        
+        # Create the data frame for visualization
+        data = X_processed.copy()
+        data["labels"] = y_processed
         return data
 
     def hierarchical_correlation_plot(
         self,
-        data: pd.DataFrame = None,
-        labels: pd.Series = None,
         features_names: list = None,
         num_features: int = None,
         method: str = 'complete',
@@ -81,8 +83,6 @@ class DataExplorer(DataLoader):
         
         # Preprocess data
         data_scaled = self.plot_preprocess(
-            X=data,
-            y=labels,
             features_names=features_names,
             num_features=num_features
         )
@@ -210,11 +210,8 @@ class DataExplorer(DataLoader):
         print(f"Hierarchical correlation plot saved to: {save_path}")
         plt.show()
                     
-
     def box_illustration(
         self,
-        data=None,
-        labels=None,
         features_names=None,
         num_features=None,
         dataset_name="dataset"  
@@ -234,10 +231,8 @@ class DataExplorer(DataLoader):
         save_dir = os.path.join("results", "images", "boxplot")
         os.makedirs(save_dir, exist_ok=True)
         
-        if self.normalization_method == "minmax":
+        if self.normalization == "minmax":
             data = self.plot_preprocess(
-                X=data,
-                y=labels,
                 features_names=features_names,
                 num_features=num_features
             )
@@ -271,12 +266,10 @@ class DataExplorer(DataLoader):
             
             print(f"Boxplot saved to: {save_path}")
         else:
-            raise ValueError(f"Unsupported normalization method: {self.normalization_method}. Only 'minmax' is supported for boxplot.")
+            raise ValueError(f"Unsupported normalization method: {self.normalization}. Only 'minmax' is supported for boxplot.")
    
     def pairplots_function(
             self,
-            data=None,
-            labels=None,
             features_names=None,
             num_features=None
         ) -> None:
@@ -296,8 +289,6 @@ class DataExplorer(DataLoader):
             """
             
             data = self.plot_preprocess(
-                X=data,
-                y=labels,
                 features_names=features_names,
                 num_features=num_features
             )
@@ -307,8 +298,6 @@ class DataExplorer(DataLoader):
 
     def statistical_difference(
             self,
-            data=None,
-            labels=None,
             features_names=None,
             num_features=None,
             stat_test="mannwhitneyu",
@@ -345,10 +334,10 @@ class DataExplorer(DataLoader):
                 raise ValueError("Unsupported statistical test. Only 'mannwhitneyu' and 'kstest' are supported.")
             if p_value <= 0 or p_value >= 1:
                 raise ValueError("p_value must be between 0 and 1.")
-            if self.normalization_method == "minmax":
-                data = self.plot_preprocess(X=data, y=labels, features_names=features_names, num_features=num_features)
+            if self.normalization == 'minmax':
+                data = self.plot_preprocess(features_names=features_names, num_features=num_features)
             else:
-                raise ValueError(f"Unsupported normalization method: {self.normalization_method}. Only 'minmax' is supported for statistical tests.")
+                raise ValueError(f"Unsupported normalization method: {self.normalization}. Only 'minmax' is supported for statistical tests.")
 
             p_values = {}
             groups = data["labels"].unique()
