@@ -13,7 +13,9 @@ import copy
 import logging
 from src.utils.metrics.metrics import _calculate_metrics
 from src.utils.metrics.shap import _calc_shap
-from src.data.process import _class_balance
+from src.utils.validation.dataclasses import ModelEvaluationConfig as Config
+from src.data.process import DataProcessor
+
 
 # Global logging configuration
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -24,7 +26,9 @@ def _evaluate(
     y: np.ndarray,
     best_model: Any,
     best_params: Dict,
-    config: Dict
+    config: Config,
+    processor: DataProcessor
+
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """
     Evaluate a machine learning model using various validation methods.
@@ -57,16 +61,16 @@ def _evaluate(
     """
     x_shap = np.zeros((X.shape[0], X.shape[1]))
 
-    if config['evaluation'] == "cv_rounds":
+    if config.evaluation == "cv_rounds":
         extra_metrics_scores, x_shap = _cv_rounds_validation(X, y, best_model, config, x_shap)
-    elif config['evaluation'] == "bootstrap":
-        extra_metrics_scores = _bootstrap_validation(X, y, best_model, config['extra_metrics'])
-    elif config['evaluation'] == "oob":
-        extra_metrics_scores = _oob_validation(X, y, best_model, config['extra_metrics'])
-    elif config['evaluation'] == "train_test":
-        extra_metrics_scores = _train_test_validation(X, y, best_model, config['class_balance'], config['extra_metrics'])
+    elif config.evaluation == "bootstrap":
+        extra_metrics_scores = _bootstrap_validation(X, y, best_model, config.extra_metrics)
+    elif config.evaluation == "oob":
+        extra_metrics_scores = _oob_validation(X, y, best_model, config.extra_metrics)
+    elif config.evaluation == "train_test":
+        extra_metrics_scores = _train_test_validation(X, y, best_model, processor, config.extra_metrics)
     else:
-        raise ValueError(f"Invalid evaluation method: {config['evaluation']}")
+        raise ValueError(f"Invalid evaluation method: {config.evaluation}")
 
     logger.info("✓ Evaluation completed")
     return pd.DataFrame(extra_metrics_scores), x_shap
@@ -75,7 +79,7 @@ def _cv_rounds_validation(
     X: pd.DataFrame,
     y: np.ndarray,
     model: Any,
-    config: Dict,
+    config: Config,
     x_shap: np.ndarray
 ) -> Tuple[Dict, np.ndarray]:
     """
@@ -85,12 +89,12 @@ def _cv_rounds_validation(
     to get robust performance estimates.
     """    
     # Initialize metrics dictionary
-    extra_metrics_scores = {extra: [] for extra in config['extra_metrics']}
+    extra_metrics_scores = {extra: [] for extra in config.extra_metrics}
     
     # Perform CV rounds
-    for i in range(config['rounds']):
+    for i in range(config.rounds):
         cv_splits = StratifiedKFold(
-            n_splits=config['splits'],
+            n_splits=config.splits,
             shuffle=True,
             random_state=i+10
         )
@@ -103,7 +107,7 @@ def _cv_rounds_validation(
             # Fit and evaluate model
             model.fit(X_train, y_train)
             extra_metrics_scores = _calculate_metrics(
-                config['extra_metrics'],
+                config.extra_metrics,
                 extra_metrics_scores,
                 model,
                 X_test,
@@ -111,15 +115,15 @@ def _cv_rounds_validation(
             )
 
             # Calculate SHAP values if requested
-            if config['calculate_shap']:
+            if config.calculate_shap:
                 shap_values = _calc_shap(X_train, X_test, model)
                 x_shap[test_index, :] += shap_values
 
     # Average SHAP values across rounds
-    if config['calculate_shap']:
-        x_shap /= config['rounds']
+    if config.calculate_shap:
+        x_shap /= config.rounds
 
-    logger.info(f"✓ Completed {config['rounds']} CV rounds")
+    logger.info(f"✓ Completed {config.rounds} CV rounds")
     return extra_metrics_scores, x_shap
 
 def _bootstrap_validation(
@@ -201,7 +205,7 @@ def _train_test_validation(
     X: pd.DataFrame,
     y: np.ndarray,
     model: Any,
-    class_balance_method: Optional[str],
+    processor: DataProcessor,
     extra_metrics: Optional[list] = None,
     n_splits: int = 100,
     test_size: float = 0.3
@@ -219,10 +223,9 @@ def _train_test_validation(
         tqdm(sss.split(X, y), desc="Train-test validation", total=n_splits)
     ):
         # Apply class balancing if specified
-        X_train, y_train = _class_balance(
+        X_train, y_train = processor.class_balance_fnc(
             X.iloc[train_index],
             y[train_index],
-            class_balance_method,
             i=i
         )
         X_test, y_test = X.iloc[test_index], y[test_index]

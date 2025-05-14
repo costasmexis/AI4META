@@ -62,7 +62,7 @@ CREATE_TABLE_SQL = [
         class_balance TEXT,
         evaluation_mthd TEXT,
         param_grid TEXT,
-        features_names_list TEXT
+        features_name_list TEXT
     );
     """,
     """

@@ -137,7 +137,7 @@ class DatabaseManager:
             INSERT INTO Job_Parameters (
                 rounds, feature_selection_type, feature_selection_method, 
                 outer_scoring, outer_splits, normalization, 
-                missing_values_method, class_balance, evaluation_mthd, param_grid, features_names_list
+                missing_values_method, class_balance, evaluation_mthd, param_grid, features_name_list
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
@@ -145,7 +145,7 @@ class DatabaseManager:
             config.get("rounds"), config.get("feature_selection_type"), config.get("feature_selection_method"),
             config.get("scoring"), config.get("splits"), config.get("normalization"),
             config.get("missing_values_method"), config.get("class_balance"), config.get("evaluation"),
-            config.get("param_grid"),config.get('features_names_list')
+            config.get("param_grid"),config.get('features_name_list')
         )
 
         # Execute the insert query

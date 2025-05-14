@@ -52,21 +52,22 @@ DEFAULT_CONFIG_MS = {
     "missing_values": "median"
 }
 
-DEFAULT_CONFIG_ME = {
+DEFAULT_CONFIG_EVAL = {
     "rounds": 20,
     "n_trials": 100,
     "feature_selection_type": "mrmr",
     "feature_selection_method": "chi2",
-    "scoring": "roc_auc",
+    "scoring": "matthews_corrcoef",
     "splits": 5,
     "normalization": "minmax",
-    "class_balance": None,    
+    "class_balance": None,
     "sfm": False,
     "missing_values": "median",
     "estimator_name": None,
-    "features_names_list": None,
+    "features_name_list": None,
     "direction": "maximize",
-    "evaluation": None
+    "evaluation": None,
+    "model_evaluation_type": "bayesian",
 }
 
 SFM_COMPATIBLE_ESTIMATORS = [

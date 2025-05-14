@@ -13,7 +13,6 @@ from src.utils.statistics.metrics_stats import _calc_metrics_stats
 from src.utils.model_selection.output_config import _return_csv
 from src.utils.plots.plots import _histogram, _plot_per_clf
 
-
 class MLSelector(DataProcessor):
     """
     MLSelector class for machine learning model selection and evaluation.
@@ -29,7 +28,7 @@ class MLSelector(DataProcessor):
         fs_method: Optional[str] = 'mrmr',
         inner_fs_method: Optional[str] = 'chi2',
         mv_method: Optional[str] = 'median',
-        class_balance: Optional[str] = None,
+        class_balance_method: Optional[str] = None,
         preprocess_mode: Optional[str] = 'ms',
         database_name: Optional[str] = None,
         inner_selection: Optional[List[str]] = ["validation_score", "one_sem", "gso_1", "gso_2", "one_sem_grd"],
@@ -37,19 +36,19 @@ class MLSelector(DataProcessor):
             'roc_auc', 'recall', 'matthews_corrcoef', 'accuracy', 'balanced_accuracy',
             'precision', 'f1', 'average_precision', 'specificity'
         ]
-    ):
+    ) -> None:
         """Initialize MLSelector instance."""
         # Initialize parent class
         super().__init__(
-            label, 
-            csv_dir, 
-            index_col, 
-            normalization, 
-            fs_method, 
-            inner_fs_method, 
-            mv_method, 
-            class_balance, 
-            preprocess_mode
+            label=label,
+            csv_dir=csv_dir,
+            index_col=index_col,
+            normalization=normalization,
+            fs_method=fs_method,
+            mv_method=mv_method,
+            inner_fs_method=inner_fs_method,
+            class_balance_method=class_balance_method,
+            preprocess_mode=preprocess_mode 
         )
         
         # Store database name
@@ -73,6 +72,8 @@ class MLSelector(DataProcessor):
         self.logger.info(f"Index Column: {self.index_col}")
         self.logger.info(f"Normalization: {self.normalization}")
         self.logger.info(f"Feature Selection Method: {self.fs_method}")
+        self.logger.info(f"Missing Values Method: {self.mv_method}")
+        self.logger.info(f"Database Name: {self.database_name}")
 
     def modelselection(
         self, 
@@ -198,6 +199,10 @@ class MLSelector(DataProcessor):
                             "Classif_rates": np.array(samples_classification_rates)
                         }
                     )
+                    # # Print the types of the last appended result
+                    # last_result = results[-1]
+                    # for key, value in last_result.items():
+                    #     print(f"{key}: {type(value)}")
                     # Update results with calculated metrics
                     results = _calc_metrics_stats(config.extra_metrics, results, indices)
 

@@ -41,7 +41,7 @@ class DataExplorer(DataProcessor):
             X=self.X,
             y=self.y,
             num_features=num_features,
-            features_names_list=features_names
+            features_name_list=features_names
         )
         
         # Create the data frame for visualization

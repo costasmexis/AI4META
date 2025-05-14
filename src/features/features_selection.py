@@ -19,7 +19,7 @@ def preprocess(
     X_train: pd.DataFrame,
     y_train: Union[pd.Series, np.ndarray],
     X_test: Optional[pd.DataFrame] = None,
-    features_names_list: Optional[List[str]] = None
+    features_name_list: Optional[List[str]] = None
 ) -> Tuple[pd.DataFrame, Optional[pd.DataFrame], Union[List[str], str]]:
     """
     Select features using configured method with support for train/test splits.
@@ -61,12 +61,12 @@ def preprocess(
         raise ValueError("No DataLoader instance available")
     
     # Check for feature list
-    if features_names_list is not None:
-        X_train = X_train[features_names_list]
+    if features_name_list is not None:
+        X_train = X_train[features_name_list]
         if X_test is not None:
-            X_test = X_test[features_names_list]
+            X_test = X_test[features_name_list]
         _log_once(logger, 'feature_list_complete', 
-                 f"✓ Selected {len(features_names_list)} features from list")
+                 f"✓ Selected {len(features_name_list)} features from list")
         
     # Normalize data
     if X_test is not None:

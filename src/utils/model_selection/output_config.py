@@ -1,8 +1,6 @@
 import os
 from typing import Optional, Dict, List, Any
 import pandas as pd
-# from datetime import datetime
-# from src.constants.translators import DEFAULT_CONFIG
 
 def _return_csv(
     final_dataset_name: str,
@@ -69,71 +67,3 @@ def _return_csv(
         print(f"Results saved to: {results_path}")
 
     return statistics_dataframe
-
-# def _file_name(config: Dict[str, Any]) -> str:
-#     """
-#     Generate a unique file name based on configuration and timestamp.
-
-#     Creates a string combining non-default configuration values and current
-#     timestamp for unique identification of result files.
-
-#     Parameters
-#     ----------
-#     config : dict
-#         Configuration dictionary to compare against defaults
-#     """
-#     # Build name components list
-#     name_components = []
-
-#     # Add non-default configurations
-#     for param, value in config.items():
-#         if param in DEFAULT_CONFIG and config[param] != DEFAULT_CONFIG[param]:
-#             name_components.append(f"{param}_{value}")
-
-#     # Add timestamp
-#     timestamp = datetime.now().strftime('%Y%m%d_%H%M')
-#     name_components.append(timestamp)
-
-#     # Join components
-#     return "_".join(name_components)
-
-# def _name_outputs(
-#     config: Dict[str, Any],
-#     results_dir: str,
-#     csv_dir: str
-# ) -> str:
-#     """
-#     Construct complete output file path for results.
-
-#     Parameters
-#     ----------
-#     config : dict
-#         Configuration dictionary
-#     results_dir : str
-#         Directory path for results storage
-#     csv_dir : str
-#         Path to input CSV file
-#     """
-#     try:
-#         # Generate dataset-specific name
-#         dataset_name = _set_result_csv_name(csv_dir)
-#         name_suffix = _file_name(config)
-#         results_name = f"{dataset_name}_{name_suffix}_{config['model_selection_type']}"
-#         return os.path.join(results_dir, results_name)
-#     except Exception as e:
-#         # Fall back to generic naming
-#         print(f"Warning: Using generic name due to error: {e}")
-#         name_suffix = _file_name(config)
-#         results_name = f"results_{name_suffix}_{config['model_selection_type']}"
-#         return os.path.join(results_dir, results_name)
-
-# def _set_result_csv_name(csv_dir: str) -> str:
-#     """
-#     Extract base name from CSV file path.
-
-#     Parameters
-#     ----------
-#     csv_dir : str
-#         Path to CSV file
-#     """
-#     return os.path.basename(csv_dir).split(".")[0]

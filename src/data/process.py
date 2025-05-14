@@ -3,7 +3,6 @@
 Data processing module that inherits from DataLoader and implements
 various data preprocessing procedures.
 """
-
 from typing import Optional, List, Dict, Union, Tuple
 import numpy as np
 import pandas as pd
@@ -409,7 +408,7 @@ class DataProcessor(DataLoader):
         y: np.ndarray = None,
         X_test: pd.DataFrame = None,
         num_features: Optional[int] = None,
-        features_names_list: Optional[List[str]] = None,
+        features_name_list: Optional[List[str]] = None,
         random_state: int = 42,
         sfm: Optional[bool] = False,
         estimator_name: Optional[str] = None
@@ -428,7 +427,7 @@ class DataProcessor(DataLoader):
             Test features (used only in 'ms' mode).
         num_features : int, optional
             Number of features to select. If None, no feature selection is applied.
-        features_names_list : List[str], optional
+        features_name_list : List[str], optional
             List of feature names to use. If provided, feature selection is skipped.
         random_state : int, optional
             Random state for reproducibility.
@@ -461,7 +460,7 @@ class DataProcessor(DataLoader):
                 X=X, 
                 y=y, 
                 num_features=num_features, 
-                features_names_list=features_names_list,
+                features_name_list=features_name_list,
                 random_state=random_state
             )
         else:
@@ -482,9 +481,9 @@ class DataProcessor(DataLoader):
         self,
         estimator_name: str,
         X_train: pd.DataFrame,
-        X_test: pd.DataFrame,
         y_train: np.ndarray,
-        num_features: Optional[int]
+        num_features: Optional[int],
+        X_test: Optional[pd.DataFrame] = None,
         ) -> Tuple[pd.DataFrame, pd.DataFrame, int]:
         """
         Perform feature selection using SelectFromModel.
@@ -512,7 +511,6 @@ class DataProcessor(DataLoader):
             Number of features selected.
         """
         # Get the estimator
-        print(f"Using {estimator_name} for feature selection")
         estimator = AVAILABLE_CLFS[estimator_name]
 
         # Create SelectFromModel
@@ -527,21 +525,22 @@ class DataProcessor(DataLoader):
 
         # Select features
         X_train_selected = X_train[selected_columns]
-        X_test_selected = X_test[selected_columns]
+        if X_test is not None:
+            X_test_selected = X_test[selected_columns]
+        else:
+            X_test_selected = None
 
-        # Update number of features if using threshold
-        if  num_features is None:
-            num_features = len(selected_columns)
-
-        return X_train_selected, X_test_selected,  num_features
+        return X_train_selected, X_test_selected, len(selected_columns)
 
     def process_general(
         self,
         X: pd.DataFrame,
         y: np.ndarray,
         num_features: Optional[int] = None,
-        features_names_list: Optional[List[str]] = None,
-        random_state: int = 42
+        features_name_list: Optional[List[str]] = None,
+        random_state: int = 42,
+        sfm: Optional[bool] = False,
+        estimator_name: Optional[str] = None
     ) -> Tuple[pd.DataFrame, np.ndarray, Optional[str]]:
         """
         Process data in general mode (single dataset).
@@ -554,7 +553,7 @@ class DataProcessor(DataLoader):
             Target labels.
         num_features : int, optional
             Number of features to select.
-        features_names_list : List[str], optional
+        features_name_list : List[str], optional
             List of feature names to use instead of feature selection.
         random_state : int, optional
             Random state for reproducibility.
@@ -565,10 +564,10 @@ class DataProcessor(DataLoader):
             Processed features, processed labels, and feature selection indicator.
         """
         # Feature pre-selection by list if provided
-        if features_names_list is not None:
-            X_selected = X[features_names_list]
+        if features_name_list is not None:
+            X_selected = X[features_name_list]
             self._log_once('feature_selection', 'list', 
-                         f"✓ Selected {len(features_names_list)} features from provided list")
+                         f"✓ Selected {len(features_name_list)} features from provided list")
         else: 
             X_selected = X
 
@@ -579,13 +578,24 @@ class DataProcessor(DataLoader):
         X_cleaned = self.missing_values(X_normalized)
         
         # Feature selection
-        if features_names_list is not None:
-            feature_indicator = len(features_names_list)
+        if features_name_list is not None:
+            feature_indicator = len(features_name_list)
         elif (num_features == X.shape[1]) or \
               ((self.fs_method == 'percentile') and (num_features == 100)):
             self._log_once('feature_selection', 'none', 
                          "✓ No feature selection needed - using all features")
             feature_indicator = 'none'
+        elif sfm and (num_features != X_cleaned.shape[1]) and (estimator_name in SFM_COMPATIBLE_ESTIMATORS):
+            # Use SelectFromModel for feature selection
+            X_cleaned, _, feature_indicator = self.sfm_fs(
+                estimator_name=estimator_name,
+                X_train=X_cleaned,
+                X_test=None,
+                y_train=y,
+                num_features=num_features
+            )
+            self._log_once('feature_selection', 'sfm', 
+                         f"✓ Selected {num_features} features using SFM with {estimator_name}")
         else:
             selected_features = self.feature_selection(
                 X=X_cleaned,

@@ -66,7 +66,7 @@ def _fit(
 
             # Normalize the data
             X_train_norm, y_train_norm, X_test_norm, feature_indicator = processor.process_data(
-                X_train, y_train, X_test, num_feature2_use, features_names_list=None, random_state=i
+                X_train, y_train, X_test, num_feature2_use, features_name_list=None, random_state=i
             )
 
             for estimator_name in config.clfs:
@@ -75,7 +75,7 @@ def _fit(
                 # Handle SelectFromModel (SFM) for supported classifiers
                 if config.sfm and estimator_name in SFM_COMPATIBLE_ESTIMATORS and feature_indicator!= "none":
                     X_train_norm_sfm, y_train_sfm, X_test_norm_sfm, _ = processor.process_data(
-                        X_train, y_train, X_test, num_feature2_use, features_names_list=None, random_state=i, sfm=config.sfm, estimator_name=estimator_name
+                        X_train, y_train, X_test, num_feature2_use, features_name_list=None, random_state=i, sfm=config.sfm, estimator_name=estimator_name
                     )
 
                     Xtrft, Xteft, ytr = X_train_norm_sfm, X_test_norm_sfm, y_train_sfm
