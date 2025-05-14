@@ -68,3 +68,11 @@ DEFAULT_CONFIG_ME = {
     "direction": "maximize",
     "evaluation": None
 }
+
+SFM_COMPATIBLE_ESTIMATORS = [
+    "RandomForestClassifier",
+    "GradientBoostingClassifier",
+    "XGBClassifier",
+    "LGBMClassifier",
+    "CatBoostClassifier"
+]

@@ -4,13 +4,14 @@ from optuna.logging import set_verbosity
 import copy
 import numpy as np
 import pandas as pd
+from typing import Union
 
 from src.utils.metrics.metrics import _calculate_metrics
 from src.utils.model_manipulation.inner_selection import _one_sem_model, _gso_model
 from src.utils.model_manipulation.model_instances import _create_model_instance
-from src.features.sfm import _sfm, _sfm_condition
+from src.features.sfm import _sfm
 from src.constants.parameters_grid import optuna_grid
-from src.constants.translators import AVAILABLE_CLFS
+from src.constants.translators import AVAILABLE_CLFS, SFM_COMPATIBLE_ESTIMATORS
 from src.data.process import DataProcessor
 from src.utils.validation.dataclasses import ModelSelectionConfig as Config
 
@@ -63,15 +64,7 @@ def _fit(
             y_train, y_test = y[train_index], y[test_index]
             all_features = num_feature2_use!=X.shape[1]
 
-            # # Preprocess data (feature selection, normalization, etc.)
-            # if (config['sfm']) and (all_features):
-            #     # If SFM is used, we need to select features first
-            #     X_train_norm, X_test_norm, num_feature = preprocess.(
-            #         config, None, X_train, y_train, X_test
-            #     )
-            #     # Apply class balancing
-            #     X_train_norm, y_train = _class_balance(X_train_norm, y_train, config["class_balance"], i)
-
+            # Normalize the data
             X_train_norm, y_train_norm, X_test_norm, feature_indicator = processor.process_data(
                 X_train, y_train, X_test, num_feature2_use, features_names_list=None, random_state=i
             )
@@ -79,19 +72,21 @@ def _fit(
             for estimator_name in config.clfs:
                 estimator = AVAILABLE_CLFS[estimator_name]
 
-                # # Handle SelectFromModel (SFM) for supported classifiers
-                # if _sfm_condition(config['sfm'], estimator_name, all_features):
-                #     # If SFM is used, we need to select features first
-                #     X_train_selected_sfm, X_test_selected_sfm, num_feature = _sfm(
-                #         estimator, X_train_norm, X_test_norm, y_train, num_feature2_use
-                #     )
-                Xtrft, Xteft = X_train_norm, X_test_norm
+                # Handle SelectFromModel (SFM) for supported classifiers
+                if config.sfm and estimator_name in SFM_COMPATIBLE_ESTIMATORS and feature_indicator!= "none":
+                    X_train_norm_sfm, y_train_sfm, X_test_norm_sfm, _ = processor.process_data(
+                        X_train, y_train, X_test, num_feature2_use, features_names_list=None, random_state=i, sfm=config.sfm, estimator_name=estimator_name
+                    )
+
+                    Xtrft, Xteft, ytr = X_train_norm_sfm, X_test_norm_sfm, y_train_sfm
+                else: 
+                    Xtrft, Xteft, ytr = X_train_norm, X_test_norm, y_train_norm
                 
                 if method == 'rcv_accel':
                     _fit_cvdefault(
                         Xtrft,
                         Xteft,
-                        y_train,
+                        ytr,
                         y_test,
                         config,
                         results,
@@ -106,7 +101,7 @@ def _fit(
                     _fit_nested(
                         Xtrft,
                         Xteft,
-                        y_train,
+                        ytr,
                         y_test,
                         config,
                         results,
@@ -120,55 +115,59 @@ def _fit(
                         y.shape[0]
                     )
                     
-        return results
+    return results
 
-def _store_results(results, num_feature, estimator_name, sfm, feature_selection_type, X_train_selected):
+def _store_results(
+        results: dict, 
+        num_feature: Union[int, str],
+        estimator_name: str, 
+        sfm: bool, 
+        feature_selection_type: str, 
+        X_train_selected: pd.DataFrame, 
+        method: str
+    ):
     """
-    Helper function to store results for each model and feature selection.
+    Stores the results of a model selection process into a dictionary.
 
-    Parameters:
-    -----------
-    results : dict
-        Dictionary to store the results.
-    num_feature : int or str
-        Number of features selected.
-    estimator_name : str
-        Name of the estimator used.
-    config : dict
-        Configuration dictionary.
-    X_train_selected : pandas.DataFrame
-        The training dataset after feature selection.
+    Args:
+        results (dict): A dictionary to store the results. Keys include:
+            - "Selected_Features": List of selected feature names or None.
+            - "Number_of_Features": Number of selected features.
+            - "Way_of_Selection": Method used for feature selection.
+            - "Classifiers": Name of the classifier with feature selection details.
+            - "MS_Method": Method used for model selection.
+        num_feature (str or int): Number of features selected. Use "none" if no feature selection is applied.
+        estimator_name (str): Name of the classifier or estimator.
+        sfm (bool): Indicates if SelectFromModel (sfm) was used for feature selection.
+        feature_selection_type (str): Type of feature selection method used (e.g., "PCA", "RFE").
+        X_train_selected (pd.DataFrame): The training data after feature selection.
+        method (str): The method used for model selection.
+
+    Returns:
+        None: The function modifies the `results` dictionary in place.
     """
-    if num_feature == "none" or num_feature is None:
-        results["Selected_Features"].append(None)
-        results["Number_of_Features"].append(X_train_selected.shape[1])
-        results["Way_of_Selection"].append("none")
-        results["Classifiers"].append(estimator_name)
-    else:
-        fs_type = "sfm" if sfm else feature_selection_type
-        results["Classifiers"].append(f"{estimator_name}_{fs_type}_{num_feature}")
-        results["Selected_Features"].append(X_train_selected.columns.tolist())
-        results["Number_of_Features"].append(num_feature)
-        results["Way_of_Selection"].append(fs_type)
+    results["Selected_Features"].append(None if num_feature == "none" else X_train_selected.columns.tolist())
+    results["Number_of_Features"].append(X_train_selected.shape[1] if num_feature == "none" else num_feature)
+    results["Way_of_Selection"].append("none" if num_feature == "none" else ("sfm" if sfm and estimator_name in SFM_COMPATIBLE_ESTIMATORS else feature_selection_type))
+    results["Classifiers"].append(estimator_name if num_feature == "none" else f"{estimator_name}_{'sfm' if sfm and estimator_name in SFM_COMPATIBLE_ESTIMATORS else feature_selection_type}_{num_feature}")
+    results["MS_Method"].append(method)
 
-    # # Debugging: Log the current results state
-    # print(f"Updated results for {estimator_name}: {results}")
 
 def _fit_nested(
-        X_train: pd.DataFrame,
-        X_test: pd.DataFrame,
-        y_train: np.ndarray,
-        y_test: np.ndarray,
-        config: Config,
-        results: dict,
-        i: int,
-        n_jobs: int,
-        estimator_name: str,
-        estimator: object,
-        all_features: bool,
-        num_feature: int,
-        test_index: np.ndarray,
-        n_samples: int
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    config: Config,
+    results: dict,
+    i: int,
+    n_jobs: int,
+    estimator_name: str,
+    estimator: object,
+    all_features: bool,
+    num_feature: Union[int, str],
+    test_index: np.ndarray,
+    n_samples: int
 ):
     # Logging setup
     set_verbosity(logging.ERROR)
@@ -181,11 +180,11 @@ def _fit_nested(
         estimator=estimator,
         scoring=config.inner_scoring,
         param_distributions=optuna_grid[opt_grid][estimator_name],
-        cv=config.inner_cv,
+        cv=config.inner_splits,
         return_train_score=True,
         n_jobs=n_jobs,
         verbose=0,
-        n_trials=config.n_trials,
+        n_trials=config.n_trials
     )
     
     clf.fit(X_train, y_train)
@@ -213,7 +212,7 @@ def _fit_nested(
         results = _calculate_metrics(config.extra_metrics, results, res_model, X_test, y_test)
         # Store feature selection and results
         _store_results(
-            results, num_feature, estimator_name, config, X_train
+            results, num_feature, estimator_name, config.sfm, config.feature_selection_type, X_train, 'NestedCV'
         )
         # Track predictions for Samples_counts
         y_pred = res_model.predict(X_test)
@@ -231,42 +230,42 @@ def _fit_nested(
             raise ValueError("Inconsistent lengths in results dictionary")
           
 def _fit_cvdefault(
-        X_train: pd.DataFrame,
-        X_test: pd.DataFrame,
-        y_train: np.ndarray,
-        y_test: np.ndarray,
-        config: Config,
-        results: dict,
-        estimator_name: str,
-        estimator: object,
-        all_features: bool,
-        num_feature: int,
-        test_index: np.ndarray,
-        n_samples: int
-    ):
-        # Train the model without hyperparameter optimization
-        res_model = _create_model_instance(estimator_name, params=None)
-        results["Estimator"].append(estimator_name)
-        res_model.fit(X_train, y_train)
-        results = _calculate_metrics(config.extra_metrics, results, res_model, X_test, y_test)
-        _store_results(
-            results, num_feature, estimator_name, config.sfm, config.feature_selection_type, X_train
-        )
-        # Track predictions for Samples_counts
-        y_pred = res_model.predict(X_test)
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    config: Config,
+    results: dict,
+    estimator_name: str,
+    estimator: object,
+    all_features: bool,
+    num_feature: Union[int, str],
+    test_index: np.ndarray,
+    n_samples: int
+):
+    # Train the model without hyperparameter optimization
+    res_model = _create_model_instance(estimator_name, params=None)
+    results["Estimator"].append(estimator_name)
+    res_model.fit(X_train, y_train)
+    results = _calculate_metrics(config.extra_metrics, results, res_model, X_test, y_test)
+    _store_results(
+        results, num_feature, estimator_name, config.sfm, config.feature_selection_type, X_train, 'DefaultCV'
+    )
+    # Track predictions for Samples_counts
+    y_pred = res_model.predict(X_test)
 
-        results["Hyperparameters"].append('Default')
-        results['Inner_selection_mthd'].append('validation_score')
+    results["Hyperparameters"].append('Default')
+    results['Inner_selection_mthd'].append('validation_score')
 
-        # Track predictions for Samples_counts
-        samples_counts = np.zeros(n_samples)
-        for idx, resu, pred in zip(test_index, y_test, y_pred):
-            if pred == resu:
-                samples_counts[idx] += 1
-        results["Samples_counts"].append(samples_counts.tolist())
+    # Track predictions for Samples_counts
+    samples_counts = np.zeros(n_samples)
+    for idx, resu, pred in zip(test_index, y_test, y_pred):
+        if pred == resu:
+            samples_counts[idx] += 1
+    results["Samples_counts"].append(samples_counts.tolist())
 
-        # Debugging: Check consistency of results
-        lengths = {key: len(val) for key, val in results.items()}
-        if len(set(lengths.values())) > 1:
-            print("Inconsistent lengths in results:", lengths)
-            raise ValueError("Inconsistent lengths in results dictionary")
+    # Debugging: Check consistency of results
+    lengths = {key: len(val) for key, val in results.items()}
+    if len(set(lengths.values())) > 1:
+        print("Inconsistent lengths in results:", lengths)
+        raise ValueError("Inconsistent lengths in results dictionary")

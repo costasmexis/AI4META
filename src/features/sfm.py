@@ -55,12 +55,8 @@ def _sfm(
     )
     logger = logging.getLogger(__name__)
 
-    # Fit the estimator
-    # estimator.fit(X_train, y_train)
-    # if  num_features is None:
-    #     sfm = SelectFromModel(estimator, threshold=threshold)
-    # else:
-    sfm = SelectFromModel(estimator, max_features= num_features, threshold=-np.inf)
+    
+    sfm = SelectFromModel(estimator, max_features=num_features, threshold=-np.inf)
 
     # Fit SelectFromModel
     sfm.fit(X_train, y_train)
@@ -82,27 +78,3 @@ def _sfm(
              f"✓ Selected {num_features} features using SelectFromModel")
 
     return X_train_selected, X_test_selected,  num_features
-
-def _sfm_condition(requested: bool, estimator_name: str, not_all_ft: bool) -> bool:
-    """
-    Check if SFM is applicable for the given estimator.
-
-    Parameters
-    ----------
-    requested : bool
-        Whether SFM is requested.
-    estimator_name : str
-        Name of the estimator.
-
-    Returns
-    -------
-    bool
-        True if SFM is applicable, False otherwise.
-    """
-    return requested and estimator_name in [
-        "RandomForestClassifier",
-        "GradientBoostingClassifier",
-        "XGBClassifier",
-        "LGBMClassifier",
-        "CatBoostClassifier"
-    ] and not_all_ft

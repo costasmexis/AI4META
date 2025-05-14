@@ -11,7 +11,7 @@ def _plot_per_clf(
     scores_dataframe: pd.DataFrame,
     plot: str,
     scorer: str,
-    final_dataset_name: str
+    save_path: str
 ) -> None:
     """
     Create visualization of classifier performance scores.
@@ -113,8 +113,8 @@ def _plot_per_clf(
     )
 
     # Save plot
-    image_path = f"{final_dataset_name}_model_selection_plot.png"
-    fig.write_image(image_path)
+    fig.write_image(save_path)
+    print("Plot saved as:", save_path)
 
 def _plot_per_metric(
     scores_df: pd.DataFrame,
@@ -162,10 +162,9 @@ def _plot_per_metric(
 
 def _histogram(
     scores_dataframe: pd.DataFrame,
-    final_dataset_name: str,
+    save_path: str,
     freq_feat: Optional[int],
-    num_clf: int,
-    num_inner_sel: int,
+    denomination: int,
     max_features: int
 ) -> None:
     """
@@ -179,8 +178,8 @@ def _histogram(
         Base name for saving the plot
     freq_feat : int, optional
         Number of top features to display
-    clfs : list[str]
-        List of classifiers used
+    denomination : int
+        Number of classifiers used
     max_features : int
         Maximum number of features available
 
@@ -203,7 +202,6 @@ def _histogram(
                 [list(index_obj) for index_obj in row["Sel_feat"]]
             ))
             feature_counts.update(features)
-            print(f"Selected {len(features)} features for {row['Clf']}")
 
     # Check if any features were selected
     if not feature_counts:
@@ -212,12 +210,9 @@ def _histogram(
 
     # Process feature counts
     top_features = feature_counts.most_common(freq_feat)
-    print(f"Top features selected: {top_features}")
     features, counts = zip(*top_features)
 
-    normalized_counts = [count / (num_clf*num_inner_sel) for count in counts]
-    print(normalized_counts)
-    print(f"Selected {freq_feat} features")
+    normalized_counts = [count / (denomination) for count in counts]
 
     # Create plot
     fig = go.Figure()
@@ -242,5 +237,5 @@ def _histogram(
     )
 
     # Save plot
-    save_path = f"{final_dataset_name}_histogram.png"
     fig.write_image(save_path)
+    print(f"Histogram saved to {save_path}")

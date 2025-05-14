@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 import logging
 
+from sklearn.feature_selection import SelectFromModel
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.feature_selection import (
     SelectKBest,
@@ -20,6 +21,8 @@ from sklearn.feature_selection import (
 from mrmr import mrmr_classif
 from imblearn.over_sampling import SMOTE, BorderlineSMOTE
 from imblearn.under_sampling import TomekLinks
+
+from src.constants.translators import SFM_COMPATIBLE_ESTIMATORS, AVAILABLE_CLFS
 
 # Import the DataLoader class
 from src.data.dataloader import DataLoader
@@ -407,7 +410,9 @@ class DataProcessor(DataLoader):
         X_test: pd.DataFrame = None,
         num_features: Optional[int] = None,
         features_names_list: Optional[List[str]] = None,
-        random_state: int = 42
+        random_state: int = 42,
+        sfm: Optional[bool] = False,
+        estimator_name: Optional[str] = None
     ) -> Union[Tuple[pd.DataFrame, np.ndarray, Optional[str]], 
                Tuple[pd.DataFrame, np.ndarray, pd.DataFrame, Optional[str]]]:
         """
@@ -468,9 +473,68 @@ class DataProcessor(DataLoader):
                 y_train=y, 
                 X_test=X_test, 
                 random_state=random_state, 
-                num_features=num_features
+                num_features=num_features,
+                sfm=sfm,
+                estimator_name=estimator_name
             )
         
+    def sfm_fs(
+        self,
+        estimator_name: str,
+        X_train: pd.DataFrame,
+        X_test: pd.DataFrame,
+        y_train: np.ndarray,
+        num_features: Optional[int]
+        ) -> Tuple[pd.DataFrame, pd.DataFrame, int]:
+        """
+        Perform feature selection using SelectFromModel.
+
+        Parameters
+        ----------
+        estimator_name : str
+            Name of the estimator to use for feature selection.
+        X_train : DataFrame
+            Training feature set.
+        X_test : DataFrame
+            Testing feature set.
+        y_train : Series or ndarray
+            Training target variable.
+        num_features : int or None, optional
+            Number of features to select. If None, threshold is used.
+
+        Returns
+        -------
+        X_train_selected : DataFrame
+            Training set with selected features.
+        X_test_selected : DataFrame
+            Testing set with selected features.
+        num_features : int
+            Number of features selected.
+        """
+        # Get the estimator
+        print(f"Using {estimator_name} for feature selection")
+        estimator = AVAILABLE_CLFS[estimator_name]
+
+        # Create SelectFromModel
+        sfm = SelectFromModel(estimator, max_features=num_features, threshold=-np.inf)
+
+        # Fit SelectFromModel
+        sfm.fit(X_train, y_train)
+
+        # Get selected features
+        selected_features = sfm.get_support(indices=True)
+        selected_columns = X_train.columns[selected_features].to_list()
+
+        # Select features
+        X_train_selected = X_train[selected_columns]
+        X_test_selected = X_test[selected_columns]
+
+        # Update number of features if using threshold
+        if  num_features is None:
+            num_features = len(selected_columns)
+
+        return X_train_selected, X_test_selected,  num_features
+
     def process_general(
         self,
         X: pd.DataFrame,
@@ -517,8 +581,8 @@ class DataProcessor(DataLoader):
         # Feature selection
         if features_names_list is not None:
             feature_indicator = len(features_names_list)
-        elif ((num_features is None) or (num_features == X.shape[1]) or 
-              ((self.fs_method == 'percentile') and (num_features == 100))):
+        elif (num_features == X.shape[1]) or \
+              ((self.fs_method == 'percentile') and (num_features == 100)):
             self._log_once('feature_selection', 'none', 
                          "✓ No feature selection needed - using all features")
             feature_indicator = 'none'
@@ -546,6 +610,8 @@ class DataProcessor(DataLoader):
         X_test: pd.DataFrame,
         random_state: int,
         num_features: Optional[int] = None,
+        sfm: Optional[bool] = False,
+        estimator_name: Optional[str] = None
     ) -> Tuple[pd.DataFrame, np.ndarray, pd.DataFrame, Optional[str]]:
         """
         Process data in model selection mode (train/test split).
@@ -562,6 +628,10 @@ class DataProcessor(DataLoader):
             Random state for reproducibility.
         num_features : int, optional
             Number of features to select.
+        sfm : bool, optional
+            Whether to use SelectFromModel for feature selection.
+        estimator : str, optional
+            The estimator to use for feature selection if sfm is True.
             
         Returns
         -------
@@ -577,11 +647,22 @@ class DataProcessor(DataLoader):
         X_test_cleaned = self.missing_values(X_test_normalized)
 
         # Feature selection
-        if ((num_features is None) or (num_features == X_train.shape[1]) or 
-            ((self.fs_method == 'percentile') and (num_features == 100))):
+        if (num_features == X_train.shape[1]) or \
+            ((self.fs_method == 'percentile') and (num_features == 100)):
             self._log_once('feature_selection', 'none',
                          "✓ No feature selection needed - using all features")
             feature_indicator = 'none'
+        elif sfm and (num_features != X_train.shape[1]) and (estimator_name in SFM_COMPATIBLE_ESTIMATORS):
+            # Use SelectFromModel for feature selection
+            X_train_cleaned, X_test_cleaned, feature_indicator = self.sfm_fs(
+                estimator_name=estimator_name,
+                X_train=X_train_cleaned,
+                X_test=X_test_cleaned,
+                y_train=y_train,
+                num_features=num_features
+            )
+            self._log_once('feature_selection', 'sfm', 
+                         f"✓ Selected {num_features} features using SFM with {estimator_name}")
         else:
             selected_features = self.feature_selection(
                 X=X_train_cleaned,

@@ -121,9 +121,14 @@ class ModelSelectionConfig:
             self.num_features = [self.num_features]
         elif self.num_features is None:
             self.num_features = [X.shape[1]]
-        elif not isinstance(self.num_features, list):
-            self._log_once("num_features must be an integer, list, or None. Using all features.")
-            self.num_features = [X.shape[1]]
+        elif isinstance(self.num_features, list):
+            if not all(isinstance(n, (int, type(None))) for n in self.num_features):
+                self._log_once("num_features list must contain only integers or None. Using all features.")
+                raise ValueError("num_features list must contain only integers or None.")
+            self.num_features = [X.shape[1] if n is None else n for n in self.num_features]
+        else:
+            self._log_once("num_features must be an int, list of ints, or None. Using all features.")
+            raise ValueError("num_features must be an int, list of ints, or None.")
     
     def _validate_scoring_metrics(self) -> None:
         """Validate scoring metrics"""

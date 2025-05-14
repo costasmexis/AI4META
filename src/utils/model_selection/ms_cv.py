@@ -1,6 +1,7 @@
 import time
 from typing import List, Dict, Any
 import numpy as np
+import pandas as pd
 import progressbar
 from sklearn.model_selection import StratifiedKFold
 from src.utils.model_selection.train import _fit
@@ -9,7 +10,7 @@ from src.utils.validation.dataclasses import ModelSelectionConfig as Config
 from src.data.process import DataProcessor
 
 def _cv_loop(
-    X: Any,
+    X: pd.DataFrame,
     y: np.ndarray,
     config: Config,
     round_num: int,
@@ -97,6 +98,7 @@ def _cv_loop(
                 "Estimator": [],
                 "Samples_counts": [],
                 "Inner_selection_mthd": [],
+                "MS_Method": [],
             }
             
             # Add additional metric tracking

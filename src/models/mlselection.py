@@ -9,6 +9,10 @@ from threadpoolctl import threadpool_limits
 from src.utils.validation.dataclasses import ModelSelectionConfig
 from src.data.process import DataProcessor
 from src.utils.model_selection.ms_cv import _cv_loop
+from src.utils.statistics.metrics_stats import _calc_metrics_stats
+from src.utils.model_selection.output_config import _return_csv
+from src.utils.plots.plots import _histogram, _plot_per_clf
+
 
 class MLSelector(DataProcessor):
     """
@@ -78,7 +82,7 @@ class MLSelector(DataProcessor):
         search_on: Optional[List[str]] = None,
         num_features: Optional[Union[int, List[int]]] = None,
         return_csv: bool = True,
-        plot: Optional[str] = None,            
+        plot: Optional[str] = 'box',            
         scoring: str = "roc_auc",
         inner_scoring: str = "matthews_corrcoef",
         splits: int = 5,
@@ -86,7 +90,7 @@ class MLSelector(DataProcessor):
         freq_feat: Optional[int] = None,
         sfm: bool = False,      
         info_to_db: bool = False,
-        filter_csv: Optional[Dict] = None, 
+        # filter_csv: Optional[Dict] = None, 
         parallel: str = "thread_per_round",
         n_trials: int = 100
     ):
@@ -125,11 +129,11 @@ class MLSelector(DataProcessor):
             sfm=sfm,
             extra_metrics=self.extra_metrics,
             info_to_db=info_to_db,
-            filter_csv=filter_csv,
+            # filter_csv=filter_csv,
             parallel=parallel,
             n_trials=n_trials
         ).validate(self.X, self.csv_dir)   
-
+        
         # Set up parallelization
         trial_indices = range(rounds)
         num_cores = multiprocessing.cpu_count()
@@ -151,77 +155,71 @@ class MLSelector(DataProcessor):
         df = pd.concat([pd.DataFrame(item) for item in list_dfs_flat], axis=0)
 
         results = []
-        for inner in inner_selection:
-            df_inner = df[df["Inner_selection_mthd"] == inner]
-            for classif in np.unique(df_inner["Classifiers"]):
-                indices = df_inner[df_inner["Classifiers"] == classif]
-                filtered_scores = indices[f"{self.config_rncv['outer_scoring']}"]
-                filtered_features = indices["Selected_Features"].values if num_features is not None else None
+        for  method in df['MS_Method'].unique():
+            df_method = df[df["MS_Method"] == method]
+            for inner in config.inner_selection:
+                df_inner = df_method[df_method["Inner_selection_mthd"] == inner]
+                for classif in np.unique(df_inner["Classifiers"]):
+                    indices = df_inner[df_inner["Classifiers"] == classif]
+                    filtered_scores = indices[f"{config.scoring}"]
+                    filtered_features = indices["Selected_Features"].values if num_features is not None else None
 
-                # Extract other details
-                Numbers_of_Features = indices["Number_of_Features"].unique()[0]
-                Way_of_Selection = indices["Way_of_Selection"].unique()[0]
+                    # Extract other details
+                    Numbers_of_Features = indices["Number_of_Features"].unique()[0]
+                    Way_of_Selection = indices["Way_of_Selection"].unique()[0]
 
-                # Aggregate sample classification rates
-                samples_classification_rates = np.zeros(len(self.y))
-                for test_part in indices["Samples_counts"]:
-                    samples_classification_rates = np.add(samples_classification_rates, test_part)
-                samples_classification_rates /= rounds
+                    # Aggregate sample classification rates
+                    samples_classification_rates = np.zeros(len(self.y))
+                    for test_part in indices["Samples_counts"]:
+                        samples_classification_rates = np.add(samples_classification_rates, test_part)
+                    samples_classification_rates /= rounds
 
-                # Append the results
-                results.append(
-                    {
-                        "Est": df_inner[df_inner["Classifiers"] == classif]["Estimator"].unique()[0],
-                        "Clf": classif+"_"+inner,
-                        "Hyp": df_inner[df_inner["Classifiers"] == classif]["Hyperparameters"].values,
-                        "Sel_way": Way_of_Selection,
-                        "Fs_inner": 'none' if Way_of_Selection == 'none' else feature_selection_method,
-                        "Fs_num": Numbers_of_Features,
-                        "Sel_feat": filtered_features,
-                        "Norm": normalization,
-                        "Miss_vals": missing_values_method,
-                        "In_cv": inner_splits,
-                        "Out_cv": outer_splits,
-                        "Rnds": rounds,
-                        "Trials": n_trials,
-                        "Class_blnc": self.config_rncv['class_balance'],
-                        "In_scor": inner_scoring,
-                        "Out_scor": outer_scoring,
-                        "In_sel": inner,
-                        "Classif_rates": samples_classification_rates
-                    }
-                )
-
-                # Update results with calculated metrics
-                results = _calc_metrics_stats(self.config_rncv['extra_metrics'], results, indices)
+                    # Append the results
+                    results.append(
+                        {
+                            "Est": str(df_inner[df_inner["Classifiers"] == classif]["Estimator"].unique()[0]),
+                            "Clf": str(classif+"_"+inner+"_"+method),
+                            "MS_Method": str(method),
+                            "Hyp": np.array(df_inner[df_inner["Classifiers"] == classif]["Hyperparameters"].values),
+                            "Sel_way": str(Way_of_Selection),
+                            "Fs_inner": '' if Way_of_Selection == 'none' or Way_of_Selection == 'sfm' else str(config.feature_selection_method),
+                            "Fs_num": int(Numbers_of_Features),
+                            "Sel_feat": list(filtered_features),
+                            "Norm": str(config.normalization),
+                            "Miss_vals": str(config.missing_values_method),
+                            "Inner_splits": int(config.inner_splits) if method == 'NestedCV' else 0,
+                            "Splits": int(config.splits),
+                            "Rnds": int(config.rounds),
+                            "Trials": int(config.n_trials) if method == 'NestedCV' else 1,
+                            "Cls_blnc": str(config.class_balance),
+                            "Inner_scoring": str(config.inner_scoring) if method == 'NestedCV' else '',
+                            "Scoring": str(config.scoring),
+                            "Inner_selection": str(inner),
+                            "Classif_rates": np.array(samples_classification_rates)
+                        }
+                    )
+                    # Update results with calculated metrics
+                    results = _calc_metrics_stats(config.extra_metrics, results, indices)
 
         print(f"Finished with {len(results)} models")
         scores_dataframe = pd.DataFrame(results)
 
-        # Save results directory
-        results_csv_dir = "results/csv"
-        os.makedirs(results_csv_dir, exist_ok=True)
-        final_csv_dataset_name = _name_outputs(self.config_rncv, results_csv_dir, self.csv_dir)
-
-        results_img_dir = "results/images"
-        os.makedirs(results_img_dir, exist_ok=True)
-        final_img_dataset_name = _name_outputs(self.config_rncv, results_img_dir, self.csv_dir)
-
         # Save to CSV if specified
-        statistics_dataframe = _return_csv(final_csv_dataset_name, scores_dataframe, self.config_rncv['extra_metrics'], filter_csv, return_csv)
+        statistics_dataframe = _return_csv(config.dataset_csv_name, scores_dataframe, config.extra_metrics, return_csv)
 
         # Plot histogram if required
-        if num_features is not None:    
-            print(scores_dataframe)
-            _histogram(scores_dataframe, final_img_dataset_name, freq_feat, len(self.config_rncv['clfs']), len(self.config_rncv['inner_selection']), self.X.shape[1])
+        if config.num_features is not None or config.num_features < self.X.shape[1]:    
+            # Save the number that features selected
+            denomination = len(scores_dataframe[scores_dataframe['Sel_way'] != 'none'])
+            _histogram(scores_dataframe, config.dataset_histogram_name, freq_feat, denomination, self.X.shape[1])
 
         # Generate performance plots
         if plot is not None:
-            _plot_per_clf(scores_dataframe, plot, self.config_rncv['outer_scoring'], final_img_dataset_name)
+            _plot_per_clf(scores_dataframe, plot, config.scoring, config.dataset_plot_name)
 
-        # Save results to database if specified
-        if info_to_db:
-            insert_to_db(scores_dataframe, self.config_rncv, database_name=self.database_name)
+        # # Save results to database if specified
+        # if info_to_db:
+        #     insert_to_db(scores_dataframe, self.config_rncv, database_name=self.database_name)
 
         return statistics_dataframe
 
