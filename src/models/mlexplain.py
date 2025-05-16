@@ -3,7 +3,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-from src.models.mlestimator import MachineLearningEstimator  
+from src.models.mlestimator import MachineLearningEstimator
+from typing import Optional
 
 shap.initjs()
 
@@ -11,34 +12,88 @@ class MLExplainer(MachineLearningEstimator):
     """
     Class for calculating and visualizing SHAP values for machine learning models.
 
-    This class supports general, tree-based, and linear explainers for various types of models.
-
-    Attributes:
-    -----------
-    estimator : object
-        The trained machine learning model to explain.
-    X : pandas.DataFrame
-        Input feature data.
-    y : pandas.Series or numpy.ndarray
-        Target labels.
-    label_mapping : dict
-        Mapping of label indices to label names.
-    shap_values : shap.Explanation or None
-        Calculated SHAP values.
-    explainer : shap.Explainer or None
-        The SHAP explainer object.
+    This class extends MachineLearningEstimator to add SHAP analysis functionality.
     """
 
-    def __init__(self, estimator, X, y, label_mapping, shap_values=None):
-        self.estimator = estimator
+    def __init__(
+            self, 
+            label: str,
+            csv_dir: str,
+            index_col: Optional[str] = None,
+            normalization: str = "minmax",
+            mv_method: str = "median",
+            fs_method: str = "mrmr",
+            inner_fs_method: str = "chi2",
+            class_balance_method: Optional[str] = None,
+            database_name: Optional[str] = None,
+            preprocess_mode: str = "general",
+            best_model: Optional[object] = None,
+            estimator_name: Optional[str] = None,
+            shap_values: Optional[np.ndarray] = None
+        ):
+        """
+        Initialize the MLExplainer with a trained model and dataset.
+        
+        Parameters
+        ----------
+        label : str
+            Target column name
+        csv_dir : str
+            Path to the CSV file
+        index_col : str, optional
+            Column to use as index
+        normalization : str, default="minmax"
+            Normalization method to use
+        mv_method : str, default="median"
+            Missing values handling method
+        fs_method : str, default="mrmr"
+            Feature selection method
+        inner_fs_method : str, default="chi2"
+            Inner feature selection method
+        class_balance_method : str, optional
+            Class balancing method
+        database_name : str, optional
+            Database name for storing results
+        preprocess_mode : str, default="general"
+            Preprocessing mode
+        best_model : object, optional
+            Trained model to explain
+        estimator_name : str, optional
+            Name of the estimator
+        shap_values : ndarray, optional
+            Pre-calculated SHAP values
+        """
+        # Initialize the parent class with basic parameters
+        super().__init__(
+            label=label,
+            csv_dir=csv_dir,
+            index_col=index_col,
+            normalization=normalization,
+            mv_method=mv_method,
+            fs_method=fs_method,
+            inner_fs_method=inner_fs_method,
+            class_balance_method=class_balance_method,
+            database_name=database_name,
+            preprocess_mode=preprocess_mode
+        )
+        
+        # Add SHAP-specific attributes
+        self.best_model = best_model
+        self.estimator_name = estimator_name
         self.explainer = None
-        self.name = estimator.__class__.__name__
-        self.X = X
-        self.y = y
-        self.shap_values = shap_values
-        self.label_mapping = label_mapping
+        
+        # Set SHAP values if provided and valid
+        if self.shap_values is None or np.all(shap_values == 0):
+            self.shap_values = None
+        else:
+            self.shap_values = shap_values
+            
+        # Create label mapping from existing data
+        self.label_mapping = {i: class_name for i, class_name in enumerate(np.unique(self.y))}
+        
+        self.logger.info("MLExplainer initialized with model: %s", estimator_name)
 
-    def calculate_shap_values(self, explainer_type="general"):
+    def calculate_shap_values(self, explainer_type:str = "general") -> np.ndarray:
         """
         Calculate SHAP values for the given model and dataset.
 
@@ -51,33 +106,34 @@ class MLExplainer(MachineLearningEstimator):
         Raises:
         -------
         ValueError
-            If the explainer type is unsupported.
+            If the explainer type is unsupported or model is not set.
         TypeError
             If the model is incompatible with the general explainer.
         """
+        if self.best_model is None:
+            raise ValueError("No model is set. Train or load a model before calculating SHAP values.")
+            
         if explainer_type == "general":
             try:
-                self.explainer = shap.Explainer(self.estimator, self.X)
+                self.explainer = shap.Explainer(self.best_model, self.X)
             except TypeError as e:
                 if "The passed model is not callable" in str(e):
-                    print("Switching to predict_proba due to compatibility issue with the model.")
-                    self.explainer = shap.Explainer(lambda X: self.estimator.predict_proba(X), self.X)
+                    self.logger.info("Switching to predict_proba due to compatibility issue with the model.")
+                    self.explainer = shap.Explainer(lambda X: self.best_model.predict_proba(X), self.X)
                 else:
                     raise TypeError(e)
 
         elif explainer_type == "tree":
-            if self.name not in [
-                "RandomForestClassifier", "XGBClassifier", "CatBoostClassifier", "LightGBMClassifier"
+            if self.estimator_name not in [
+                "RandomForestClassifier", "XGBClassifier", "CatBoostClassifier", "LGBMClassifier"
             ]:
                 raise ValueError("Tree explainer supports tree-based models only.")
-            elif self.name == "XGBClassifier" and self.estimator.booster != "gbtree":
-                raise ValueError("XGBClassifier requires 'booster' to be 'gbtree'.")
-            self.explainer = shap.TreeExplainer(self.estimator, data=self.X, model_output="probability")
+            self.explainer = shap.TreeExplainer(self.best_model, data=self.X, model_output="probability")
 
         elif explainer_type == "linear":
-            if self.name not in ["LogisticRegression", "LinearDiscriminantAnalysis"]:
+            if self.estimator_name not in ["LogisticRegression", "LinearDiscriminantAnalysis", "ElasticNet"]:
                 raise ValueError("Linear explainer supports linear models only.")
-            self.explainer = shap.LinearExplainer(self.estimator, self.X)
+            self.explainer = shap.LinearExplainer(self.best_model, self.X)
 
         else:
             raise ValueError("Unsupported explainer. Use 'general', 'tree', or 'linear'.")
@@ -85,14 +141,18 @@ class MLExplainer(MachineLearningEstimator):
         if self.explainer is not None:
             try:
                 self.shap_values = self.explainer(self.X)
+                self.logger.info("SHAP values calculated successfully")
             except ValueError:
                 num_features = self.X.shape[1]
                 max_evals = 2 * num_features + 1
                 self.shap_values = self.explainer(self.X, max_evals=max_evals)
+                self.logger.info(f"SHAP values calculated with max_evals={max_evals}")
         else:
             raise ValueError("Explainer is not defined.")
+        
+        return self.shap_values
 
-    def plot_shap_values(self, max_display=10, plot_type="summary", label=1):
+    def plot_shap_values(self, max_display: int = 10, plot_type: str = "summary", label: int = 1) -> None:
         """
         Plot SHAP values using various visualization types.
 
@@ -108,10 +168,14 @@ class MLExplainer(MachineLearningEstimator):
         Raises:
         -------
         ValueError
-            If an unsupported plot type is provided.
+            If an unsupported plot type is provided or no SHAP values are calculated.
         """
+        if self.shap_values is None:
+            raise ValueError("No SHAP values available. Run calculate_shap_values() first.")
+            
         # Ensure shap_values is in the proper format
         if not isinstance(self.shap_values, shap.Explanation):
+            self.logger.info("Converting SHAP values to Explanation object")
             self.shap_values = shap.Explanation(
                 values=self.shap_values,
                 feature_names=self.X.columns,
@@ -120,18 +184,19 @@ class MLExplainer(MachineLearningEstimator):
 
         if plot_type == "summary":
             try:
+                # Try to plot for specific class label
                 shap.summary_plot(
-                    shap_values=self.shap_values[:, :, label],
+                    shap_values=self.shap_values[:, :, label] if len(self.shap_values.shape) == 3 else self.shap_values,
                     features=self.X,
                     feature_names=self.X.columns,
                     max_display=max_display,
                     sort=True,
                 )
-                print(f"The plot is for label {label}, corresponding to {self.label_mapping[label]}.")
-            except IndexError:
-                print(f"The SHAP values do not exist for the label {label}. Showing summary plot for all labels.")
+                self.logger.info(f"Created summary plot for label {label}, corresponding to {self.label_mapping.get(label, 'unknown')}")
+            except (IndexError, AttributeError):
+                self.logger.info(f"Could not create specific label plot. Showing summary plot for all data.")
                 shap.summary_plot(
-                    shap_values=self.shap_values.values,
+                    shap_values=self.shap_values.values if hasattr(self.shap_values, 'values') else self.shap_values,
                     features=self.X,
                     feature_names=self.X.columns,
                     max_display=max_display,
@@ -141,25 +206,29 @@ class MLExplainer(MachineLearningEstimator):
         elif plot_type == "beeswarm":
             try:
                 shap.plots.beeswarm(
-                    self.shap_values[:, :, label], max_display=max_display
+                    self.shap_values[:, :, label] if len(self.shap_values.shape) == 3 else self.shap_values, 
+                    max_display=max_display
                 )
-                print(f"The plot is for label {label}, corresponding to {self.label_mapping[label]}.")
-            except IndexError:
-                print(f"The SHAP values do not exist for the label {label}. Showing beeswarm plot for all labels.")
+                self.logger.info(f"Created beeswarm plot for label {label}")
+            except (IndexError, AttributeError):
+                self.logger.info("Could not create specific label plot. Showing beeswarm plot for all data.")
                 shap.plots.beeswarm(self.shap_values, max_display=max_display)
 
         elif plot_type == "bar":
-             if len(self.shap_values.shape) == 3:
-                shap.plots.bar(self.shap_values[:, :, label], max_display=max_display)
-             elif len(self.shap_values.shape) == 2:
-                shap.plots.bar(self.shap_values, max_display=max_display)
-             else:
+            try:
+                if len(self.shap_values.shape) == 3:
+                    shap.plots.bar(self.shap_values[:, :, label], max_display=max_display)
+                else:
+                    shap.plots.bar(self.shap_values, max_display=max_display)
+                self.logger.info(f"Created bar plot for SHAP values")
+            except Exception as e:
+                self.logger.error(f"Error creating bar plot: {str(e)}")
                 print("Unexpected SHAP values format for bar plot.")
 
         else:
             raise ValueError("Unsupported plot type. Use 'summary', 'beeswarm', or 'bar'.")
 
-    def plot_shap_pca(self, label=None):
+    def plot_shap_pca(self, label: int = 1) -> None:
         """
         Generate a PCA plot of SHAP values, colored by the target labels.
 
@@ -227,5 +296,4 @@ class MLExplainer(MachineLearningEstimator):
         ax.set_ylabel("PC2", fontsize=15)
         ax.set_title("PCA of SHAP Values", fontsize=20)
         ax.legend(loc="best")
-        # ax.grid()
         plt.show()
