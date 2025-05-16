@@ -428,12 +428,12 @@ class ModelEvaluationConfig:
                 self._log_once("param_grid must be a dictionary. Using default: None")
                 raise ValueError("param_grid must be a dictionary.")
             else:
-                self.param_grid = {self.estimator_name: self.param_grid}
+                self.param_grid = self.param_grid
         else:
             if self.search_type == 'bayesian':
-                self.param_grid = optuna_grid["NestedCV"]
+                self.param_grid = optuna_grid["NestedCV"][self.estimator_name]
             else:
-                self.param_grid = optuna_grid["SklearnParameterGrid"]
+                self.param_grid = optuna_grid["SklearnParameterGrid"][self.estimator_name]
 
     def _validate_direction(self) -> None:
         """Validate direction for optimization"""

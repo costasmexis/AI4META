@@ -8,6 +8,7 @@ import warnings
 from typing import Optional, Dict, Any, List, Union, Tuple
 import pickle
 import json
+import dataclasses
 
 from src.constants.parameters_grid import optuna_grid
 from src.constants.translators import AVAILABLE_CLFS
@@ -151,7 +152,7 @@ class MachineLearningEstimator(DataProcessor):
             if search_type == "random":
                 search_cv = RandomizedSearchCV(
                     estimator=config.estimator,
-                    param_distributions=config.param_grid[config.estimator_name],
+                    param_distributions=config.param_grid,
                     scoring=config.scoring,
                     cv=custom_cv_splits,
                     n_iter=config.n_trials,
@@ -160,7 +161,7 @@ class MachineLearningEstimator(DataProcessor):
             else:
                 search_cv = GridSearchCV(
                     estimator=config.estimator,
-                    param_grid=config.param_grid[config.estimator_name],
+                    param_grid=config.param_grid,
                     scoring=config.scoring,
                     cv=custom_cv_splits,
                     n_jobs=config.processors,
@@ -176,7 +177,7 @@ class MachineLearningEstimator(DataProcessor):
             search_cv = optuna.integration.OptunaSearchCV(
                 estimator=config.estimator,
                 scoring=config.scoring,
-                param_distributions=config.param_grid[estimator_name],
+                param_distributions=config.param_grid,
                 cv=custom_cv_splits,
                 return_train_score=True,
                 n_jobs=config.processors,
@@ -247,8 +248,27 @@ class MachineLearningEstimator(DataProcessor):
             
             # Save a json with the metadata of the function 
             with open(f"{config.metadata_path}", "w") as metadata_file:
-                print(config)
-                json.dump(config, metadata_file)
+                
+                # After creating config_dict
+                config_dict = dataclasses.asdict(config)
+
+                # Convert param_grid to a string representation
+                if 'param_grid' in config_dict and config_dict['param_grid'] is not None:
+                    config_dict['param_grid'] = str(config_dict['param_grid'])
+
+                # Also convert other non-serializable objects
+                if '_logger' in config_dict:
+                    del config_dict['_logger']
+                if '_logged_messages' in config_dict:
+                    del config_dict['_logged_messages']
+
+                # Add the csv_dir to the config_dict
+                config_dict['csv_dir'] = self.csv_dir
+                config_dict['index_col'] = self.index_col
+
+                # Now dump to JSON
+                json.dump(config_dict, metadata_file, indent=2)
+
             self.logger.info(f"✓ Metadata of the function saved to {config.metadata_path}")
 
         if calculate_shap:

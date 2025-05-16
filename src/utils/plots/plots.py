@@ -157,8 +157,8 @@ def _plot_per_metric(
     )
 
     # Display and save plot
-    fig.show()
-    fig.write_image(f"{name}.png")
+    fig.write_image(f"{name}")
+    print("Plot saved as:", name)
 
 def _histogram(
     scores_dataframe: pd.DataFrame,
