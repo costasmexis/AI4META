@@ -16,6 +16,7 @@ from src.data.process import DataProcessor
 from src.utils.statistics.metrics_stats import _calc_metrics_stats
 from src.utils.model_selection.output_config import _return_csv
 from src.utils.validation.dataclasses import ModelEvaluationConfig
+from src.database.manager import DatabaseManager
 
 # from src.utils.validation.validation import ConfigValidator
 from src.utils.model_manipulation.model_instances import _create_model_instance
@@ -274,5 +275,10 @@ class MachineLearningEstimator(DataProcessor):
         if calculate_shap:
             self.shap_values = shaps_array
             self.logger.info("✓ SHAP values calculated")
+        
+                # Save results to database if specified
+        if info_to_db:
+            dbman = DatabaseManager(self.database_name)
+            dbman.insert_experiment_data(scores_df, config, database_name=self.database_name)
             
         logging.info("✓ Model evaluation completed")

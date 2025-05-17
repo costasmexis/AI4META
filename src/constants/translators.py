@@ -11,31 +11,39 @@ from sklearn.svm import SVC
 
 
 AVAILABLE_CLFS = {
-            "RandomForestClassifier": RandomForestClassifier(),
-            "GradientBoostingClassifier": GradientBoostingClassifier(),
-            "LinearDiscriminantAnalysis": LinearDiscriminantAnalysis(),
-            "LogisticRegression": LogisticRegression(),
-            "ElasticNet": LogisticRegression(penalty="elasticnet", solver="saga"),
-            "XGBClassifier": XGBClassifier(),
-            "GaussianNB": GaussianNB(),
-            "KNeighborsClassifier": KNeighborsClassifier(),
-            "SVC": SVC(),
-            "LGBMClassifier": LGBMClassifier(),
-            "GaussianProcessClassifier": GaussianProcessClassifier(),
-            "CatBoostClassifier": CatBoostClassifier(),
-        }
+    "RandomForestClassifier": RandomForestClassifier(),
+    "GradientBoostingClassifier": GradientBoostingClassifier(),
+    "LinearDiscriminantAnalysis": LinearDiscriminantAnalysis(),
+    "LogisticRegression": LogisticRegression(),
+    "ElasticNet": LogisticRegression(penalty="elasticnet", solver="saga"),
+    "XGBClassifier": XGBClassifier(),
+    "GaussianNB": GaussianNB(),
+    "KNeighborsClassifier": KNeighborsClassifier(),
+    "SVC": SVC(),
+    "LGBMClassifier": LGBMClassifier(),
+    "GaussianProcessClassifier": GaussianProcessClassifier(),
+    "CatBoostClassifier": CatBoostClassifier(),
+}
+
+INNER_SELECTION_METHODS = [
+    "validation_score",
+    "one_sem", 
+    "one_sem_grd", 
+    "gso_1", 
+    "gso_2"
+]
 
 METRIC_ADDREVIATIONS = {
-        'roc_auc': 'AUC',
-        'accuracy': 'ACC',
-        'balanced_accuracy': 'BAL_ACC',
-        'recall': 'REC',
-        'precision': 'PREC',
-        'f1': 'F1',
-        'average_precision': 'AVG_PREC',
-        'specificity': 'SPEC',
-        'matthews_corrcoef': 'MCC'
-    }
+    'roc_auc': 'AUC',
+    'accuracy': 'ACC',
+    'balanced_accuracy': 'BAL_ACC',
+    'recall': 'REC',
+    'precision': 'PREC',
+    'f1': 'F1',
+    'average_precision': 'AVG_PREC',
+    'specificity': 'SPEC',
+    'matthews_corrcoef': 'MCC'
+}
 
 DEFAULT_CONFIG_MS = {
     "rounds": 10,
