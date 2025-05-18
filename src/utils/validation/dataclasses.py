@@ -89,6 +89,9 @@ class ModelSelectionConfig:
         
         # Configure classifiers
         self._configure_classifiers()
+
+        # Validate SFM (Sequential Feature Selection) setting
+        self._validate_sfm()
         
         # Extract dataset info
         self._extract_dataset_info(X, csv_dir)
@@ -163,6 +166,12 @@ class ModelSelectionConfig:
             self.clfs = [clf for clf in self.search_on if clf in AVAILABLE_CLFS]
         else:
             self.clfs = [clf for clf in AVAILABLE_CLFS if clf not in self.exclude]
+    
+    def _validate_sfm(self) -> None:
+        """Validate SFM (Sequential Feature Selection) setting"""
+        if self.sfm not in [True, False]:
+            self._log_once(f"Invalid SFM value: {self.sfm}. Using default: False")
+            self.sfm = False
     
     def _extract_dataset_info(self, X: pd.DataFrame, csv_dir: str) -> None:
         """Extract and store dataset-related information"""
@@ -256,6 +265,7 @@ class ModelEvaluationConfig:
     boxplot: bool = False
     features_name_list: Optional[List[str]] = None
     direction: str = "maximize"
+    sfm: bool = False
 
     # Derived attributes (will be set during validation)
     dataset_name: Optional[str] = None
@@ -321,6 +331,9 @@ class ModelEvaluationConfig:
 
         # Set result names
         self._set_result_names()
+
+        # Validate SFM (Sequential Feature Selection) setting
+        self._validate_sfm()
         
         # Validate feature names list
         self._validate_features_name_list(X)
@@ -457,6 +470,12 @@ class ModelEvaluationConfig:
                 self._log_once("No valid features in features_name_list. Using all features.")
                 self.features_name_list = None
     
+    def _validate_sfm(self) -> None:
+        """Validate SFM (Sequential Feature Selection) setting"""
+        if self.sfm not in [True, False]:
+            self._log_once(f"Invalid SFM value: {self.sfm}. Using default: False")
+            self.sfm = False
+
     def _extract_dataset_info(self, X: pd.DataFrame, csv_dir: str) -> None:
         """Extract and store dataset-related information"""
         # Extract dataset name from path

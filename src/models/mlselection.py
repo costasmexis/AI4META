@@ -200,10 +200,6 @@ class MLSelector(DataProcessor):
                             "Classif_rates": np.array(samples_classification_rates)
                         }
                     )
-                    # # Print the types of the last appended result
-                    # last_result = results[-1]
-                    # for key, value in last_result.items():
-                    #     print(f"{key}: {type(value)}")
                     # Update results with calculated metrics
                     results = _calc_metrics_stats(config.extra_metrics, results, indices)
 

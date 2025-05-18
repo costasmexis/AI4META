@@ -9,6 +9,7 @@ import numpy as np
 import json
 from collections import Counter
 
+from sqlalchemy import func
 # Import your dataclass models
 from src.database.dataclasses import Base, Dataset, Classifier, FeatureSelection, Hyperparameters
 from src.database.dataclasses import PerformanceMetrics, SamplesClassificationRates, ShapValues, Experiment, FeatureCount
@@ -200,6 +201,7 @@ class DatabaseManager:
                         feature_count = FeatureCount(
                             feature_name=feature_name, 
                             count=count,
+                            experiment_id=experiment_id  # Add this line to set the experiment_id
                         )
                         session.add(feature_count)
                 
@@ -209,7 +211,7 @@ class DatabaseManager:
                 session.rollback()
                 self.logger.error(f"Failed to insert feature counts: {str(e)}")
                 raise
-
+            
     def insert_experiment_data(self, scores_dataframe, config, database_name=None):
         """
         Insert experiment data from model selection or evaluation into the database.
@@ -232,6 +234,16 @@ class DatabaseManager:
                 # Determine the type of experiment
                 is_model_selection = hasattr(config, 'model_selection_type')
                 is_model_evaluation = hasattr(config, 'search_type')
+
+                max_combination_id = session.query(func.max(Experiment.combination_id)).scalar()
+            
+                # If no combination_id exists yet or it's None, start with 1
+                if max_combination_id is None:
+                    combination_id = 1
+                else:
+                    combination_id = max_combination_id + 1
+                    
+                self.logger.info(f"Using combination_id: {combination_id} for this batch of experiments")
                 
                 # Insert dataset
                 dataset_id = self.insert_dataset(config.dataset_name)
@@ -244,7 +256,7 @@ class DatabaseManager:
                     classifier_id = self.insert_classifier(estimator, inner_selection)
                     
                     # Get hyperparameters
-                    hyperparameters = row.get("Hyp") if "Hyp" in scores_dataframe.columns else getattr(config, 'best_params', None)
+                    hyperparameters = row.get("Hyp") if "Hyp" in scores_dataframe.columns else None
                     if isinstance(hyperparameters, np.ndarray):
                         hyperparameters = hyperparameters.tolist()
                     hyperparameter_id = self.insert_hyperparameters(json.dumps(hyperparameters))
@@ -264,8 +276,8 @@ class DatabaseManager:
                     
                     # Process SHAP values if available
                     shap_values_id = None
-                    if hasattr(config, 'calculate_shap') and config.calculate_shap and hasattr(row, 'shap_values'):
-                        shap_values_str = json.dumps(row['shap_values'].tolist() if isinstance(row['shap_values'], np.ndarray) else row['shap_values'])
+                    if hasattr(config, 'calculate_shap') and config.calculate_shap and hasattr(row, 'Shap'):
+                        shap_values_str = json.dumps(row['Shap'].tolist() if isinstance(row['Shap'], np.ndarray) else row['Shap'])
                         shap_values_id = self.insert_shap_values(shap_values_str)
                     
                     # Process performance metrics
@@ -283,8 +295,8 @@ class DatabaseManager:
                     experiment_data = {
                         'n_trials': getattr(config, 'n_trials', None),
                         'rounds': getattr(config, 'rounds', None),
-                        'feature_selection_type': getattr(config, 'feature_selection_type', None),
-                        'feature_selection_method': getattr(config, 'feature_selection_method', None),
+                        'feature_selection_type': row.get("Sel_way"),
+                        'feature_selection_method': row.get("Fs_inner"),
                         'inner_scoring': getattr(config, 'inner_scoring', None),
                         'scoring': getattr(config, 'scoring', None),
                         'inner_splits': getattr(config, 'inner_splits', None),
@@ -300,6 +312,7 @@ class DatabaseManager:
                         'performance_id': performance_id,
                         'sample_rate_id': sample_rate_id,
                         'shap_values_id': shap_values_id,
+                        'combination_id': combination_id
                     }
                     
                     # Add specific fields based on experiment type

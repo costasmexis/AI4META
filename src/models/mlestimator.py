@@ -11,7 +11,7 @@ import json
 import dataclasses
 
 from src.constants.parameters_grid import optuna_grid
-from src.constants.translators import AVAILABLE_CLFS
+from src.constants.translators import AVAILABLE_CLFS, SFM_COMPATIBLE_ESTIMATORS
 from src.data.process import DataProcessor
 from src.utils.statistics.metrics_stats import _calc_metrics_stats
 from src.utils.model_selection.output_config import _return_csv
@@ -98,6 +98,7 @@ class MachineLearningEstimator(DataProcessor):
         n_trials: int = 100,
         evaluation: str = "cv_rounds",
         num_features: Optional[int] = None,
+        sfm: Optional[bool] = False,
         boxplot: bool = True,
         calculate_shap: bool = False,
         param_grid: Optional[Dict] = None,
@@ -132,6 +133,7 @@ class MachineLearningEstimator(DataProcessor):
             inner_selection=inner_selection,
             info_to_db=info_to_db,
             processors=processors,
+            sfm=sfm,
             save_model=save_model
         ).validate(self.X, self.csv_dir)
 
@@ -279,6 +281,26 @@ class MachineLearningEstimator(DataProcessor):
                 # Save results to database if specified
         if info_to_db:
             dbman = DatabaseManager(self.database_name)
-            dbman.insert_experiment_data(scores_df, config, database_name=self.database_name)
-            
+            # Create a new single-row dataframe to hold consolidated results
+            consolidated_df = pd.DataFrame()
+            # Format hyperparameters as an array containing a single dictionary
+            consolidated_df["Hyp"] = np.array([self.best_params])
+            # Add feature selection information (typically 'none' for MLEstimator)
+            # Check if sfm applied
+            if config.sfm and config.estimator_name in SFM_COMPATIBLE_ESTIMATORS:
+                consolidated_df["Sel_way"] = 'none' if config.num_features == self.X.shape[1] else 'sfm'
+                consolidated_df["Fs_inner"] = 'none' if config.num_features == self.X.shape[1] else 'none'
+            else:
+                consolidated_df["Sel_way"] = 'none' if config.num_features == self.X.shape[1] else config.feature_selection_type
+                consolidated_df["Fs_inner"] = 'none' if config.num_features == self.X.shape[1] else config.feature_selection_method
+            consolidated_df["Fs_num"] = config.num_features
+            # Add consolidated metrics - store each metric as a list of values
+            for column in scores_df.columns:
+                # Store the list of values for each metric
+                consolidated_df[column] = [scores_df[column].tolist()]
+            # Add the shap values if calculated
+            if calculate_shap:
+                consolidated_df["Shap"] = [self.shap_values]
+            dbman.insert_experiment_data(consolidated_df, config, database_name=self.database_name)
+
         logging.info("✓ Model evaluation completed")
