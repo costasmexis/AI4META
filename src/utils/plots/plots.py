@@ -6,6 +6,8 @@ import plotly.graph_objects as go
 from itertools import chain
 from collections import Counter
 from src.utils.statistics.bootstrap_ci import _calc_ci_btstrp
+import logging
+import json
 
 def _plot_per_clf(
     scores_dataframe: pd.DataFrame,
@@ -162,9 +164,9 @@ def _plot_per_metric(
 
 def _histogram(
     scores_dataframe: pd.DataFrame,
-    save_path: str,
+    save_json_path: str,
     freq_feat: Optional[int],
-    denomination: int,
+    # denominator: int,
     max_features: int
 ) -> None:
     """
@@ -174,12 +176,12 @@ def _histogram(
     ----------
     scores_dataframe : pd.DataFrame
         DataFrame containing feature selection results
+    save_json_path : str
+        Path to save the json with the most important features per estimator
     final_dataset_name : str
         Base name for saving the plot
     freq_feat : int, optional
         Number of top features to display
-    denomination : int
-        Number of classifiers used
     max_features : int
         Maximum number of features available
 
@@ -193,49 +195,139 @@ def _histogram(
     if freq_feat is None or freq_feat > max_features:
         freq_feat = max_features
 
-    # Count feature occurrences
-    feature_counts = Counter()
-    for _, row in scores_dataframe.iterrows():
-        if row["Sel_way"] != "none":
-
-            features = list(chain.from_iterable(
-                [list(index_obj) for index_obj in row["Sel_feat"]]
-            ))
-            feature_counts.update(features)
-
-    # Check if any features were selected
-    if not feature_counts:
+    # Check the different ways of selection and number of selection 
+    selection_ways = scores_dataframe["Sel_way"].unique()
+    if 'none' in selection_ways:
+        selection_ways = selection_ways[selection_ways != 'none']
+    if len(selection_ways) == 0:
         print("No features were selected.")
         return
+    else:
+        # Initiate an empty dictionary with the selected features
+        frfs_dct = {}
 
-    # Process feature counts
-    top_features = feature_counts.most_common(freq_feat)
-    features, counts = zip(*top_features)
+        # Filter the dataframe to only include selected features
+        selected_df = scores_dataframe[scores_dataframe["Sel_way"] != 'none']
 
-    normalized_counts = [count / (denomination) for count in counts]
+        # Find the different selection number of features
+        selection_numbers = selected_df["Fs_num"].unique()
 
-    # Create plot
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=features,
-        y=normalized_counts,
-        marker=dict(color="skyblue"),
-        text=[f"{count:.2f}" for count in normalized_counts],
-        textposition='auto'
-    ))
+        for selection_number in selection_numbers:
+            # Filter the dataframe to only include the current selection number
+            filtered_df = selected_df[selected_df["Fs_num"] == selection_number]
 
-    # Configure layout
-    fig.update_layout(
-        title="Histogram of Selected Features",
-        xaxis_title="Features",
-        yaxis_title="Normalized Counts",
-        xaxis_tickangle=-90,
-        bargap=0.2,
-        template="plotly_white",
-        width=min(max(1000, freq_feat * 20), 2000),
-        height=700
-    )
+            for selection_way in selection_ways:
+                # Filter the dataframe to only include the current selection way
+                filtered_df_way = filtered_df[filtered_df["Sel_way"] == selection_way]
 
-    # Save plot
-    fig.write_image(save_path)
-    print(f"Histogram saved to {save_path}")
+                # Check if sfm is selected 
+                if selection_way == 'sfm':
+                    # Find counts for each estimator separetely
+                    for estimator in filtered_df_way["Est"].unique():
+                        # Filter the dataframe to only include the current estimator
+                        filtered_df_estimator = filtered_df_way[filtered_df_way["Est"] == estimator]
+
+                        denominator_sfm = len(filtered_df_estimator)
+
+                        # Count feature occurrences
+                        feature_counts = Counter()
+                        for _, row in filtered_df_estimator.iterrows():
+                            features = list(chain.from_iterable(
+                                [list(index_obj) for index_obj in row["Sel_feat"]]
+                            ))
+                            feature_counts.update(features)
+
+                        # Process feature counts
+                        top_features = feature_counts.most_common(freq_feat)
+                        features, counts = zip(*top_features)
+
+                        normalized_counts = [count / (denominator_sfm) for count in counts]
+
+                        # Create plot
+                        fig = go.Figure()
+                        fig.add_trace(go.Bar(
+                            x=features,
+                            y=normalized_counts,
+                            marker=dict(color="skyblue"),
+                            text=[f"{count:.2f}" for count in normalized_counts],
+                            textposition='auto'
+                        ))
+
+                        # Configure layout
+                        fig.update_layout(
+                            title=f"Histogram of Selected Features ({estimator})",
+                            xaxis_title="Features",
+                            yaxis_title="Normalized Counts",
+                            xaxis_tickangle=-90,
+                            bargap=0.2,
+                            template="plotly_white",
+                            width=min(max(1000, freq_feat * 20), 2000),
+                            height=700
+                        )
+
+                        # Save plot
+                        fig.write_image(filtered_df_estimator['Histogram_path'].iloc[0])
+                        logging.info(f"Histogram saved to {filtered_df_way['Histogram_path'].iloc[0]}")
+
+                        # Add the estimator, the features and the counts to the dictionary
+                        frfs_dct[f'{estimator}_{selection_number}'] = {
+                            "features": features,
+                            "counts": normalized_counts,
+                            "selection_way": selection_way
+                        }
+                else:
+                    # Find counts for all estimators
+                    denominator = len(filtered_df_way)
+
+                    # Count feature occurrences
+                    feature_counts = Counter()
+                    for _, row in filtered_df_way.iterrows():
+                        features = list(chain.from_iterable(
+                            [list(index_obj) for index_obj in row["Sel_feat"]]
+                        ))
+                        feature_counts.update(features)
+
+                    # Process feature counts
+                    top_features = feature_counts.most_common(freq_feat)
+                    features, counts = zip(*top_features)
+
+                    normalized_counts = [count / (denominator) for count in counts]
+
+                    # Create plot
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(
+                        x=features,
+                        y=normalized_counts,
+                        marker=dict(color="skyblue"),
+                        text=[f"{count:.2f}" for count in normalized_counts],
+                        textposition='auto'
+                    ))
+
+                    # Configure layout
+                    fig.update_layout(
+                        title=f"Histogram of Selected Features ({selection_way})",
+                        xaxis_title="Features",
+                        yaxis_title="Normalized Counts",
+                        xaxis_tickangle=-90,
+                        bargap=0.2,
+                        template="plotly_white",
+                        width=min(max(1000, freq_feat * 20), 2000),
+                        height=700
+                    )
+
+                    # Save plot
+                    fig.write_image(filtered_df_way['Histogram_path'].iloc[0])
+                    logging.info(f"Histogram saved to {filtered_df_way['Histogram_path'].iloc[0]}")
+
+                    # Add the estimator, the features and the counts to the dictionary
+                    for estimator in filtered_df_way["Est"].unique():
+                        frfs_dct[f'{estimator}_{selection_number}'] = {
+                            "features": features,
+                            "counts": normalized_counts,
+                            "selection_way": selection_way
+                        }
+
+    # Save the dictionary to a JSON file it its not empty
+    if frfs_dct:
+        with open(save_json_path, "w") as json_file:
+            json.dump(frfs_dct, json_file, indent=4)

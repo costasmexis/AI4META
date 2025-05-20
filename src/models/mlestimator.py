@@ -203,6 +203,8 @@ class MachineLearningEstimator(DataProcessor):
 
         # Create and evaluate final model
         self.best_model = _create_model_instance(config.estimator_name, self.best_params)
+
+        
         
         # Apply evaluatuin in the final model
         scores_df, shaps_array = _evaluate(X, self.y, self.best_model, self.best_params, config, self)

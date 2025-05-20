@@ -50,6 +50,7 @@ class ModelSelectionConfig:
     dataset_csv_name: Optional[str] = None
     dataset_histogram_name: Optional[str] = None
     dataset_plot_name: Optional[str] = None
+    dataset_json_name: Optional[str] = None
     
     # Validation helper variables
     _logger: Optional[logging.Logger] = field(default=None, repr=False)
@@ -233,8 +234,13 @@ class ModelSelectionConfig:
         # Histogram results directory
         results_hist_dir = "results/histograms/"
         os.makedirs(results_hist_dir, exist_ok=True)
-        self.dataset_histogram_name = os.path.join(results_hist_dir, f"{base_name}_histogram.png")
-        
+        self.dataset_histogram_name = os.path.join(results_hist_dir, f"{base_name}_histogram")
+
+        # Json for feature importance
+        results_json_dir = "results/json/"
+        os.makedirs(results_json_dir, exist_ok=True)
+        self.dataset_json_name = os.path.join(results_json_dir, f"{base_name}_frfs.json")
+
 @dataclass
 class ModelEvaluationConfig:
     """Data class for model evaluation configuration with built-in validation"""

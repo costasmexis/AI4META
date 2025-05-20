@@ -196,6 +196,7 @@ class Experiment(Base):
     output_plot_path: Optional[str] = field(default=None)
     output_histogram_path: Optional[str] = field(default=None)
     output_parameters_path: Optional[str] = field(default=None)
+    output_json_frfs_path: Optional[str] = field(default=None)
     combination_id: Optional[int] = field(default=None)
     # Columns
     experiment_id = Column(Integer, primary_key=True, autoincrement=True)
@@ -229,6 +230,7 @@ class Experiment(Base):
     output_plot_path = Column(String)
     output_histogram_path = Column(String)
     output_parameters_path = Column(String)
+    output_json_frfs_path = Column(String)
     combination_id = Column(Integer)
     
     # Relationships

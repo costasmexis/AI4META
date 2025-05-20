@@ -184,7 +184,8 @@ class MLSelector(DataProcessor):
                             "MS_Method": str(method),
                             "Hyp": np.array(df_inner[df_inner["Classifiers"] == classif]["Hyperparameters"].values),
                             "Sel_way": str(Way_of_Selection),
-                            "Fs_inner": 'none' if Way_of_Selection == 'none' or Way_of_Selection == 'sfm' else str(config.feature_selection_method),
+                            "Fs_inner": 'none' if Way_of_Selection == 'none' or Way_of_Selection == 'sfm' else \
+                            str(config.feature_selection_method),
                             "Fs_num": int(Numbers_of_Features),
                             "Sel_feat": list(filtered_features),
                             "Norm": str(config.normalization),
@@ -197,7 +198,10 @@ class MLSelector(DataProcessor):
                             "Inner_scoring": str(config.inner_scoring) if method == 'NestedCV' else '',
                             "Scoring": str(config.scoring),
                             "Inner_selection": str(inner),
-                            "Classif_rates": np.array(samples_classification_rates)
+                            "Classif_rates": np.array(samples_classification_rates),
+                            "Histogram_path": None if int(Numbers_of_Features) == self.X.shape[1] else \
+                                (str(config.dataset_histogram_name)+f'_{Way_of_Selection}_{Numbers_of_Features}.png' \
+                                if Way_of_Selection != 'sfm' else str(config.dataset_histogram_name)+f'_{classif}.png'),
                         }
                     )
                     # Update results with calculated metrics
@@ -211,9 +215,7 @@ class MLSelector(DataProcessor):
 
         # Plot histogram if required
         if config.num_features is not None or config.num_features < self.X.shape[1]:    
-            # Save the number that features selected
-            denomination = len(scores_dataframe[scores_dataframe['Sel_way'] != 'none'])
-            _histogram(scores_dataframe, config.dataset_histogram_name, freq_feat, denomination, self.X.shape[1])
+            _histogram(scores_dataframe, config.dataset_json_name , freq_feat, self.X.shape[1])
 
         # Generate performance plots
         if plot is not None:

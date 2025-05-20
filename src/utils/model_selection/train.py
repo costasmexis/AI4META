@@ -9,7 +9,6 @@ from typing import Union
 from src.utils.metrics.metrics import _calculate_metrics
 from src.utils.model_manipulation.inner_selection import _one_sem_model, _gso_model
 from src.utils.model_manipulation.model_instances import _create_model_instance
-from src.features.sfm import _sfm
 from src.constants.parameters_grid import optuna_grid
 from src.constants.translators import AVAILABLE_CLFS, SFM_COMPATIBLE_ESTIMATORS
 from src.data.process import DataProcessor

@@ -178,3 +178,7 @@ usr/*
 .python-version
 uv.lock
 pyproject.toml
+
+
+results/
+.DS_Store

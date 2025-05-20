@@ -1,9 +1,10 @@
 import os
 from typing import Optional, Dict, List, Any
 import pandas as pd
+import logging
 
 def _return_csv(
-    final_dataset_name: str,
+    csv_path: str,
     scores_dataframe: pd.DataFrame,
     extra_metrics: Optional[List[str]] = None,
     # filter_csv: Optional[Dict[str, Dict[str, float]]] = None,
@@ -17,8 +18,8 @@ def _return_csv(
 
     Parameters
     ----------
-    final_dataset_name : str
-        Base name for the output CSV file
+    csv_path : str
+        Base path for the output CSV file
     scores_dataframe : pd.DataFrame
         DataFrame containing the model evaluation results
     extra_metrics : list[str], optional
@@ -29,11 +30,8 @@ def _return_csv(
     save_csv : bool, default=False
         Whether to save the processed DataFrame to CSV
     """
-    # Construct output file path
-    results_path = f"{final_dataset_name}_outerloops_results.csv"
-
     # Define columns to remove
-    cols_to_drop = ["Classif_rates", "Clf", "Hyp", "Sel_feat"]
+    cols_to_drop = ["Classif_rates", "Clf", "Hyp", "Sel_feat", "Histogram_path"]
 
     # Add scoring-related columns if present
     if "Scoring" in scores_dataframe.columns:
@@ -63,7 +61,8 @@ def _return_csv(
 
     # Save to CSV if requested
     if save_csv:
-        statistics_dataframe.to_csv(results_path, index=False)
-        print(f"Results saved to: {results_path}")
+        statistics_dataframe.to_csv(csv_path, index=False)
+        logging.info(f"Results saved to: {csv_path}")
 
     return statistics_dataframe
+    

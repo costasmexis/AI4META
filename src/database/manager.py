@@ -75,7 +75,7 @@ class DatabaseManager:
             dataset, created = self._get_or_create(session, Dataset, dataset_name=dataset_name)
             if created:
                 session.commit()
-                self.logger.info(f"✓ Created new dataset with ID: {dataset.dataset_id}")
+                # self.logger.info(f"✓ Created new dataset with ID: {dataset.dataset_id}")
             return dataset.dataset_id
 
     def insert_classifier(self, estimator: str, inner_selection: Optional[str]) -> int:
@@ -86,7 +86,7 @@ class DatabaseManager:
             )
             if created:
                 session.commit()
-                self.logger.info(f"✓ Created new classifier with ID: {classifier.classifier_id}")
+                # self.logger.info(f"✓ Created new classifier with ID: {classifier.classifier_id}")
             return classifier.classifier_id
 
     def insert_feature_selection(self, way_of_selection: str, numbers_of_features: int, 
@@ -101,7 +101,7 @@ class DatabaseManager:
             )
             if created:
                 session.commit()
-                self.logger.info(f"✓ Created new feature selection with ID: {selection.selection_id}")
+                # self.logger.info(f"✓ Created new feature selection with ID: {selection.selection_id}")
             return selection.selection_id
 
     def insert_hyperparameters(self, hyperparameters: str) -> int:
@@ -112,7 +112,7 @@ class DatabaseManager:
             )
             if created:
                 session.commit()
-                self.logger.info(f"✓ Created new hyperparameters with ID: {params.hyperparameter_id}")
+                # self.logger.info(f"✓ Created new hyperparameters with ID: {params.hyperparameter_id}")
             return params.hyperparameter_id
 
     def insert_performance_metrics(self, metrics_dict: Dict[str, str]) -> int:
@@ -125,7 +125,7 @@ class DatabaseManager:
                 session.flush()
                 metrics_id = metrics.performance_id
                 session.commit()
-                self.logger.info(f"✓ Inserted performance metrics with ID: {metrics_id}")
+                # self.logger.info(f"✓ Inserted performance metrics with ID: {metrics_id}")
                 return metrics_id
             except SQLAlchemyError as e:
                 session.rollback()
@@ -141,7 +141,7 @@ class DatabaseManager:
             )
             if created:
                 session.commit()
-                self.logger.info(f"✓ Created new classification rates with ID: {rates.sample_rate_id}")
+                # self.logger.info(f"✓ Created new classification rates with ID: {rates.sample_rate_id}")
             return rates.sample_rate_id
 
     def insert_shap_values(self, shap_values: str) -> int:
@@ -153,7 +153,7 @@ class DatabaseManager:
                 session.flush()
                 shap_id = shap.shap_values_id
                 session.commit()
-                self.logger.info(f"✓ Inserted SHAP values with ID: {shap_id}")
+                # self.logger.info(f"✓ Inserted SHAP values with ID: {shap_id}")
                 return shap_id
             except SQLAlchemyError as e:
                 session.rollback()
@@ -169,7 +169,7 @@ class DatabaseManager:
                 session.flush()
                 experiment_id = experiment.experiment_id
                 session.commit()
-                self.logger.info(f"✓ Created new experiment with ID: {experiment_id}")
+                # self.logger.info(f"✓ Created new experiment with ID: {experiment_id}")
                 return experiment_id
             except SQLAlchemyError as e:
                 session.rollback()
@@ -206,7 +206,7 @@ class DatabaseManager:
                         session.add(feature_count)
                 
                 session.commit()
-                self.logger.info(f"✓ Inserted {len(feature_counts)} feature counts for experiment {experiment_id}")
+                # self.logger.info(f"✓ Inserted {len(feature_counts)} feature counts for experiment {experiment_id}")
             except SQLAlchemyError as e:
                 session.rollback()
                 self.logger.error(f"Failed to insert feature counts: {str(e)}")
@@ -320,8 +320,9 @@ class DatabaseManager:
                         experiment_data.update({
                             'model_selection_type': getattr(config, 'model_selection_type', None),
                             'output_csv_path': getattr(config, 'dataset_csv_name', None),
-                            'output_histogram_path': getattr(config, 'dataset_histogram_name', None),
+                            'output_histogram_path': row.get('Histogram_path'),
                             'output_plot_path': getattr(config, 'dataset_plot_name', None),
+                            'output_json_frfs_path': getattr(config, 'dataset_json_name', None),
                         })
                     
                     if is_model_evaluation:
