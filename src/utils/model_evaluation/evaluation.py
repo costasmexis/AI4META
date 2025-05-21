@@ -25,7 +25,6 @@ def _evaluate(
     X: pd.DataFrame,
     y: np.ndarray,
     best_model: Any,
-    best_params: Dict,
     config: Config,
     processor: DataProcessor
 
@@ -41,8 +40,6 @@ def _evaluate(
         Target labels
     best_model : Any
         Trained machine learning model
-    best_params : Dict
-        Best hyperparameters from model selection
     config : Dict
         Configuration dictionary containing evaluation settings
 

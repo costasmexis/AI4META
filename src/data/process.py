@@ -115,19 +115,21 @@ class DataProcessor(DataLoader):
             self._logged_operations[operation][method] = True
             self.logger.info(message)
 
-    def missing_values(self, X: pd.DataFrame) -> pd.DataFrame:
+    def missing_values(self, X: pd.DataFrame, y: pd.Series) -> Tuple[pd.DataFrame, pd.Series]:
         """
         Handle missing values in the dataset.
 
         Parameters
         ----------
         X : DataFrame
-            Input data to process.
+            Input features to process.
+        y : Series, optional
+            Target variable, needed when dropping rows to maintain alignment.
 
         Returns
         -------
-        DataFrame
-            Data with missing values handled according to the specified method.
+        tuple
+            Processed X and y with missing values handled according to the specified method.
 
         Raises
         ------
@@ -138,6 +140,7 @@ class DataProcessor(DataLoader):
             raise ValueError("Input data X cannot be None")
             
         X_result = X.copy()  # Create a copy to avoid modifying the original
+        y_result = y.copy() 
         
         total_missing = X_result.isnull().sum().sum()
         if total_missing > 0:
@@ -146,7 +149,15 @@ class DataProcessor(DataLoader):
         # Apply the specified method
         if self.mv_method == "drop":
             initial_rows = len(X_result)
-            X_result = X_result.dropna()
+            # Keep track of indices to be dropped
+            rows_to_drop = X_result.isnull().any(axis=1)
+            
+            # Apply the drop
+            X_result = X_result.loc[~rows_to_drop]
+            
+            # Also adjust y
+            y_result = y_result.loc[~rows_to_drop]
+                
             self._log_once('missing_values', self.mv_method, f"✓ Dropped {initial_rows - len(X_result)} rows with missing values")
         elif self.mv_method in ["mean", "median", "0"]:
             if self.mv_method == "0":
@@ -160,7 +171,7 @@ class DataProcessor(DataLoader):
         else:
             raise Exception(f"Unsupported method: {self.mv_method}. Use 'drop', 'mean', 'median', '0', or None")
         
-        return X_result
+        return X_result, y_result
     
     def normalize_ms(self, X_train: pd.DataFrame, X_test: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
@@ -407,6 +418,7 @@ class DataProcessor(DataLoader):
         X: pd.DataFrame = None,
         y: np.ndarray = None,
         X_test: pd.DataFrame = None,
+        y_test: np.ndarray = None,
         num_features: Optional[int] = None,
         features_name_list: Optional[List[str]] = None,
         random_state: int = 42,
@@ -471,6 +483,7 @@ class DataProcessor(DataLoader):
                 X_train=X, 
                 y_train=y, 
                 X_test=X_test, 
+                y_test=y_test, 
                 random_state=random_state, 
                 num_features=num_features,
                 sfm=sfm,
@@ -575,8 +588,8 @@ class DataProcessor(DataLoader):
         X_normalized = self.normalize(X_selected)
         
         # Handle missing values
-        X_cleaned = self.missing_values(X_normalized)
-        
+        X_cleaned, y_cleaned = self.missing_values(X_normalized, y)
+
         # Feature selection
         if features_name_list is not None:
             feature_indicator = len(features_name_list)
@@ -591,7 +604,7 @@ class DataProcessor(DataLoader):
                 estimator_name=estimator_name,
                 X_train=X_cleaned,
                 X_test=None,
-                y_train=y,
+                y_train=y_cleaned,
                 num_features=num_features
             )
             self._log_once('feature_selection', 'sfm', 
@@ -599,7 +612,7 @@ class DataProcessor(DataLoader):
         else:
             selected_features = self.feature_selection(
                 X=X_cleaned,
-                y=y,
+                y=y_cleaned,
                 num_features=num_features
             )
             X_cleaned = X_cleaned[selected_features]
@@ -607,17 +620,18 @@ class DataProcessor(DataLoader):
         
         # Apply class balancing
         if self.class_balance_method is not None:
-            X_cleaned, y = self.class_balance_fnc(
-                X=X_cleaned, y=y, random_state=random_state
+            X_cleaned, y_cleaned = self.class_balance_fnc(
+                X=X_cleaned, y=y_cleaned, random_state=random_state
             )
 
-        return X_cleaned, y, feature_indicator
+        return X_cleaned, y_cleaned, feature_indicator
 
     def process_ms(
         self,
         X_train: pd.DataFrame,
         y_train: np.ndarray,
         X_test: pd.DataFrame,
+        y_test: np.ndarray,
         random_state: int,
         num_features: Optional[int] = None,
         sfm: Optional[bool] = False,
@@ -653,8 +667,8 @@ class DataProcessor(DataLoader):
         X_train_normalized, X_test_normalized = self.normalize_ms(X_train, X_test)
         
         # Handle missing values
-        X_train_cleaned = self.missing_values(X_train_normalized)
-        X_test_cleaned = self.missing_values(X_test_normalized)
+        X_train_cleaned, y_train_cleaned = self.missing_values(X_train_normalized, y_train)
+        X_test_cleaned, y_test_cleaned = self.missing_values(X_test_normalized, y_test)
 
         # Feature selection
         if (num_features == X_train.shape[1]) or \
@@ -668,7 +682,7 @@ class DataProcessor(DataLoader):
                 estimator_name=estimator_name,
                 X_train=X_train_cleaned,
                 X_test=X_test_cleaned,
-                y_train=y_train,
+                y_train=y_train_cleaned,
                 num_features=num_features
             )
             self._log_once('feature_selection', 'sfm', 
@@ -676,7 +690,7 @@ class DataProcessor(DataLoader):
         else:
             selected_features = self.feature_selection(
                 X=X_train_cleaned,
-                y=y_train,
+                y=y_train_cleaned,
                 num_features=num_features
             )
             X_train_cleaned = X_train_cleaned[selected_features]
@@ -685,14 +699,14 @@ class DataProcessor(DataLoader):
 
         # Apply class balancing to training data only
         if self.class_balance_method is not None:
-            X_train_cleaned, y_train = self.class_balance_fnc(
+            X_train_cleaned, y_train_cleaned = self.class_balance_fnc(
                 X=X_train_cleaned, 
-                y=y_train, 
+                y=y_train_cleaned, 
                 random_state=random_state
-            )     
-            
-        return X_train_cleaned, y_train, X_test_cleaned, feature_indicator
-    
+            )
+
+        return X_train_cleaned, y_train_cleaned, X_test_cleaned, y_test_cleaned, feature_indicator
+
     def _validate_parameters(self):
         """
         Validate all parameters passed to the DataProcessor.

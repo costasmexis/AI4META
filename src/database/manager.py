@@ -233,7 +233,7 @@ class DatabaseManager:
             try:
                 # Determine the type of experiment
                 is_model_selection = hasattr(config, 'model_selection_type')
-                is_model_evaluation = hasattr(config, 'search_type')
+                is_model_evaluation = hasattr(config, 'evaluation')
 
                 max_combination_id = session.query(func.max(Experiment.combination_id)).scalar()
             
@@ -264,7 +264,8 @@ class DatabaseManager:
                     # Process feature selection - FIXED to not use way_of_inner_selection
                     selection_id = None
                     # Call insert_feature_selection with only two parameters
-                    selection_id = self.insert_feature_selection(row.get("Sel_way"), row.get("Fs_num"), row.get('Fs_inner'))
+                    if "Sel_way" in scores_dataframe.columns and "Fs_num" in scores_dataframe.columns:
+                        selection_id = self.insert_feature_selection(row.get("Sel_way"), row.get("Fs_num"), row.get('Fs_inner'))
 
                     # Process sample classification rates
                     sample_rate_id = None
@@ -295,8 +296,8 @@ class DatabaseManager:
                     experiment_data = {
                         'n_trials': getattr(config, 'n_trials', None),
                         'rounds': getattr(config, 'rounds', None),
-                        'feature_selection_type': row.get("Sel_way"),
-                        'feature_selection_method': row.get("Fs_inner"),
+                        'feature_selection_type': row.get("Sel_way",None),
+                        'feature_selection_method': row.get("Fs_inner",None),
                         'inner_scoring': getattr(config, 'inner_scoring', None),
                         'scoring': getattr(config, 'scoring', None),
                         'inner_splits': getattr(config, 'inner_splits', None),
@@ -326,13 +327,21 @@ class DatabaseManager:
                         })
                     
                     if is_model_evaluation:
+                        # Extract metadata_path and params_path from model_path if available
+                        model_path = getattr(config, 'model_path', None)
+                        metadata_path = None
+                        params_path = None
+                        if model_path:
+                            base, _ = os.path.splitext(model_path)
+                            metadata_path = f"{base}_metadata.json"
+                            params_path = f"{base}_params.json"
+
                         experiment_data.update({
-                            'search_type': getattr(config, 'search_type', None),
                             'output_csv_path': getattr(config, 'dataset_csv_name', None),
                             'output_plot_path': getattr(config, 'dataset_plot_name', None),
-                            'output_model_path': getattr(config, 'model_path', None),
-                            'output_metadata_path': getattr(config, 'metadata_path', None),
-                            'output_parameters_path': getattr(config, 'params_path', None),
+                            'output_model_path': model_path,
+                            'output_metadata_path': metadata_path,
+                            'output_parameters_path': params_path,
                         })
                     
                     # Insert experiment

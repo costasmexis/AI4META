@@ -64,8 +64,8 @@ def _fit(
             all_features = num_feature2_use!=X.shape[1]
 
             # Normalize the data
-            X_train_norm, y_train_norm, X_test_norm, feature_indicator = processor.process_data(
-                X_train, y_train, X_test, num_feature2_use, features_name_list=None, random_state=i
+            X_train_norm, y_train_norm, X_test_norm, y_test_norm, feature_indicator = processor.process_data(
+                X_train, y_train, X_test, y_test, num_feature2_use, features_name_list=None, random_state=i
             )
 
             for estimator_name in config.clfs:
@@ -73,20 +73,20 @@ def _fit(
 
                 # Handle SelectFromModel (SFM) for supported classifiers
                 if config.sfm and estimator_name in SFM_COMPATIBLE_ESTIMATORS and feature_indicator!= "none":
-                    X_train_norm_sfm, y_train_sfm, X_test_norm_sfm, _ = processor.process_data(
-                        X_train, y_train, X_test, num_feature2_use, features_name_list=None, random_state=i, sfm=config.sfm, estimator_name=estimator_name
+                    X_train_norm_sfm, y_train_sfm, X_test_norm_sfm, y_test_norm_sfm, feature_indicator_sfm = processor.process_data(
+                        X_train, y_train, X_test, y_test, num_feature2_use, features_name_list=None, random_state=i, sfm=config.sfm, estimator_name=estimator_name
                     )
 
-                    Xtrft, Xteft, ytr = X_train_norm_sfm, X_test_norm_sfm, y_train_sfm
+                    Xtrft, Xteft, ytr, yte = X_train_norm_sfm, X_test_norm_sfm, y_train_sfm, y_test_norm_sfm
                 else: 
-                    Xtrft, Xteft, ytr = X_train_norm, X_test_norm, y_train_norm
-                
+                    Xtrft, Xteft, ytr, yte = X_train_norm, X_test_norm, y_train_norm, y_test_norm
+
                 if method == 'rcv_accel':
                     _fit_cvdefault(
                         Xtrft,
                         Xteft,
                         ytr,
-                        y_test,
+                        yte,
                         config,
                         results,
                         estimator_name,
@@ -101,7 +101,7 @@ def _fit(
                         Xtrft,
                         Xteft,
                         ytr,
-                        y_test,
+                        yte,
                         config,
                         results,
                         i,

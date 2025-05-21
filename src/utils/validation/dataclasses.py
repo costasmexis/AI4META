@@ -242,41 +242,27 @@ class ModelSelectionConfig:
         self.dataset_json_name = os.path.join(results_json_dir, f"{base_name}_frfs.json")
 
 @dataclass
-class ModelEvaluationConfig:
-    """Data class for model evaluation configuration with built-in validation"""
-    
-    # Model selection parameters with default values
+class ModelTuning:
+    """Data class for model tuning configuration"""
     estimator_name: str = None
     search_type: str = 'bayesian'
-    evaluation: str = 'cv_rounds'
     normalization: str = 'minmax'
     class_balance: str = None
-    feature_selection_method: str = 'chi2'
-    feature_selection_type: str = 'mrmr'
     missing_values_method: str = 'median'
-    rounds: int = 20
-    num_features: Optional[int] = None
+    # feature_selection_method: str = 'chi2'
+    # feature_selection_type: str = 'mrmr'
     scoring: str = "matthews_corrcoef"
     splits: int = 5
     inner_selection: str = "validation_score"
-    sfm: bool = False
-    extra_metrics: List[str] = field(default_factory=lambda: ['roc_auc','recall', 'matthews_corrcoef', 'accuracy', 'balanced_accuracy',  
-                           'precision', 'f1', 'average_precision', 'specificity'])
     info_to_db: bool = False
     n_trials: int = 100
     processors: int = -1
-    save_model: bool = True
+    # save_model: bool = True
     param_grid: Optional[Dict] = None
-    calculate_shap: bool = False
-    boxplot: bool = False
     features_name_list: Optional[List[str]] = None
-    direction: str = "maximize"
-    sfm: bool = False
 
     # Derived attributes (will be set during validation)
     dataset_name: Optional[str] = None
-    dataset_csv_name: Optional[str] = None
-    dataset_plot_name: Optional[str] = None
     model_path: Optional[str] = None
     params_path: Optional[str] = None
     metadata_path: Optional[str] = None
@@ -284,7 +270,7 @@ class ModelEvaluationConfig:
    # Validation helper variables
     _logger: Optional[logging.Logger] = field(default=None, repr=False)
     _logged_messages: set = field(default_factory=set, repr=False)
-   
+
     def validate(self, X: pd.DataFrame, csv_dir: str) -> 'ModelEvaluationConfig':
         """
         Validate this configuration instance against the dataset and return self.
@@ -311,15 +297,6 @@ class ModelEvaluationConfig:
         # Validate estimator name
         self._validate_estimator_name()
         
-        # Validate number of features
-        self._validate_num_features(X)
-        
-        # Validate scoring metrics
-        self._validate_scoring_metrics()
-        
-        # Validate evaluation method
-        self._validate_evaluation_method()
-        
         # Validate inner selection method
         self._validate_inner_selection()
         
@@ -329,18 +306,12 @@ class ModelEvaluationConfig:
         # Validate parameter grid
         self._validate_param_grid()
 
-        # Validate direction for optimization
-        self._validate_direction()
-        
         # Extract dataset info
         self._extract_dataset_info(X, csv_dir)
 
         # Set result names
         self._set_result_names()
 
-        # Validate SFM (Sequential Feature Selection) setting
-        self._validate_sfm()
-        
         # Validate feature names list
         self._validate_features_name_list(X)
         
@@ -378,46 +349,6 @@ class ModelEvaluationConfig:
         else: 
             self.estimator = AVAILABLE_CLFS[self.estimator_name]
     
-    def _validate_num_features(self, X: pd.DataFrame) -> None:
-        """Validate number of features"""
-        if self.num_features is None:
-            self.num_features = X.shape[1]
-        elif not isinstance(self.num_features, int):
-            self._log_once("num_features must be an integer or None. Using all features.")
-            raise ValueError("num_features must be an integer or None.")
-        elif self.num_features > X.shape[1]:
-            self._log_once(f"num_features ({self.num_features}) is greater than the number of available features ({X.shape[1]}). "
-                            f"Using all features.")
-            raise ValueError(f"num_features ({self.num_features}) is greater than the number of available features ({X.shape[1]}).")
-        elif self.num_features <= 0:
-            self._log_once("num_features must be positive. Using all features.")
-            raise ValueError("num_features must be positive.")
-    
-    def _validate_scoring_metrics(self) -> None:
-        """Validate scoring metrics"""
-        valid_scorers = list(get_scorer_names()) + ["specificity"]
-        
-        if self.scoring not in valid_scorers:
-            raise ValueError(f"Invalid scoring metric: {self.scoring}. "
-                            f"Valid options: {valid_scorers}")
-            
-        # Ensure scoring is in extra_metrics
-        if self.scoring not in self.extra_metrics:
-            self.extra_metrics.insert(0, self.scoring)
-            
-        # Validate all metrics in extra_metrics
-        for metric in self.extra_metrics:
-            if metric not in valid_scorers:
-                self._log_once(f"Invalid metric in extra_metrics: {metric}. Removing it.")
-                self.extra_metrics.remove(metric)
-    
-    def _validate_evaluation_method(self) -> None:
-        """Validate evaluation method"""
-        valid_evaluation_methods = ["cv_rounds", "bootstrap", "oob", "train_test"]
-        if self.evaluation not in valid_evaluation_methods:
-            self._log_once(f"Invalid evaluation method: {self.evaluation}. Using default: cv_rounds")
-            self.evaluation = "cv_rounds"
-    
     def _validate_inner_selection(self) -> None:
         """Validate inner selection method"""
         valid_inner_selection_methods = ["validation_score", "one_sem", "gso_1", "gso_2", "one_sem_grd"]
@@ -454,13 +385,6 @@ class ModelEvaluationConfig:
             else:
                 self.param_grid = optuna_grid["SklearnParameterGrid"][self.estimator_name]
 
-    def _validate_direction(self) -> None:
-        """Validate direction for optimization"""
-        valid_directions = ["maximize", "minimize"]
-        if self.direction not in valid_directions:
-            self._log_once(f"Invalid direction: {self.direction}. Using default: maximize")
-            self.direction = "maximize"
-
     def _validate_features_name_list(self, X: pd.DataFrame) -> None:
         """Validate features names list"""
         if self.features_name_list is not None:
@@ -475,12 +399,6 @@ class ModelEvaluationConfig:
             if not self.features_name_list:
                 self._log_once("No valid features in features_name_list. Using all features.")
                 self.features_name_list = None
-    
-    def _validate_sfm(self) -> None:
-        """Validate SFM (Sequential Feature Selection) setting"""
-        if self.sfm not in [True, False]:
-            self._log_once(f"Invalid SFM value: {self.sfm}. Using default: False")
-            self.sfm = False
 
     def _extract_dataset_info(self, X: pd.DataFrame, csv_dir: str) -> None:
         """Extract and store dataset-related information"""
@@ -525,8 +443,212 @@ class ModelEvaluationConfig:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         final_name += f'_{timestamp}'
 
+        # Add tuning type
+        final_name += f"_TUNE_{self.search_type.upper()}"
+        
+        return final_name
+
+    def _set_result_names(self) -> None:
+        """Set paths for output files"""
+        # Get the base name
+        base_name = self._extract_final_name()
+        
+        # Model directory for saving trained models
+        # if self.save_model:
+        model_dir = "results/models/"
+        os.makedirs(model_dir, exist_ok=True)
+        self.model_path = os.path.join(model_dir, f"{base_name}_model.pkl")
+        self.params_path = os.path.join(model_dir, f"{base_name}_params.json")
+        self.metadata_path = os.path.join(model_dir, f"{base_name}_metadata.json")
+
+@dataclass
+class ModelEvaluationConfig:
+    """Data class for model evaluation configuration with built-in validation"""
+    
+    # Model selection parameters with default values
+    estimator_name: str = None
+    model_path: str = None
+    evaluation: str = 'cv_rounds'
+    normalization: str = 'minmax'
+    class_balance: str = None
+    feature_selection_method: str = 'chi2'
+    missing_values_method: str = 'median'
+    rounds: int = 20
+    splits: int = 5
+    scoring: str = "matthews_corrcoef"
+    extra_metrics: List[str] = field(default_factory=lambda: ['roc_auc','recall', 'matthews_corrcoef', 'accuracy', 'balanced_accuracy',  
+                           'precision', 'f1', 'average_precision', 'specificity'])
+    info_to_db: bool = False
+    calculate_shap: bool = False
+    boxplot: bool = False
+    features_name_list: Optional[List[str]] = None
+
+    # Derived attributes (will be set during validation)
+    dataset_name: Optional[str] = None
+    dataset_csv_name: Optional[str] = None
+    dataset_plot_name: Optional[str] = None
+
+   # Validation helper variables
+    _logger: Optional[logging.Logger] = field(default=None, repr=False)
+    _logged_messages: set = field(default_factory=set, repr=False)
+   
+    def validate(self, X: pd.DataFrame, csv_dir: str) -> 'ModelEvaluationConfig':
+        """
+        Validate this configuration instance against the dataset and return self.
+        
+        Parameters
+        ----------
+        X : DataFrame
+            Input features for validation
+        csv_dir : str
+            Path to the CSV file
+            
+        Returns
+        -------
+        ModelEvaluationConfig
+            Self, after validation (for method chaining)
+        """
+        # Setup logging if not already done
+        if self._logger is None:
+            self._logger = logging.getLogger(__name__)
+
+        # Validate model path
+        self._validate_model_path()
+        
+        # Validate scoring metrics
+        self._validate_scoring_metrics()
+        
+        # Validate evaluation method
+        self._validate_evaluation_method()
+        
+        # Extract dataset info
+        self._extract_dataset_info(X, csv_dir)
+
+        # Set result names
+        self._set_result_names()
+
+        # Validate feature names list
+        self._validate_features_name_list(X)
+        
+        return self
+    
+    def _log_once(self, message: str, level: str = 'warning') -> None:
+        """Log a message only if it hasn't been logged before."""
+        if message not in self._logged_messages:
+            if level == 'warning':
+                self._logger.warning(message)
+            elif level == 'error':
+                self._logger.error(message)
+            elif level == 'info':
+                self._logger.info(message)
+            self._logged_messages.add(message)
+
+    def _validate_model_path(self) -> None:
+        """Validate model path"""
+        if self.model_path is None:
+            self._log_once("No model path specified. You must provide a model path.", level='error')
+            raise ValueError("No model path specified. You must provide a model path.")
+        
+        if not os.path.exists(self.model_path):
+            self._log_once(f"Model file does not exist: {self.model_path}.", level='error')
+            raise FileNotFoundError(f"Model file does not exist: {self.model_path}.")
+    
+    def _validate_scoring_metrics(self) -> None:
+        """Validate scoring metrics"""
+        valid_scorers = list(get_scorer_names()) + ["specificity"]
+        
+        if self.scoring not in valid_scorers:
+            raise ValueError(f"Invalid scoring metric: {self.scoring}. "
+                            f"Valid options: {valid_scorers}")
+            
+        # Ensure scoring is in extra_metrics
+        if self.scoring not in self.extra_metrics:
+            self.extra_metrics.insert(0, self.scoring)
+            
+        # Validate all metrics in extra_metrics
+        for metric in self.extra_metrics:
+            if metric not in valid_scorers:
+                self._log_once(f"Invalid metric in extra_metrics: {metric}. Removing it.")
+                self.extra_metrics.remove(metric)
+    
+    def _validate_evaluation_method(self) -> None:
+        """Validate evaluation method"""
+        valid_evaluation_methods = ["cv_rounds", "bootstrap", "oob", "train_test"]
+        if self.evaluation not in valid_evaluation_methods:
+            self._log_once(f"Invalid evaluation method: {self.evaluation}. Using default: cv_rounds")
+            self.evaluation = "cv_rounds"
+
+    def _validate_features_name_list(self, X: pd.DataFrame) -> None:
+        """Validate features names list"""
+        if self.features_name_list is not None:
+            # Check if all feature names exist in the dataset
+            invalid_features = [f for f in self.features_name_list if f not in X.columns]
+            if invalid_features:
+                self._log_once(f"Invalid feature names: {invalid_features}. These features do not exist in the dataset.")
+                # Remove invalid features
+                self.features_name_list = [f for f in self.features_name_list if f in X.columns]
+                
+            # Check if the list is empty after removing invalid features
+            if not self.features_name_list:
+                self._log_once("No valid features in features_name_list. Using all features.")
+                self.features_name_list = None
+
+    def _extract_dataset_info(self, X: pd.DataFrame, csv_dir: str) -> None:
+        """Extract and store dataset-related information"""
+        # Extract dataset name from path
+        pattern = r"[^/]+(?=\.csv)"
+        match = re.search(pattern, csv_dir)
+        self.dataset_name = match.group() if match else ''
+        
+        # Set features information
+        self.all_features = X.shape[1]
+
+    def _extract_final_name(self) -> str:
+        """
+        Extract the final name for plots, CSVs, etc., including non-default parameter values.
+        
+        Returns
+        -------
+        str
+            Formatted name including dataset name and non-default parameters
+        """
+
+        # Try to extract estimator_name from model_path using AVAILABLE_CLFS and regex
+        estimator_name = None
+        if self.model_path:
+            for clf_name in AVAILABLE_CLFS:
+                # Use word boundaries to avoid partial matches
+                pattern = rf"\b{re.escape(clf_name)}\b"
+                if re.search(pattern, self.model_path):
+                    estimator_name = clf_name
+                    break
+
+        # Start with dataset name and estimator
+        final_name = f"{self.dataset_name}_{estimator_name}"
+        
+        # Get default values from constants (assuming DEFAULT_CONFIG_EVAL exists)
+        defaults = DEFAULT_CONFIG_EVAL
+
+        # Add non-default configurations
+        for param, value in defaults.items():
+            if param in vars(self) and getattr(self, param) != value:
+                param_value = getattr(self, param)
+                # Handle special cases like lists, dicts
+                if isinstance(param_value, list):
+                    param_value = "_".join(str(x) for x in param_value[:3])  # Limit to first 3 elements
+                    if len(getattr(self, param)) > 3:
+                        param_value += "_etc"
+                elif isinstance(param_value, dict):
+                    param_value = "custom_dict"
+                
+                final_name += f"_{param}_{param_value}"
+
+        # Add timestamp to ensure uniqueness
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        final_name += f'_{timestamp}'
+
         # Add evaluation type
-        final_name += f"_EVAL_{self.search_type.upper()}"
+        final_name += f"_EVAL_{self.evaluation.upper()}"
         
         return final_name
 
@@ -544,11 +666,3 @@ class ModelEvaluationConfig:
         results_image_dir = "results/images/model_evaluation/"
         os.makedirs(results_image_dir, exist_ok=True)
         self.dataset_plot_name = os.path.join(results_image_dir, f"{base_name}_plot.png")
-        
-        # Model directory for saving trained models
-        if self.save_model:
-            model_dir = "results/models/"
-            os.makedirs(model_dir, exist_ok=True)
-            self.model_path = os.path.join(model_dir, f"{base_name}_model.pkl")
-            self.params_path = os.path.join(model_dir, f"{base_name}_params.json")
-            self.metadata_path = os.path.join(model_dir, f"{base_name}_metadata.json")
