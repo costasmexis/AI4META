@@ -9,6 +9,7 @@ from scipy.spatial.distance import squareform
 from scipy.stats import pearsonr
 from sklearn.preprocessing import MinMaxScaler
 from src.data.process import DataProcessor
+from sklearn.decomposition import PCA
 
 
 class DataExplorer(DataProcessor):
@@ -17,7 +18,8 @@ class DataExplorer(DataProcessor):
                  fs_method='mrmr',
                  inner_fs_method='chi2',
                  mv_method='median',
-                 class_balance=None):
+                 class_balance_method=None  
+                ):
         
         # Call the parent constructor with all the processing parameters
         super().__init__(
@@ -28,7 +30,7 @@ class DataExplorer(DataProcessor):
             fs_method=fs_method,
             inner_fs_method=inner_fs_method,
             mv_method=mv_method,
-            class_balance=class_balance,
+            class_balance_method=class_balance_method,  
             preprocess_mode='general'
         )
         
@@ -48,6 +50,50 @@ class DataExplorer(DataProcessor):
         data = X_processed.copy()
         data["labels"] = y_processed
         return data
+    
+    def pca_plot(self, features_names=None, num_features=None) -> None:
+        """
+        Create a PCA plot to visualize the distribution of samples in the feature space.
+        
+        Parameters
+        ----------
+        features_names : list, optional
+            List of feature names to include in the PCA plot. If None, all features are used.
+        num_features : int, optional
+            Number of features to include in the PCA plot based on feature importance. 
+            If None, all features are used.
+        """
+        
+        # Preprocess data
+        data_scaled = self.plot_preprocess(
+            features_names=features_names,
+            num_features= num_features if num_features is not None else self.X.shape[1]
+        )
+        
+        # Perform PCA
+        pca = PCA()
+        principal_components = pca.fit_transform(data_scaled.drop(columns=['labels']))
+        
+        # Create a DataFrame for the PCA results
+        pca_df = pd.DataFrame(data=principal_components, columns=[f'PC{i+1}' for i in range(principal_components.shape[1])])
+        pca_df['labels'] = data_scaled['labels'].values
+        
+        # Plot PCA results
+        plt.figure(figsize=(10, 8))
+        sns.scatterplot(x='PC1', y='PC2', hue='labels', data=pca_df)
+        plt.title('PCA of Features')
+        plt.xlabel('Principal Component 1')
+        plt.ylabel('Principal Component 2')
+        plt.legend(title='Labels')
+        
+        # Save the figure
+        save_dir = os.path.join("results", "images", "pca")
+        os.makedirs(save_dir, exist_ok=True)
+        
+        save_path = os.path.join(save_dir, "pca_plot.png")
+        plt.savefig(save_path, dpi=300)
+        
+        print(f"PCA plot saved to: {save_path}")
 
     def hierarchical_correlation_plot(
         self,
