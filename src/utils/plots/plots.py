@@ -331,3 +331,4 @@ def _histogram(
     if frfs_dct:
         with open(save_json_path, "w") as json_file:
             json.dump(frfs_dct, json_file, indent=4)
+        logging.info(f"Histogram data saved to {save_json_path}")

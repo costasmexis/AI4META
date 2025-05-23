@@ -161,7 +161,8 @@ class MachineLearningEstimator(DataProcessor):
 
         else:          
             from optuna.logging import set_verbosity, ERROR
-            set_verbosity(ERROR)
+            # set_verbosity(ERROR)
+            set_verbosity(optuna.logging.INFO)
             
             search_cv = optuna.integration.OptunaSearchCV(
                 estimator=config.estimator,
@@ -244,6 +245,7 @@ class MachineLearningEstimator(DataProcessor):
             estimator_name=None,
             model_path=model_path,
             evaluation=evaluation,
+            calculate_shap=calculate_shap,
             rounds=rounds,
             splits=splits,
             scoring=scoring,

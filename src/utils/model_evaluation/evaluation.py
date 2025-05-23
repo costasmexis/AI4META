@@ -15,6 +15,7 @@ from src.utils.metrics.metrics import _calculate_metrics
 from src.utils.metrics.shap import _calc_shap
 from src.utils.validation.dataclasses import ModelEvaluationConfig as Config
 from src.data.process import DataProcessor
+import tqdm
 
 
 # Global logging configuration
@@ -89,7 +90,7 @@ def _cv_rounds_validation(
     extra_metrics_scores = {extra: [] for extra in config.extra_metrics}
     
     # Perform CV rounds
-    for i in range(config.rounds):
+    for i in tqdm.tqdm(range(config.rounds), desc="CV rounds"):
         cv_splits = StratifiedKFold(
             n_splits=config.splits,
             shuffle=True,

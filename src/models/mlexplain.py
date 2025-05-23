@@ -152,7 +152,7 @@ class MLExplainer(MachineLearningEstimator):
         
         return self.shap_values
 
-    def plot_shap_values(self, max_display: int = 10, plot_type: str = "summary", label: int = 1) -> None:
+    def plot_shap_values(self, max_display: int = 10, features_name_list: list = None, plot_type: str = "summary", label: int = 1) -> None:
         """
         Plot SHAP values using various visualization types.
 
@@ -173,22 +173,27 @@ class MLExplainer(MachineLearningEstimator):
         if self.shap_values is None:
             raise ValueError("No SHAP values available. Run calculate_shap_values() first.")
             
+        if features_name_list is not None:
+            X = self.X[features_name_list]
+        else:
+            X = self.X
+        
         # Ensure shap_values is in the proper format
         if not isinstance(self.shap_values, shap.Explanation):
             self.logger.info("Converting SHAP values to Explanation object")
             self.shap_values = shap.Explanation(
                 values=self.shap_values,
-                feature_names=self.X.columns,
-                data=self.X
+                feature_names=X.columns,
+                data=X
             )
-
+        
         if plot_type == "summary":
             try:
                 # Try to plot for specific class label
                 shap.summary_plot(
                     shap_values=self.shap_values[:, :, label] if len(self.shap_values.shape) == 3 else self.shap_values,
-                    features=self.X,
-                    feature_names=self.X.columns,
+                    features=X,
+                    feature_names=X.columns,
                     max_display=max_display,
                     sort=True,
                 )
@@ -197,8 +202,8 @@ class MLExplainer(MachineLearningEstimator):
                 self.logger.info(f"Could not create specific label plot. Showing summary plot for all data.")
                 shap.summary_plot(
                     shap_values=self.shap_values.values if hasattr(self.shap_values, 'values') else self.shap_values,
-                    features=self.X,
-                    feature_names=self.X.columns,
+                    features=X,
+                    feature_names=X.columns,
                     max_display=max_display,
                     sort=True,
                 )
