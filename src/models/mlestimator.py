@@ -233,7 +233,7 @@ class MachineLearningEstimator(DataProcessor):
         evaluation: str = 'cv_rounds',
         rounds: int = 20,
         splits: int = 5,
-        scoring: str = "matthews_corrcoef",
+        # scoring: str = "matthews_corrcoef",
         info_to_db: bool = False,
         calculate_shap: bool = False,
         boxplot: bool = True,
@@ -248,7 +248,7 @@ class MachineLearningEstimator(DataProcessor):
             calculate_shap=calculate_shap,
             rounds=rounds,
             splits=splits,
-            scoring=scoring,
+            # scoring=scoring,
             normalization=self.normalization,
             missing_values_method=self.mv_method,
             extra_metrics=self.extra_metrics,
@@ -290,7 +290,7 @@ class MachineLearningEstimator(DataProcessor):
                 "Miss_vals": config.missing_values_method,
                 "Eval": config.evaluation,
                 "Class_blnc": config.class_balance,
-                "Scoring": config.scoring
+                # "Scoring": config.scoring
             }
         ]
         stat_lst = _calc_metrics_stats(config.extra_metrics, results=results, indices=scores_df)

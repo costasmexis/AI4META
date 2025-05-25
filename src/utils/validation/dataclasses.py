@@ -475,7 +475,7 @@ class ModelEvaluationConfig:
     missing_values_method: str = 'median'
     rounds: int = 20
     splits: int = 5
-    scoring: str = "matthews_corrcoef"
+    # scoring: str = "matthews_corrcoef"
     extra_metrics: List[str] = field(default_factory=lambda: ['roc_auc','recall', 'matthews_corrcoef', 'accuracy', 'balanced_accuracy',  
                            'precision', 'f1', 'average_precision', 'specificity'])
     info_to_db: bool = False
@@ -515,8 +515,8 @@ class ModelEvaluationConfig:
         # Validate model path
         self._validate_model_path()
         
-        # Validate scoring metrics
-        self._validate_scoring_metrics()
+        # # Validate scoring metrics
+        # self._validate_scoring_metrics()
         
         # Validate evaluation method
         self._validate_evaluation_method()
@@ -553,23 +553,23 @@ class ModelEvaluationConfig:
             self._log_once(f"Model file does not exist: {self.model_path}.", level='error')
             raise FileNotFoundError(f"Model file does not exist: {self.model_path}.")
     
-    def _validate_scoring_metrics(self) -> None:
-        """Validate scoring metrics"""
-        valid_scorers = list(get_scorer_names()) + ["specificity"]
+    # def _validate_scoring_metrics(self) -> None:
+    #     """Validate scoring metrics"""
+    #     valid_scorers = list(get_scorer_names()) + ["specificity"]
         
-        if self.scoring not in valid_scorers:
-            raise ValueError(f"Invalid scoring metric: {self.scoring}. "
-                            f"Valid options: {valid_scorers}")
+    #     if self.scoring not in valid_scorers:
+    #         raise ValueError(f"Invalid scoring metric: {self.scoring}. "
+    #                         f"Valid options: {valid_scorers}")
             
-        # Ensure scoring is in extra_metrics
-        if self.scoring not in self.extra_metrics:
-            self.extra_metrics.insert(0, self.scoring)
+    #     # Ensure scoring is in extra_metrics
+    #     if self.scoring not in self.extra_metrics:
+    #         self.extra_metrics.insert(0, self.scoring)
             
-        # Validate all metrics in extra_metrics
-        for metric in self.extra_metrics:
-            if metric not in valid_scorers:
-                self._log_once(f"Invalid metric in extra_metrics: {metric}. Removing it.")
-                self.extra_metrics.remove(metric)
+    #     # Validate all metrics in extra_metrics
+    #     for metric in self.extra_metrics:
+    #         if metric not in valid_scorers:
+    #             self._log_once(f"Invalid metric in extra_metrics: {metric}. Removing it.")
+    #             self.extra_metrics.remove(metric)
     
     def _validate_evaluation_method(self) -> None:
         """Validate evaluation method"""

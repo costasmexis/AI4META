@@ -38,6 +38,9 @@ class DataExplorer(DataProcessor):
         """
         Preprocess data for plotting using the functionality from DataProcessor.
         """
+        if features_names is None and num_features is None:
+            # If no features are specified, use all features
+            num_features = self.X.shape[1]
         # Use the process_general method from DataProcessor
         X_processed, y_processed, _ = self.process_general(
             X=self.X,
