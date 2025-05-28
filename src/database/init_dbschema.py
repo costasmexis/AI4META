@@ -5,7 +5,10 @@ from typing import Optional
 
 from src.database.manager import DatabaseManager
 
-def init_database(db_name: Optional[str] = None, db_folder: str = "database") -> str:
+def init_database(
+        db_name: Optional[str] = None, 
+        db_folder: str = "database"
+    ) -> str:
     """
     Initialize a new SQLite database with SQLAlchemy schema.
 

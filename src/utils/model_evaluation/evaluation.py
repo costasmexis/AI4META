@@ -28,10 +28,9 @@ def _evaluate(
     best_model: Any,
     config: Config,
     processor: DataProcessor
-
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     """
-    Evaluate a machine learning model using various validation methods.
+    Evaluate a machine learning model using various evaluation methods.
 
     Parameters
     ----------
@@ -53,27 +52,62 @@ def _evaluate(
     -----
     Supports multiple evaluation methods:
     - cv_rounds: Cross-validation with multiple rounds
-    - bootstrap: Bootstrap validation
-    - oob: Out-of-bag validation
-    - train_test: Train-test split validation
+    - bootstrap: Bootstrap evaluation
+    - oob: Out-of-bag evaluation
+    - train_test: Train-test split evaluation
     """
     x_shap = np.zeros((X.shape[0], X.shape[1]))
 
-    if config.evaluation == "cv_rounds":
-        extra_metrics_scores, x_shap = _cv_rounds_validation(X, y, best_model, config, x_shap)
+    if config.evaluation == "prefitted":
+        extra_metrics_scores, x_shap = _prefitted_single_evaluation(X, y, best_model, config, x_shap)
+    elif config.evaluation == "cv_rounds":
+        extra_metrics_scores, x_shap = _cv_rounds_evaluation(X, y, best_model, config, x_shap)
     elif config.evaluation == "bootstrap":
-        extra_metrics_scores = _bootstrap_validation(X, y, best_model, config.extra_metrics)
+        extra_metrics_scores = _bootstrap_evaluation(X, y, best_model, config.extra_metrics)
     elif config.evaluation == "oob":
-        extra_metrics_scores = _oob_validation(X, y, best_model, config.extra_metrics)
+        extra_metrics_scores = _oob_evaluation(X, y, best_model, config.extra_metrics)
     elif config.evaluation == "train_test":
-        extra_metrics_scores = _train_test_validation(X, y, best_model, processor, config.extra_metrics)
+        extra_metrics_scores = _train_test_evaluation(X, y, best_model, processor, config.extra_metrics)
     else:
         raise ValueError(f"Invalid evaluation method: {config.evaluation}")
 
     logger.info("✓ Evaluation completed")
     return pd.DataFrame(extra_metrics_scores), x_shap
 
-def _cv_rounds_validation(
+def _prefitted_single_evaluation(
+    X: pd.DataFrame,
+    y: np.ndarray,
+    model: Any,
+    config: Config,
+    x_shap: Optional[np.ndarray]
+) -> Tuple[Dict, np.ndarray]:
+    """
+    Evaluate a pre-fitted model on the provided dataset.
+
+    This method calculates specified extra metrics and SHAP values
+    for a model that has already been trained.
+    """
+
+    extra_metrics_scores = {extra: [] for extra in config.extra_metrics} if config.extra_metrics else {}
+
+    extra_metrics_scores = _calculate_metrics(
+        config.extra_metrics,
+        extra_metrics_scores,
+        model,
+        X,
+        y
+    )
+    logger.info("✓ Prefitted model metrics calculated")
+
+    # If SHAP values are requested, calculate them
+    if config.calculate_shap:
+        shap_values = _calc_shap(X, X, model)
+        x_shap += shap_values
+
+    logger.info("✓ Prefitted evaluation complete")
+    return extra_metrics_scores, x_shap
+
+def _cv_rounds_evaluation(
     X: pd.DataFrame,
     y: np.ndarray,
     model: Any,
@@ -124,7 +158,7 @@ def _cv_rounds_validation(
     logger.info(f"✓ Completed {config.rounds} CV rounds")
     return extra_metrics_scores, x_shap
 
-def _bootstrap_validation(
+def _bootstrap_evaluation(
     X: pd.DataFrame,
     y: np.ndarray,
     model: Any,
@@ -132,7 +166,7 @@ def _bootstrap_validation(
     n_iterations: int = 100
 ) -> Dict:
     """
-    Perform bootstrap validation for model evaluation.
+    Perform bootstrap evaluation for model evaluation.
 
     This method uses bootstrapping to create multiple training sets
     and evaluates the model on the out-of-bootstrap samples.
@@ -142,7 +176,7 @@ def _bootstrap_validation(
     extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
     
     # Perform bootstrap iterations
-    for i in tqdm(range(n_iterations), desc="Bootstrap validation"):
+    for i in tqdm(range(n_iterations), desc="Bootstrap evaluation"):
         # Create bootstrap sample
         X_train_res, y_train_res = resample(X_train, y_train, random_state=i)
         
@@ -157,10 +191,10 @@ def _bootstrap_validation(
             y_test
         )
 
-    logger.info("✓ Bootstrap validation complete")
+    logger.info("✓ Bootstrap evaluation complete")
     return extra_metrics_scores
 
-def _oob_validation(
+def _oob_evaluation(
     X: pd.DataFrame,
     y: np.ndarray,
     model: Any,
@@ -168,14 +202,14 @@ def _oob_validation(
     n_iterations: int = 100
 ) -> Dict:
     """
-    Perform out-of-bag validation for model evaluation.
+    Perform out-of-bag evaluation for model evaluation.
 
     This method evaluates the model using samples that were not used
     in the bootstrap training sets.
     """    
     extra_metrics_scores = {extra: [] for extra in extra_metrics} if extra_metrics else {}
 
-    for i in tqdm(range(n_iterations), desc="OOB validation"):
+    for i in tqdm(range(n_iterations), desc="OOB evaluation"):
         # Generate random indices for bootstrap sample
         rng = np.random.default_rng(i)
         indices = rng.choice(range(X.shape[0]), size=X.shape[0], replace=True)
@@ -196,10 +230,10 @@ def _oob_validation(
             y_test
         )
 
-    logger.info("✓ OOB validation complete")
+    logger.info("✓ OOB evaluation complete")
     return extra_metrics_scores
 
-def _train_test_validation(
+def _train_test_evaluation(
     X: pd.DataFrame,
     y: np.ndarray,
     model: Any,
@@ -209,7 +243,7 @@ def _train_test_validation(
     test_size: float = 0.3
 ) -> Dict:
     """
-    Perform train-test split validation with optional class balancing.
+    Perform train-test split evaluation with optional class balancing.
 
     This method creates multiple stratified train-test splits and
     optionally applies class balancing to the training data.
@@ -218,7 +252,7 @@ def _train_test_validation(
     sss = StratifiedShuffleSplit(n_splits=n_splits, test_size=test_size, random_state=0)
 
     for i, (train_index, test_index) in enumerate(
-        tqdm(sss.split(X, y), desc="Train-test validation", total=n_splits)
+        tqdm(sss.split(X, y), desc="Train-test evaluation", total=n_splits)
     ):
         # Apply class balancing if specified
         X_train, y_train = processor.class_balance_fnc(
@@ -239,5 +273,5 @@ def _train_test_validation(
             y_test
         )
 
-    logger.info("✓ Train-test validation complete")
+    logger.info("✓ Train-test evaluation complete")
     return extra_metrics_scores

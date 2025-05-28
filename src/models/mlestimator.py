@@ -5,7 +5,7 @@ import optuna
 import pandas as pd
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, StratifiedKFold
 import warnings
-from typing import Optional, Dict, Any, List, Union, Tuple
+from typing import Optional, Dict, Any, List, Union, Tuple, Literal
 import pickle
 import json
 import dataclasses
@@ -23,6 +23,9 @@ from src.utils.model_manipulation.model_instances import _create_model_instance
 from src.utils.model_manipulation.inner_selection import _one_sem_model, _gso_model
 from src.utils.model_evaluation.evaluation import _evaluate
 from src.utils.plots.plots import _plot_per_metric
+
+from optuna.logging import set_verbosity, ERROR
+from tqdm import tqdm
 # from src.db.input import insert_to_db
 # from src.utils.statistics.metrics_stats import _calc_metrics_stats
 
@@ -97,20 +100,22 @@ class MachineLearningEstimator(DataProcessor):
         param_grid: Optional[Dict] = None,
         inner_selection: str = "validation_score",
         info_to_db: bool = False,
-        processors: int = -1
-        # save_model: bool = True
-    ):
-        """Perform hyperparameter optimization using specified search methods."""
-        
+        processors: int = -1,
+        save_fitted_model: bool = True
+    ) -> Dict[Literal['model_path', 'params_path', 'fitted_model_path', 'metadata_path'], str]:
+        """Perform hyperparameter optimization using specified search methods.
+
+        Returns:
+            Dict[str, str]: Dictionary with keys: 'model_path', 'params_path', 
+                        'fitted_model_path', 'metadata_path'
+        """
+
         # Create and validate the configuration
         config = ModelTuning(
             search_type=search_type,
             scoring=scoring,
             normalization=self.normalization,
-            # feature_selection_type=self.fs_method,
-            # feature_selection_method=self.inner_fs_method,
             missing_values_method=self.mv_method,
-            # extra_metrics=self.extra_metrics,
             class_balance=self.class_balance_method,
             features_name_list=features_name_list,
             splits=splits,
@@ -119,8 +124,8 @@ class MachineLearningEstimator(DataProcessor):
             param_grid=param_grid,
             inner_selection=inner_selection,
             info_to_db=info_to_db,
-            processors=processors
-            # save_model=save_model
+            processors=processors,
+            save_fitted_model=save_fitted_model
         ).validate(self.X, self.csv_dir)
 
         # Preprocess data
@@ -160,10 +165,29 @@ class MachineLearningEstimator(DataProcessor):
             logging.info("✓ Completed grid/random search")
 
         else:          
-            from optuna.logging import set_verbosity, ERROR
-            # set_verbosity(ERROR)
+            # Suppress Optuna's verbose logging
             set_verbosity(optuna.logging.INFO)
-            
+            set_verbosity(ERROR)
+
+            # Create a progress bar with custom format
+            pbar = tqdm(total=config.n_trials, desc="Hyperparameter Search")
+
+            def update_progress(study, trial):
+                pbar.update(1)
+                
+                # Prepare display info
+                current_value = f'{trial.value:.4f}' if trial.value is not None else 'Failed'
+                best_value = f'{study.best_value:.4f}' if study.best_value is not None else 'N/A'
+                best_trial_num = study.best_trial.number if study.best_trial is not None else 'N/A'
+                
+                # Update postfix with detailed info
+                pbar.set_postfix({
+                    'Trial': trial.number,
+                    'Current': current_value,
+                    'Best': best_value,
+                    'Best Trial': best_trial_num
+                })
+
             search_cv = optuna.integration.OptunaSearchCV(
                 estimator=config.estimator,
                 scoring=config.scoring,
@@ -175,8 +199,13 @@ class MachineLearningEstimator(DataProcessor):
                 n_trials=config.n_trials,
                 study=optuna.create_study(direction='maximize', sampler=optuna.samplers.TPESampler()),
                 subsample=0.7 * X.shape[0] * (splits - 1) / splits,
+                callbacks=[update_progress]
             )
-            search_cv.fit(X, y)
+
+            try:
+                search_cv.fit(X, y)
+            finally:
+                pbar.close()
             model_trials = search_cv.trials_
 
             # Select best parameters based on inner selection method            
@@ -200,6 +229,13 @@ class MachineLearningEstimator(DataProcessor):
         with open(f"{config.params_path}", "w") as params_file:
             json.dump(self.best_params, params_file)
         self.logger.info(f"✓ Best hyperparameters saved to {config.params_path}")
+
+        # If save_fitted_model is True, fit the model on the entire dataset
+        if config.save_fitted_model:
+            fit_model = self.best_model.fit(X, y)
+            with open(f"{config.fitted_model_path}", "wb") as fit_model_file:
+                pickle.dump(fit_model, fit_model_file)
+            self.logger.info(f"✓ Fitted model path: {config.fitted_model_path}")
         
         # Save a json with the metadata of the function 
         with open(f"{config.metadata_path}", "w") as metadata_file:
@@ -226,29 +262,39 @@ class MachineLearningEstimator(DataProcessor):
 
         self.logger.info(f"✓ Metadata of the function saved to {config.metadata_path}")
 
+        return {
+            'model_path': config.model_path,
+            'params_path': config.params_path,
+            'fitted_model_path': config.fitted_model_path,
+            'metadata_path': config.metadata_path
+        }
 
     def evaluation(
         self,
         model_path: str = None,
         evaluation: str = 'cv_rounds',
-        rounds: int = 20,
-        splits: int = 5,
-        # scoring: str = "matthews_corrcoef",
+        prefitted: bool = False,
+        rounds: int = None,
+        splits: int = None,
         info_to_db: bool = False,
         calculate_shap: bool = False,
         boxplot: bool = True,
         features_name_list: Optional[List[str]] = None
-    ):
+    ) -> Dict[Literal['eval_csv_path'], str]:
+        """Evaluate the model using specified evaluation methods.
+        Returns:
+            Dict[str, str]: Dictionary with key: 'eval_csv_path'
+        """
 
         # Create and validate the configuration
         config = ModelEvaluationConfig(
             estimator_name=None,
+            inner_selection=None,
             model_path=model_path,
             evaluation=evaluation,
             calculate_shap=calculate_shap,
             rounds=rounds,
             splits=splits,
-            # scoring=scoring,
             normalization=self.normalization,
             missing_values_method=self.mv_method,
             extra_metrics=self.extra_metrics,
@@ -290,7 +336,6 @@ class MachineLearningEstimator(DataProcessor):
                 "Miss_vals": config.missing_values_method,
                 "Eval": config.evaluation,
                 "Class_blnc": config.class_balance,
-                # "Scoring": config.scoring
             }
         ]
         stat_lst = _calc_metrics_stats(config.extra_metrics, results=results, indices=scores_df)
@@ -328,3 +373,7 @@ class MachineLearningEstimator(DataProcessor):
             dbman.insert_experiment_data(consolidated_df, config, database_name=self.database_name)
 
         logging.info("✓ Model evaluation completed")
+
+        return {
+            'eval_csv_path': config.dataset_csv_name
+        }

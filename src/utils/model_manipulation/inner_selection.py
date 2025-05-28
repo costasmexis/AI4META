@@ -2,7 +2,12 @@ import numpy as np
 import optuna
 from src.constants.parameters_grid import hyper_compl
 
-def _gso_model(trials: list, model_name: str, splits: int, method: str) -> dict:
+def _gso_model(
+        trials: list, 
+        model_name: str, 
+        splits: int, 
+        method: str
+    ) -> dict:
     """
     Select optimal hyperparameters using Gap Score Optimization (GSO) approach.
 
@@ -60,7 +65,11 @@ def _gso_model(trials: list, model_name: str, splits: int, method: str) -> dict:
     # Fallback to best overall parameters if no trials meet criteria
     return trials[0].params
 
-def _calculate_complexity(trial: dict, model_name: str, samples: int) -> float:
+def _calculate_complexity(
+        trial: dict, 
+        model_name: str, 
+        samples: int
+    ) -> float:
     """
     Calculate the computational complexity score for a model configuration.
 
@@ -117,8 +126,12 @@ def _calculate_complexity(trial: dict, model_name: str, samples: int) -> float:
     # Default complexity for unsupported models
     return float("inf")
 
-def _one_sem_model(trials: list, model_name: str, samples: int, 
-                  splits: int, method: str) -> dict:
+def _one_sem_model(
+       trials: list,
+       model_name: str,
+       samples: int,
+       splits: int,
+       method: str) -> dict:
     """
     Select model hyperparameters using the one-standard-error rule with variations.
 

@@ -22,7 +22,9 @@ class DataLoader:
         self.__load_data()
         self.__encode_labels()
 
-    def __load_data(self) -> None:
+    def __load_data(
+            self
+        ) -> None:
         """Load data from file into pandas DataFrame."""        
         file_extension = self.csv_dir.split(".")[-1]
         if file_extension in ["csv", "tsv", "txt"]:
@@ -34,7 +36,9 @@ class DataLoader:
         self.X = data.drop(self.label, axis=1)
         self.y = data[self.label].copy()
         
-    def __encode_labels(self) -> None:
+    def __encode_labels(
+            self
+        ) -> None:
         """Encode target variable from string to numeric values."""        
         label_encoder = LabelEncoder()
         self.y = label_encoder.fit_transform(self.y)
@@ -42,4 +46,4 @@ class DataLoader:
             index: class_label
             for index, class_label in enumerate(label_encoder.classes_)
         }
-        print(f"Label mapping: {self.label_mapping}")
+        logging.info(f"Label mapping: {self.label_mapping}")

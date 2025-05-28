@@ -4,7 +4,11 @@ from src.constants.translators import METRIC_ADDREVIATIONS
 from src.utils.statistics.bootstrap_ci import _calc_ci_btstrp
 import pandas as pd
 
-def _calc_metrics_stats(extra_metrics, results, indices):
+def _calc_metrics_stats(
+        extra_metrics: list, 
+        results: list, 
+        indices: pd.DataFrame
+    ) -> list:
     """
     Calculate statistical summaries for specified metrics and store them in the results dictionary.
 

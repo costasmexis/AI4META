@@ -30,7 +30,7 @@ class MLExplainer(MachineLearningEstimator):
             best_model: Optional[object] = None,
             estimator_name: Optional[str] = None,
             shap_values: Optional[np.ndarray] = None
-        ):
+        ) -> None:
         """
         Initialize the MLExplainer with a trained model and dataset.
         
@@ -93,7 +93,10 @@ class MLExplainer(MachineLearningEstimator):
         
         self.logger.info("MLExplainer initialized with model: %s", estimator_name)
 
-    def calculate_shap_values(self, explainer_type:str = "general") -> np.ndarray:
+    def calculate_shap_values(
+            self, 
+            explainer_type:str = "general"
+        ) -> np.ndarray:
         """
         Calculate SHAP values for the given model and dataset.
 
@@ -152,7 +155,13 @@ class MLExplainer(MachineLearningEstimator):
         
         return self.shap_values
 
-    def plot_shap_values(self, max_display: int = 10, features_name_list: list = None, plot_type: str = "summary", label: int = 1) -> None:
+    def plot_shap_values(
+            self, 
+            max_display: int = 10, 
+            features_name_list: list = None, 
+            plot_type: str = "summary", 
+            label: int = 1
+        ) -> None:
         """
         Plot SHAP values using various visualization types.
 
@@ -233,7 +242,10 @@ class MLExplainer(MachineLearningEstimator):
         else:
             raise ValueError("Unsupported plot type. Use 'summary', 'beeswarm', or 'bar'.")
 
-    def plot_shap_pca(self, label: int = 1) -> None:
+    def plot_shap_pca(
+            self, 
+            label: int = 1
+        ) -> None:
         """
         Generate a PCA plot of SHAP values, colored by the target labels.
 

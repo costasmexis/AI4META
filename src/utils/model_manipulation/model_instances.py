@@ -9,7 +9,10 @@ from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
 from xgboost import XGBClassifier
 
-def _create_model_instance(model_name: str, params: dict = None) -> object:
+def _create_model_instance(
+        model_name: str, 
+        params: dict = None
+    ) -> object:
     """
     Create and configure a machine learning model instance with specified parameters.
 

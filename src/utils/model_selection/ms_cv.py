@@ -16,7 +16,6 @@ def _cv_loop(
     round_num: int,
     avail_thr: int,
     processor: DataProcessor
-
 ) -> List[Dict[str, Any]]:
     """
     Execute a cross-validation loop with default hyperparameters for model evaluation.

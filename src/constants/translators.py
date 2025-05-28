@@ -60,7 +60,7 @@ DEFAULT_CONFIG_MS = {
     "missing_values": "median"
 }
 
-DEFAULT_CONFIG_EVAL = {
+DEFAULT_CONFIG_TUNEVAL = {
     "rounds": 20,
     "n_trials": 100,
     "feature_selection_type": "mrmr",
@@ -75,7 +75,8 @@ DEFAULT_CONFIG_EVAL = {
     "features_name_list": None,
     "direction": "maximize",
     "evaluation": None,
-    "model_evaluation_type": "bayesian",
+    # "model_evaluation_type": None,
+    "inner_selection": None
 }
 
 SFM_COMPATIBLE_ESTIMATORS = [

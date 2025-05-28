@@ -50,14 +50,22 @@ class Classifier(Base):
     valid_inner_selections: ClassVar[List[str]] = INNER_SELECTION_METHODS
 
     @validates('estimator')
-    def validate_estimator(self, key, estimator):
+    def validate_estimator(
+        self, 
+        key, 
+        estimator
+    ):
         """Ensure estimator is one of the valid choices"""
         if estimator not in self.valid_estimators:
             raise ValueError(f"Invalid estimator: {estimator}. Must be one of: {', '.join(self.valid_estimators)}")
         return estimator
     
     @validates('inner_selection')
-    def validate_inner_selection(self, key, inner_selection):
+    def validate_inner_selection(
+        self, 
+        key, 
+        inner_selection
+    ):
         """Ensure inner_selection is one of the valid choices if provided"""
         if inner_selection is not None and inner_selection not in self.valid_inner_selections:
             raise ValueError(

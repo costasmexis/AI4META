@@ -1,6 +1,11 @@
 import numpy as np
 
-def _calc_ci_btstrp(data, central_tendency='median', n_bootstraps=1000, confidence_level=0.95):
+def _calc_ci_btstrp(
+        data: np.ndarray, 
+        central_tendency: str = 'median', 
+        n_bootstraps: int = 1000, 
+        confidence_level: float = 0.95
+    ) -> tuple:
     """
     Calculate the confidence interval of the mean or median using bootstrapping.
 

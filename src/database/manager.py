@@ -17,7 +17,11 @@ from src.database.dataclasses import PerformanceMetrics, SamplesClassificationRa
 class DatabaseManager:
     """Manager for database operations using SQLAlchemy ORM with dataclasses."""
 
-    def __init__(self, db_name: str = "ai4meta.db", db_folder: str = "database"):
+    def __init__(
+            self, 
+            db_name: str = "ai4meta.db", 
+            db_folder: str = "database"
+        ):
         """Initialize DatabaseManager with specified database name and folder."""
         # Configure logging
         logging.basicConfig(
@@ -53,12 +57,19 @@ class DatabaseManager:
             self.logger.error(f"Failed to initialize schema: {str(e)}")
             raise
 
-    def close_connection(self) -> None:
+    def close_connection(
+            self
+        ) -> None:
         """Close the database connection."""
         # SQLAlchemy handles connection pooling, so we don't need to explicitly close anything
         self.logger.info("✓ Database connection closed")
 
-    def _get_or_create(self, session: Session, model: Type[Base], **kwargs) -> Tuple[Any, bool]:
+    def _get_or_create(
+            self, 
+            session: Session, 
+            model: Type[Base], 
+            **kwargs
+        ) -> Tuple[Any, bool]:
         """Get an existing instance or create a new one."""
         instance = session.query(model).filter_by(**kwargs).first()
         if instance:
@@ -69,7 +80,10 @@ class DatabaseManager:
             session.flush()  # Flush to get the ID without committing
             return instance, True
 
-    def insert_dataset(self, dataset_name: str) -> int:
+    def insert_dataset(
+            self, 
+            dataset_name: str
+        ) -> int:
         """Insert or fetch a dataset ID."""
         with self.Session() as session:
             dataset, created = self._get_or_create(session, Dataset, dataset_name=dataset_name)
@@ -78,7 +92,11 @@ class DatabaseManager:
                 # self.logger.info(f"✓ Created new dataset with ID: {dataset.dataset_id}")
             return dataset.dataset_id
 
-    def insert_classifier(self, estimator: str, inner_selection: Optional[str]) -> int:
+    def insert_classifier(
+            self, 
+            estimator: str, 
+            inner_selection: Optional[str]
+        ) -> int:
         """Insert or fetch a classifier ID."""
         with self.Session() as session:
             classifier, created = self._get_or_create(
@@ -89,8 +107,12 @@ class DatabaseManager:
                 # self.logger.info(f"✓ Created new classifier with ID: {classifier.classifier_id}")
             return classifier.classifier_id
 
-    def insert_feature_selection(self, way_of_selection: str, numbers_of_features: int, 
-                                way_of_inner_selection: str) -> int:
+    def insert_feature_selection(
+            self, 
+            way_of_selection: str, 
+            numbers_of_features: int, 
+            way_of_inner_selection: str
+        ) -> int:
         """Insert or fetch a feature selection ID."""
         with self.Session() as session:
             selection, created = self._get_or_create(
@@ -115,7 +137,10 @@ class DatabaseManager:
                 # self.logger.info(f"✓ Created new hyperparameters with ID: {params.hyperparameter_id}")
             return params.hyperparameter_id
 
-    def insert_performance_metrics(self, metrics_dict: Dict[str, str]) -> int:
+    def insert_performance_metrics(
+            self, 
+            metrics_dict: Dict[str, str]
+        ) -> int:
         """Insert performance metrics and return the ID."""
         with self.Session() as session:
             try:
@@ -132,7 +157,10 @@ class DatabaseManager:
                 self.logger.error(f"Failed to insert performance metrics: {str(e)}")
                 raise
 
-    def insert_sample_classification_rates(self, classification_rates: str) -> int:
+    def insert_sample_classification_rates(
+            self, 
+            classification_rates: str
+        ) -> int:
         """Insert or fetch a sample classification rates ID."""
         with self.Session() as session:
             rates, created = self._get_or_create(
@@ -144,7 +172,10 @@ class DatabaseManager:
                 # self.logger.info(f"✓ Created new classification rates with ID: {rates.sample_rate_id}")
             return rates.sample_rate_id
 
-    def insert_shap_values(self, shap_values: str) -> int:
+    def insert_shap_values(
+            self, 
+            shap_values: str
+        ) -> int:
         """Insert SHAP values and return the ID."""
         with self.Session() as session:
             try:
@@ -160,7 +191,10 @@ class DatabaseManager:
                 self.logger.error(f"Failed to insert SHAP values: {str(e)}")
                 raise
 
-    def insert_experiment(self, experiment_data: Dict[str, Any]) -> int:
+    def insert_experiment(
+            self, 
+            experiment_data: Dict[str, Any]
+        ) -> int:
         """Insert an experiment and return its ID."""
         with self.Session() as session:
             try:
@@ -176,7 +210,11 @@ class DatabaseManager:
                 self.logger.error(f"Failed to insert experiment: {str(e)}")
                 raise
 
-    def insert_feature_counts(self, feature_counts: Dict[str, int], experiment_id: int) -> None:
+    def insert_feature_counts(
+            self, 
+            feature_counts: Dict[str, int], 
+            experiment_id: int
+        ) -> None:
         """Insert feature counts for an experiment."""
         with self.Session() as session:
             try:
@@ -212,7 +250,12 @@ class DatabaseManager:
                 self.logger.error(f"Failed to insert feature counts: {str(e)}")
                 raise
             
-    def insert_experiment_data(self, scores_dataframe, config, database_name=None):
+    def insert_experiment_data(
+            self, 
+            scores_dataframe, 
+            config, 
+            database_name=None
+        ) -> None:
         """
         Insert experiment data from model selection or evaluation into the database.
         

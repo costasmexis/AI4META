@@ -2,13 +2,12 @@ from typing import Any, Union, Optional
 import numpy as np
 import pandas as pd
 import shap
-from numpy.typing import NDArray
 
 def _calc_shap(
     X_train: Union[pd.DataFrame, np.ndarray],
     X_test: Union[pd.DataFrame, np.ndarray],
     model: Any
-) -> NDArray:
+) -> np.ndarray:
     """
     Calculate SHAP (SHapley Additive exPlanations) values for model predictions.
     

@@ -7,8 +7,7 @@ import logging
 import pandas as pd
 from datetime import datetime
 from sklearn.metrics import get_scorer_names
-from src.constants.translators import DEFAULT_CONFIG_EVAL, DEFAULT_CONFIG_MS
-from src.constants.translators import AVAILABLE_CLFS
+from src.constants.translators import DEFAULT_CONFIG_TUNEVAL, DEFAULT_CONFIG_MS, AVAILABLE_CLFS, INNER_SELECTION_METHODS
 from src.constants.parameters_grid import optuna_grid
 
 
@@ -249,21 +248,20 @@ class ModelTuning:
     normalization: str = 'minmax'
     class_balance: str = None
     missing_values_method: str = 'median'
-    # feature_selection_method: str = 'chi2'
-    # feature_selection_type: str = 'mrmr'
     scoring: str = "matthews_corrcoef"
     splits: int = 5
     inner_selection: str = "validation_score"
     info_to_db: bool = False
     n_trials: int = 100
     processors: int = -1
-    # save_model: bool = True
+    save_fitted_model: bool = True
     param_grid: Optional[Dict] = None
     features_name_list: Optional[List[str]] = None
 
     # Derived attributes (will be set during validation)
     dataset_name: Optional[str] = None
     model_path: Optional[str] = None
+    fitted_model_path: Optional[str] = None
     params_path: Optional[str] = None
     metadata_path: Optional[str] = None
 
@@ -423,7 +421,7 @@ class ModelTuning:
         final_name = f"{self.dataset_name}_{self.estimator_name}"
         
         # Get default values from constants (assuming DEFAULT_CONFIG_EVAL exists)
-        defaults = DEFAULT_CONFIG_EVAL
+        defaults = DEFAULT_CONFIG_TUNEVAL
 
         # Add non-default configurations
         for param, value in defaults.items():
@@ -454,12 +452,16 @@ class ModelTuning:
         base_name = self._extract_final_name()
         
         # Model directory for saving trained models
-        # if self.save_model:
         model_dir = "results/models/"
+        metadata_dir = "results/models/metadata/"
+        params_dir = "results/models/params/"
+        os.makedirs(params_dir, exist_ok=True)
+        os.makedirs(metadata_dir, exist_ok=True)
         os.makedirs(model_dir, exist_ok=True)
         self.model_path = os.path.join(model_dir, f"{base_name}_model.pkl")
-        self.params_path = os.path.join(model_dir, f"{base_name}_params.json")
-        self.metadata_path = os.path.join(model_dir, f"{base_name}_metadata.json")
+        self.fitted_model_path = os.path.join(model_dir, f"{base_name}_fitted_model.pkl")
+        self.params_path = os.path.join(params_dir, f"{base_name}_params.json")
+        self.metadata_path = os.path.join(metadata_dir, f"{base_name}_metadata.json")
 
 @dataclass
 class ModelEvaluationConfig:
@@ -473,9 +475,8 @@ class ModelEvaluationConfig:
     class_balance: str = None
     feature_selection_method: str = 'chi2'
     missing_values_method: str = 'median'
-    rounds: int = 20
-    splits: int = 5
-    # scoring: str = "matthews_corrcoef"
+    rounds: int = None
+    splits: int = None
     extra_metrics: List[str] = field(default_factory=lambda: ['roc_auc','recall', 'matthews_corrcoef', 'accuracy', 'balanced_accuracy',  
                            'precision', 'f1', 'average_precision', 'specificity'])
     info_to_db: bool = False
@@ -485,6 +486,7 @@ class ModelEvaluationConfig:
 
     # Derived attributes (will be set during validation)
     dataset_name: Optional[str] = None
+    inner_selection: str = None
     dataset_csv_name: Optional[str] = None
     dataset_plot_name: Optional[str] = None
 
@@ -492,7 +494,11 @@ class ModelEvaluationConfig:
     _logger: Optional[logging.Logger] = field(default=None, repr=False)
     _logged_messages: set = field(default_factory=set, repr=False)
    
-    def validate(self, X: pd.DataFrame, csv_dir: str) -> 'ModelEvaluationConfig':
+    def validate(
+            self,
+            X: pd.DataFrame, 
+            csv_dir: str
+        ) -> 'ModelEvaluationConfig':
         """
         Validate this configuration instance against the dataset and return self.
         
@@ -515,11 +521,11 @@ class ModelEvaluationConfig:
         # Validate model path
         self._validate_model_path()
         
-        # # Validate scoring metrics
-        # self._validate_scoring_metrics()
-        
         # Validate evaluation method
         self._validate_evaluation_method()
+
+        # Validate number of rounds and splits
+        self._validate_rounds_splits()
         
         # Extract dataset info
         self._extract_dataset_info(X, csv_dir)
@@ -543,6 +549,17 @@ class ModelEvaluationConfig:
                 self._logger.info(message)
             self._logged_messages.add(message)
 
+    def _validate_rounds_splits(self) -> None:
+        """Validate rounds and splits"""
+        if self.evaluation == 'cv_rounds':
+            if self.rounds is None:
+                self.rounds = 20
+                raise Warning("No rounds specified. Using default: 20.")
+
+            if self.splits is None:
+                self.splits = 5
+                raise Warning("No splits specified. Using default: 5.")
+
     def _validate_model_path(self) -> None:
         """Validate model path"""
         if self.model_path is None:
@@ -553,30 +570,13 @@ class ModelEvaluationConfig:
             self._log_once(f"Model file does not exist: {self.model_path}.", level='error')
             raise FileNotFoundError(f"Model file does not exist: {self.model_path}.")
     
-    # def _validate_scoring_metrics(self) -> None:
-    #     """Validate scoring metrics"""
-    #     valid_scorers = list(get_scorer_names()) + ["specificity"]
-        
-    #     if self.scoring not in valid_scorers:
-    #         raise ValueError(f"Invalid scoring metric: {self.scoring}. "
-    #                         f"Valid options: {valid_scorers}")
-            
-    #     # Ensure scoring is in extra_metrics
-    #     if self.scoring not in self.extra_metrics:
-    #         self.extra_metrics.insert(0, self.scoring)
-            
-    #     # Validate all metrics in extra_metrics
-    #     for metric in self.extra_metrics:
-    #         if metric not in valid_scorers:
-    #             self._log_once(f"Invalid metric in extra_metrics: {metric}. Removing it.")
-    #             self.extra_metrics.remove(metric)
-    
     def _validate_evaluation_method(self) -> None:
         """Validate evaluation method"""
-        valid_evaluation_methods = ["cv_rounds", "bootstrap", "oob", "train_test"]
+        valid_evaluation_methods = ["cv_rounds", "bootstrap", "oob", "train_test", "prefitted"]
         if self.evaluation not in valid_evaluation_methods:
-            self._log_once(f"Invalid evaluation method: {self.evaluation}. Using default: cv_rounds")
-            self.evaluation = "cv_rounds"
+            raise ValueError(f"Invalid evaluation method: {self.evaluation}. "
+                           f"Valid options: {valid_evaluation_methods}")
+ 
 
     def _validate_features_name_list(self, X: pd.DataFrame) -> None:
         """Validate features names list"""
@@ -614,20 +614,25 @@ class ModelEvaluationConfig:
         """
 
         # Try to extract estimator_name from model_path using AVAILABLE_CLFS and regex
-        estimator_name = None
         if self.model_path:
             for clf_name in AVAILABLE_CLFS:
                 # Use word boundaries to avoid partial matches
                 pattern = rf"\b{re.escape(clf_name)}\b"
                 if re.search(pattern, self.model_path):
-                    estimator_name = clf_name
+                    self.estimator_name = clf_name
+                    break
+            for inn_sel in INNER_SELECTION_METHODS:
+                # Use word boundaries to avoid partial matches
+                pattern = rf"\b{re.escape(inn_sel)}\b"
+                if re.search(pattern, self.model_path):
+                    self.inner_selection = inn_sel
                     break
 
         # Start with dataset name and estimator
-        final_name = f"{self.dataset_name}_{estimator_name}"
+        final_name = f"{self.dataset_name}_{self.estimator_name}_{self.inner_selection}"
         
         # Get default values from constants (assuming DEFAULT_CONFIG_EVAL exists)
-        defaults = DEFAULT_CONFIG_EVAL
+        defaults = DEFAULT_CONFIG_TUNEVAL
 
         # Add non-default configurations
         for param, value in defaults.items():

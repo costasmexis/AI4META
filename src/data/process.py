@@ -3,13 +3,14 @@
 Data processing module that inherits from DataLoader and implements
 various data preprocessing procedures.
 """
-from typing import Optional, List, Dict, Union, Tuple
+from typing import Optional, List, Dict, Union, Tuple, Literal
 import numpy as np
 import pandas as pd
 import logging
 
 from sklearn.feature_selection import SelectFromModel
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.model_selection import train_test_split
 from sklearn.feature_selection import (
     SelectKBest,
     chi2,
@@ -98,7 +99,12 @@ class DataProcessor(DataLoader):
         # Validate all parameters
         self._validate_parameters()
 
-    def _log_once(self, operation: str, method: str, message: str) -> None:
+    def _log_once(
+            self, 
+            operation: str, 
+            method: str,
+            message: str
+        ) -> None:
         """
         Log a message only once for a specific operation and method.
 
@@ -115,7 +121,11 @@ class DataProcessor(DataLoader):
             self._logged_operations[operation][method] = True
             self.logger.info(message)
 
-    def missing_values(self, X: pd.DataFrame, y: pd.Series) -> Tuple[pd.DataFrame, pd.Series]:
+    def missing_values(
+            self, 
+            X: pd.DataFrame, 
+            y: pd.Series
+        ) -> Tuple[pd.DataFrame, pd.Series]:
         """
         Handle missing values in the dataset.
 
@@ -173,7 +183,88 @@ class DataProcessor(DataLoader):
         
         return X_result, y_result
     
-    def normalize_ms(self, X_train: pd.DataFrame, X_test: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def split_data(
+        self,
+        X: pd.DataFrame = None,
+        y: pd.Series = None,
+        test_size: float = 0.2,
+        keep_balance: bool = False,
+        random_state: int = 42
+    ) -> Dict[Literal['train_path', 'test_path'], str]:
+        """
+        Splits the dataset into training and test sets, and saves them as CSV files.
+        Parameters
+        ----------
+        X : pd.DataFrame, optional
+            Feature dataframe to split. If None, uses self.X.
+        y : pd.Series, optional
+            Target series to split. If None, uses self.y.
+        test_size : float, default=0.2
+            Proportion of the dataset to include in the test split.
+        keep_balance : bool, default=False
+            Whether to stratify the split to maintain class balance.
+        random_state : int, default=42
+            Random seed for reproducibility.
+        Returns
+        -------
+        None
+        Side Effects
+        ------------
+        Saves the resulting train and test splits as CSV files in the same directory as self.csv_dir,
+        appending '_train.csv' and '_test.csv' to the filename. Logs the file paths of the saved splits.
+        """
+        
+        if X is None:
+            X = self.X.copy() if self.X is not None else None
+        if y is None:
+            y = self.y.copy() if self.y is not None else None
+
+        # Combine X and y for splitting
+        data = X.copy()
+        data[self.label] = y
+        
+        if keep_balance:
+            train_data, test_data = train_test_split(
+                data,
+                test_size=test_size,
+                stratify=data[self.label],
+                random_state=random_state
+            )
+        else:
+            train_data, test_data = train_test_split(
+                data,
+                test_size=test_size,
+                shuffle=True,
+                random_state=random_state
+            )
+        
+        # Construct train and test filenames based on csv_dir
+        base_path = self.csv_dir
+        if base_path.endswith('.csv'):
+            train_filename = base_path.replace('.csv', '_train.csv')
+            test_filename = base_path.replace('.csv', '_test.csv')
+        else:
+            train_filename = base_path + '_train.csv'
+            test_filename = base_path + '_test.csv'
+        
+        # Save to CSV files if requested
+        train_data.to_csv(train_filename, index=False)
+        test_data.to_csv(test_filename, index=False)
+            
+        self.logger.info(f"Training data saved to: {train_filename}")
+        self.logger.info(f"Test data saved to: {test_filename}")
+
+        return {
+            'train_path': train_filename,
+            'test_path': test_filename
+        }
+
+
+    def normalize_ms(
+            self, 
+            X_train: pd.DataFrame, 
+            X_test: pd.DataFrame
+        ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Normalize both training and test data using the same transformer.
 
@@ -225,7 +316,10 @@ class DataProcessor(DataLoader):
             
         return X_train_result, X_test_result
 
-    def normalize(self, X: pd.DataFrame) -> pd.DataFrame:
+    def normalize(
+            self, 
+            X: pd.DataFrame
+        ) -> pd.DataFrame:
         """
         Normalize the input data using specified method.
 
@@ -497,7 +591,7 @@ class DataProcessor(DataLoader):
         y_train: np.ndarray,
         num_features: Optional[int],
         X_test: Optional[pd.DataFrame] = None,
-        ) -> Tuple[pd.DataFrame, pd.DataFrame, int]:
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, int]:
         """
         Perform feature selection using SelectFromModel.
 
@@ -707,7 +801,9 @@ class DataProcessor(DataLoader):
 
         return X_train_cleaned, y_train_cleaned, X_test_cleaned, y_test_cleaned, feature_indicator
 
-    def _validate_parameters(self):
+    def _validate_parameters(
+            self
+        ):
         """
         Validate all parameters passed to the DataProcessor.
         
@@ -726,7 +822,10 @@ class DataProcessor(DataLoader):
         self._validate_class_balance(self.class_balance_method)
         self._validate_preprocess_mode(self.preprocess_mode)
 
-    def _validate_normalization(self, method):
+    def _validate_normalization(
+            self, 
+            method: Union[str, None]
+        ) -> None:
         """
         Validate the normalization method.
         
@@ -747,7 +846,10 @@ class DataProcessor(DataLoader):
                 f"Valid options are: {', '.join([str(m) for m in valid_methods])}"
             )
 
-    def _validate_fs_method(self, method):
+    def _validate_fs_method(
+            self, 
+            method: Union[str, None]
+        ) -> None:
         """
         Validate the feature selection method.
         
@@ -768,7 +870,10 @@ class DataProcessor(DataLoader):
                 f"Valid options are: {', '.join([str(m) for m in valid_methods])}"
             )
 
-    def _validate_inner_fs_method(self, method):
+    def _validate_inner_fs_method(
+            self, 
+            method: Union[str, None]
+        ) -> None:
         """
         Validate the inner feature selection scoring method.
         
@@ -789,7 +894,10 @@ class DataProcessor(DataLoader):
                 f"Valid options are: {', '.join([str(m) for m in valid_methods])}"
             )
 
-    def _validate_mv_method(self, method):
+    def _validate_mv_method(
+            self, 
+            method: Union[str, None]
+        ) -> None:
         """
         Validate the missing values handling method.
         
@@ -810,7 +918,10 @@ class DataProcessor(DataLoader):
                 f"Valid options are: {', '.join([str(m) for m in valid_methods])}"
             )
 
-    def _validate_class_balance(self, method):
+    def _validate_class_balance(
+            self, 
+            method: Union[str, None]
+        ) -> None:
         """
         Validate the class balancing method.
         
@@ -831,7 +942,10 @@ class DataProcessor(DataLoader):
                 f"Valid options are: {', '.join([str(m) for m in valid_methods])}"
             )
 
-    def _validate_preprocess_mode(self, mode):
+    def _validate_preprocess_mode(
+            self, 
+            mode: str
+        ) -> None:
         """
         Validate the preprocessing mode.
         

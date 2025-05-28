@@ -25,7 +25,7 @@ def _fit(
         i: int,
         n_jobs: int = 1,
         processor: DataProcessor = None
-    ):
+    ) -> dict:
     """
     Perform the fitting procedure for the machine learning pipeline.
 
@@ -124,7 +124,7 @@ def _store_results(
         feature_selection_type: str, 
         X_train_selected: pd.DataFrame, 
         method: str
-    ):
+    ) -> None:
     """
     Stores the results of a model selection process into a dictionary.
 
@@ -167,7 +167,7 @@ def _fit_nested(
     num_feature: Union[int, str],
     test_index: np.ndarray,
     n_samples: int
-):
+) -> None:
     # Logging setup
     set_verbosity(logging.ERROR)
     logging.getLogger("optuna").setLevel(logging.ERROR)
@@ -241,7 +241,7 @@ def _fit_cvdefault(
     num_feature: Union[int, str],
     test_index: np.ndarray,
     n_samples: int
-):
+) -> None:
     # Train the model without hyperparameter optimization
     res_model = _create_model_instance(estimator_name, params=None)
     results["Estimator"].append(estimator_name)

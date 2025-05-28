@@ -9,7 +9,11 @@ from sklearn.metrics import (
     roc_auc_score
 )
 
-def _specificity_scorer(estimator: Any, X: np.ndarray, y: np.ndarray) -> float:
+def _specificity_scorer(
+        estimator: Any, 
+        X: np.ndarray, 
+        y: np.ndarray
+    ) -> float:
     """
     Calculate the specificity score (true negative rate) for a classifier.
 

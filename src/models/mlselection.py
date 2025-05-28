@@ -95,7 +95,7 @@ class MLSelector(DataProcessor):
         # filter_csv: Optional[Dict] = None, 
         parallel: str = "thread_per_round",
         n_trials: int = 100
-    ):
+    ) -> pd.DataFrame:
         """
         Perform model selection using the specified parameters.
         

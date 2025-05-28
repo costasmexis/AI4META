@@ -4,23 +4,28 @@ import pandas as pd
 import scipy.stats as stats
 import seaborn as sns
 import os
+from typing import Optional, List
 from scipy.cluster import hierarchy
 from scipy.spatial.distance import squareform
 from scipy.stats import pearsonr
 from sklearn.preprocessing import MinMaxScaler
 from src.data.process import DataProcessor
 from sklearn.decomposition import PCA
+import logging
 
 
 class DataExplorer(DataProcessor):
-    def __init__(self, label, csv_dir, index_col=None, 
-                 normalization='minmax',
-                 fs_method='mrmr',
-                 inner_fs_method='chi2',
-                 mv_method='median',
-                 class_balance_method=None  
-                ):
-        
+    def __init__(self,
+                label: str,
+                csv_dir: str, 
+                index_col: Optional[str] = None, 
+                normalization: Optional[str] = 'minmax',
+                fs_method: Optional[str] = 'mrmr',
+                inner_fs_method: Optional[str] = 'chi2',
+                mv_method: Optional[str] = 'median',
+                class_balance_method: Optional[str] = None
+            ) -> None:
+
         # Call the parent constructor with all the processing parameters
         super().__init__(
             label=label, 
@@ -34,7 +39,11 @@ class DataExplorer(DataProcessor):
             preprocess_mode='general'
         )
         
-    def plot_preprocess(self, features_names=None, num_features=None) -> pd.DataFrame:
+    def plot_preprocess(
+            self, 
+            features_names: Optional[List[str]] = None, 
+            num_features: Optional[int] = None
+        ) -> pd.DataFrame:
         """
         Preprocess data for plotting using the functionality from DataProcessor.
         """
@@ -53,11 +62,57 @@ class DataExplorer(DataProcessor):
         data = X_processed.copy()
         data["labels"] = y_processed
         return data
-    
-    def pca_plot(self, features_names=None, num_features=None) -> None:
+
+    def plot_class_balance(
+            self, 
+            save_fig: bool = False, 
+            title: str = "Class Balance"
+        ) -> None:
+        """
+        Visualize the class balance as a pie chart and print class counts.
+
+        Parameters
+        ----------
+        save_fig : bool, optional
+            Whether to save the pie chart figure. Default is False.
+        """
+        # Get label counts
+        class_counts = pd.Series(self.y).value_counts().sort_index()
+        class_names = [self.label_mapping.get(i, str(i)) for i in class_counts.index]
+
+        # Print class counts
+        print("Class distribution:")
+        for name, count in zip(class_names, class_counts):
+            print(f"{name}: {count}")
+
+        # Plot pie chart
+        plt.figure(figsize=(6, 6))
+        plt.pie(
+            class_counts,
+            labels=class_names,
+            autopct='%1.1f%%',
+            startangle=90,
+            colors=sns.color_palette("Set2", len(class_counts))
+        )
+        plt.title(title)
+
+        if save_fig:
+            save_dir = os.path.join("results", "images", "class_balance")
+            os.makedirs(save_dir, exist_ok=True)
+            save_path = os.path.join(save_dir, f"{title}_class_balance_piechart.png")
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            print(f"Class balance pie chart saved to: {save_path}")
+
+        plt.show()
+
+    def pca_plot(
+            self, 
+            features_names: Optional[List[str]] = None, 
+            num_features: Optional[int] = None
+        ) -> None:
         """
         Create a PCA plot to visualize the distribution of samples in the feature space.
-        
+
         Parameters
         ----------
         features_names : list, optional
@@ -96,7 +151,7 @@ class DataExplorer(DataProcessor):
         save_path = os.path.join(save_dir, "pca_plot.png")
         plt.savefig(save_path, dpi=300)
         
-        print(f"PCA plot saved to: {save_path}")
+        logging.info(f"PCA plot saved to: {save_path}")
 
     def hierarchical_correlation_plot(
         self,
@@ -261,9 +316,9 @@ class DataExplorer(DataProcessor):
                     
     def box_illustration(
         self,
-        features_names=None,
-        num_features=None,
-        dataset_name="dataset"  
+        features_names: Optional[List[str]] = None,
+        num_features: Optional[int] = None,
+        dataset_name: str = "dataset"
     ) -> None:
         """
         Generate a boxplot to visualize the distribution of features values to help identify 
@@ -319,8 +374,8 @@ class DataExplorer(DataProcessor):
    
     def pairplots_function(
             self,
-            features_names=None,
-            num_features=None
+            features_names: Optional[List[str]] = None,
+            num_features: Optional[int] = None
         ) -> None:
             """
             Generate pairplots to visualize relationships between features and labels.
@@ -347,11 +402,11 @@ class DataExplorer(DataProcessor):
 
     def statistical_difference(
             self,
-            features_names=None,
-            num_features=None,
-            stat_test="mannwhitneyu",
-            p_value=0.05,
-            show_box=True
+            features_names: Optional[List[str]] = None,
+            num_features: Optional[int] = None,
+            stat_test: str = "mannwhitneyu",
+            p_value: float = 0.05,
+            show_box: bool = True
         ) -> list:
             """
             Perform non-parametric statistical tests to identify significant features based on labels,
