@@ -23,8 +23,8 @@ def _fit(
         test_index: np.ndarray, 
         fit_type: str,
         i: int,
+        processor: DataProcessor,
         n_jobs: int = 1,
-        processor: DataProcessor = None
     ) -> dict:
     """
     Perform the fitting procedure for the machine learning pipeline.

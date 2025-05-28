@@ -48,12 +48,12 @@ class DataProcessor(DataLoader):
         self,
         label: str,
         csv_dir: str,
-        index_col: Optional[str] = None,
-        normalization: Optional[str] = 'minmax',
+        index_col:  Union[str, None] = None,
+        normalization:  Union[str, None] = 'minmax',
         fs_method: Optional[str] = 'mrmr',
         inner_fs_method: Optional[str] = 'chi2',
         mv_method: Optional[str] = 'median',
-        class_balance_method: Optional[str] = None,
+        class_balance_method: Union[str, None] = None,
         preprocess_mode: Optional[str] = 'general'
     ) -> None:
         """
@@ -185,8 +185,8 @@ class DataProcessor(DataLoader):
     
     def split_data(
         self,
-        X: pd.DataFrame = None,
-        y: pd.Series = None,
+        X: Union[pd.DataFrame, None] = None,
+        y: Union[pd.Series, None] = None,
         test_size: float = 0.2,
         keep_balance: bool = False,
         random_state: int = 42

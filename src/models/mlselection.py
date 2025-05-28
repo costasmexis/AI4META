@@ -25,7 +25,7 @@ class MLSelector(DataProcessor):
         label: str,
         csv_dir: str,
         index_col: Optional[str] = None,
-        normalization: Optional[str] = 'minmax',
+        normalization: Optional[Union[str, None]] = 'minmax',
         fs_method: Optional[str] = 'mrmr',
         inner_fs_method: Optional[str] = 'chi2',
         mv_method: Optional[str] = 'median',
