@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 from src.models.mlestimator import MachineLearningEstimator
 from typing import Optional
+import os
+import pickle
 
 shap.initjs()
 
@@ -95,6 +97,7 @@ class MLExplainer(MachineLearningEstimator):
 
     def calculate_shap_values(
             self, 
+            model_path: Optional[str] = None,
             explainer_type:str = "general"
         ) -> np.ndarray:
         """
@@ -113,6 +116,15 @@ class MLExplainer(MachineLearningEstimator):
         TypeError
             If the model is incompatible with the general explainer.
         """
+
+        if model_path is not None:
+            if os.path.exists(model_path):
+                with open(model_path, "rb") as model_file:
+                    self.best_model = pickle.load(model_file)
+                self.logger.info("Loaded model from path: %s", model_path)
+            else:
+                self.logger.warning("Model path does not exist: %s", model_path)
+
         if self.best_model is None:
             raise ValueError("No model is set. Train or load a model before calculating SHAP values.")
             

@@ -459,7 +459,11 @@ class ModelTuning:
         os.makedirs(metadata_dir, exist_ok=True)
         os.makedirs(model_dir, exist_ok=True)
         self.model_path = os.path.join(model_dir, f"{base_name}_model.pkl")
-        self.fitted_model_path = os.path.join(model_dir, f"{base_name}_fitted_model.pkl")
+        if self.save_fitted_model:
+            # Path for the fitted model
+            self.fitted_model_path = os.path.join(model_dir, f"{base_name}_fitted_model.pkl")
+        else:
+            self.fitted_model_path = None
         self.params_path = os.path.join(params_dir, f"{base_name}_params.json")
         self.metadata_path = os.path.join(metadata_dir, f"{base_name}_metadata.json")
 
