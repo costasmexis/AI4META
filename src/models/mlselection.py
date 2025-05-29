@@ -64,8 +64,10 @@ class MLSelector(DataProcessor):
         """Set up logging for the class."""
         logging.basicConfig(
             level=logging.INFO,
-            format='%(message)s'
+            format='%(message)s',
+            force=True
         )
+
         self.logger = logging.getLogger(__name__)
         self.logger.info("MLSelector initialized with parameters:")
         self.logger.info(f"Label: {self.label}")
