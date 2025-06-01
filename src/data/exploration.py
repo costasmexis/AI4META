@@ -15,6 +15,49 @@ import logging
 
 
 class DataExplorer(DataProcessor):
+    """
+    DataExplorer extends DataProcessor to provide advanced data exploration and visualization tools
+    for tabular datasets, particularly in the context of metabolomics or similar domains.
+    This class offers methods for preprocessing, visualizing class balance, performing PCA,
+    generating hierarchical correlation plots, boxplots, pairplots, and conducting statistical
+    tests to identify significant features.
+    label : str
+        The name of the label column in the dataset.
+    csv_dir : str
+        Directory path to the CSV file containing the dataset.
+    index_col : str, optional
+        Name of the column to use as the index for the DataFrame.
+    normalization : str, optional
+        Normalization method to apply to the data. Default is 'minmax'.
+    fs_method : str, optional
+        Feature selection method to use. Default is 'mrmr'.
+    inner_fs_method : str, optional
+        Inner feature selection method. Default is 'chi2'.
+    mv_method : str, optional
+        Method for handling missing values. Default is 'median'.
+    class_balance_method : str, optional
+        Method for balancing classes. Default is None.
+    Methods
+    -------
+    plot_class_balance(save_fig=False, title="Class Balance") -> None
+        Visualizes the class balance as a pie chart and prints class counts.
+    pca_plot(features_names=None, num_features=None) -> None
+        Creates a PCA plot to visualize the distribution of samples in the feature space.
+    hierarchical_correlation_plot(features_names=None, num_features=None, method='complete', figsize=(50, 50)) -> None
+        Generates a hierarchical clustering correlation heatmap for visualizing relationships between features.
+    box_illustration(features_names=None, num_features=None, dataset_name="dataset") -> None
+        Generates a boxplot to visualize the distribution of feature values, aiding in normalization assessment.
+    pairplots_function(features_names=None, num_features=None) -> None
+        Generates pairplots to visualize relationships between features and labels.
+    statistical_difference(features_names=None, num_features=None, stat_test="mannwhitneyu", p_value=0.05, show_box=True) -> list
+        Performs non-parametric statistical tests to identify significant features based on labels,
+        and optionally visualizes these features' distributions using boxplots.
+    Notes
+    -----
+    - Most visualization methods save figures to the 'results/images' directory.
+    - Only 'minmax' normalization is supported for some visualization and statistical methods.
+    - The class assumes binary classification for some methods (e.g., statistical_difference).
+    """
     def __init__(self,
                 label: str,
                 csv_dir: str, 
@@ -39,7 +82,7 @@ class DataExplorer(DataProcessor):
             preprocess_mode='general'
         )
         
-    def plot_preprocess(
+    def _plot_preprocess(
             self, 
             features_names: Optional[List[str]] = None, 
             num_features: Optional[int] = None
@@ -120,10 +163,15 @@ class DataExplorer(DataProcessor):
         num_features : int, optional
             Number of features to include in the PCA plot based on feature importance. 
             If None, all features are used.
+
+        Returns
+        -------
+        This method performs PCA on the specified features, visualizes the first two principal components,
+        and saves the plot as a PNG file in the 'results/images/pca' directory.
         """
         
         # Preprocess data
-        data_scaled = self.plot_preprocess(
+        data_scaled = self._plot_preprocess(
             features_names=features_names,
             num_features= num_features if num_features is not None else self.X.shape[1]
         )
@@ -150,6 +198,7 @@ class DataExplorer(DataProcessor):
         
         save_path = os.path.join(save_dir, "pca_plot.png")
         plt.savefig(save_path, dpi=300)
+        plt.show()
         
         logging.info(f"PCA plot saved to: {save_path}")
 
@@ -180,13 +229,17 @@ class DataExplorer(DataProcessor):
             Default is 'complete'.
         figsize : tuple, optional
             Size of the figure (width, height) in inches. Default is (50, 50).
+
+        Returns
+        -------
+        A matplotlib figure showing the hierarchical clustering correlation heatmap.
         """
         
         # Set default class names if not provided
         class_names = list(self.label_mapping.values())
         
         # Preprocess data
-        data_scaled = self.plot_preprocess(
+        data_scaled = self._plot_preprocess(
             features_names=features_names,
             num_features=num_features
         )
@@ -256,8 +309,7 @@ class DataExplorer(DataProcessor):
             cmap='coolwarm',
             vmin=-1, 
             vmax=1,
-            cbar_kws={'label': f'Pearson Correlation'},
-            # square=True  # Make cells square for better visualization
+            cbar_kws={'label': f'Pearson Correlation'}
         )
         
         # Improve heatmap layout for Y-axis
@@ -336,7 +388,7 @@ class DataExplorer(DataProcessor):
         os.makedirs(save_dir, exist_ok=True)
         
         if self.normalization == "minmax":
-            data = self.plot_preprocess(
+            data = self._plot_preprocess(
                 features_names=features_names,
                 num_features=num_features
             )
@@ -392,7 +444,7 @@ class DataExplorer(DataProcessor):
             :type way_of_selection: str
             """
             
-            data = self.plot_preprocess(
+            data = self._plot_preprocess(
                 features_names=features_names,
                 num_features=num_features
             )
@@ -439,7 +491,7 @@ class DataExplorer(DataProcessor):
             if p_value <= 0 or p_value >= 1:
                 raise ValueError("p_value must be between 0 and 1.")
             if self.normalization == 'minmax':
-                data = self.plot_preprocess(features_names=features_names, num_features=num_features)
+                data = self._plot_preprocess(features_names=features_names, num_features=num_features)
             else:
                 raise ValueError(f"Unsupported normalization method: {self.normalization}. Only 'minmax' is supported for statistical tests.")
 

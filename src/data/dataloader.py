@@ -5,7 +5,20 @@ from sklearn.preprocessing import LabelEncoder
 import logging
 
 class DataLoader:
-    """A class for loading data"""
+    """
+    DataLoader is a utility class for loading and preprocessing tabular data from CSV, TSV, or TXT files.
+    Attributes:
+        csv_dir (str): Path to the data file.
+        index_col (Optional[str]): Column to use as the row labels of the DataFrame.
+        label (str): Name of the target column.
+    Methods:
+        __init__(label, csv_dir, index_col=None):
+            Initializes the DataLoader, loads the data, and encodes the labels.
+        __load_data():
+            Loads data from the specified file into a pandas DataFrame, splitting into features (X) and target (y).
+        __encode_labels():
+            Encodes the target variable (y) from string labels to numeric values using LabelEncoder, and stores the mapping.
+    """
 
     def __init__(self, 
                  label: str, 
